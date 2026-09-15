@@ -1,0 +1,78 @@
+# TURBOK2 · Cabina
+
+Cockpit de sesión para intradía en futuros, con journal de inversiones, playbook
+por instrumento y calculadoras de riesgo e interés compuesto.
+
+Es **una sola página**: `index.html` lleva dentro el HTML, el CSS y el JS. Sin
+build, sin bundler, sin dependencias. Lo único que carga de fuera son las
+tipografías de Google Fonts.
+
+## Qué hay dentro
+
+| Pestaña | Para qué |
+| --- | --- |
+| **Cabina** | Pre-sesión con lista que se congela al guardarla, niveles del día, reglas duras, cuentas prop con la regla de consistencia, sesión de hoy con el banner de la sesión en vivo, y calendario de resultados. |
+| **Futuros** | Journal de operaciones: resumen, cuentas, análisis (R múltiple, franjas horarias, día de la semana, consistencia) y diario por día. |
+| **Inversiones** | Posiciones y operaciones por mercado, con métricas de asignación y salud de la cartera. |
+| **Playbook** | Una sección por tipo de instrumento: futuros, perpetuos, opciones, cripto, acciones y ETFs, bonos, bienes raíces. |
+| **Formas de hacer dinero** | Ideas por categoría, con estado y notas. |
+| **Calculadora** | Interés compuesto y dimensionado de riesgo a partir de la cuenta y la regla dura. |
+
+Todo en español y en horario de 12 horas. La hora de referencia es Nueva York
+(ET), incluido el cambio de día: a medianoche en ET la cabina abre sesión nueva.
+
+### Cómo se archiva cada cosa
+
+Escribes el instrumento en «Registrar operación» y la app decide el destino:
+
+| Escribes | Va a | Por qué |
+| --- | --- | --- |
+| `MNQ`, `ES`, `MGC` | Journal de Futuros | contrato con valor de punto conocido |
+| `MESZ5` | Journal de Futuros | contrato con mes de vencimiento |
+| `ETHUSDT`, `BTC-PERP` | Journal de Futuros | perpetuo |
+| `SPY 250117C500` | Inversiones · Opciones | contrato de opciones |
+| `BTC`, `ETH`, `IBIT` | Inversiones · Cripto | activo conocido |
+| `SGOV`, `TLT` | Inversiones · Bonos | activo conocido |
+| `O`, `VNQ` | Inversiones · Bienes raíces | activo conocido |
+| `VTI`, `QQQ` | Inversiones · ETFs | activo conocido |
+| cualquier otro | Inversiones · Acciones | no es un contrato de futuros |
+
+Siempre se puede forzar el destino a mano antes de guardar.
+
+## Dónde se guardan los datos
+
+Depende de dónde se abra la página:
+
+- **Como artefacto de Claude**: base de datos del artefacto (sincroniza entre
+  dispositivos) y subida de capturas de pantalla por operación.
+- **Servida como archivo estático** (GitHub Pages, Vercel, o abriendo el
+  archivo a mano): `localStorage` del navegador. Los datos **no salen del
+  equipo**, no se sincronizan entre dispositivos y se pierden si se borran los
+  datos del sitio. Las capturas quedan dentro de la propia operación como data
+  URI, así que conviene no abusar.
+
+Dicho claro: este repositorio guarda **el sistema, no los datos**. Clonarlo no
+trae tu journal.
+
+## Abrirla en local
+
+```sh
+python3 -m http.server 8000
+# luego: http://localhost:8000/
+```
+
+Vale con abrir `index.html` directamente en el navegador; el `http.server` solo
+evita rarezas con `file://`.
+
+## Publicarla
+
+El repositorio ya trae `.nojekyll`, así que sirve tal cual desde **GitHub
+Pages** (Settings → Pages → Deploy from a branch → `main` / `root`) o desde
+**Vercel** (importar el repo, sin framework, sin build).
+
+La página lleva `<meta name="robots" content="noindex, nofollow">`. Si algún día
+quieres que la indexen los buscadores, quita esa línea del `<head>`.
+
+> El repositorio es público: cualquiera puede leer el código y los valores por
+> defecto de las reglas y las cuentas de ejemplo. Tus operaciones no están aquí
+> — viven en tu navegador.
