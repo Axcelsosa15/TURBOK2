@@ -11,8 +11,8 @@ tipografías de Google Fonts.
 
 | Pestaña | Para qué |
 | --- | --- |
-| **Cabina** | Pre-sesión con lista que se congela al guardarla, niveles del día, reglas duras, cuentas prop con la regla de consistencia, sesión de hoy con el banner de la sesión en vivo, y calendario de resultados. |
-| **Futuros** | Journal de operaciones: resumen, cuentas, análisis (R múltiple, franjas horarias, día de la semana, consistencia) y diario por día. |
+| **Cabina** | Una pre-sesión por sesión de mercado (Asia, Londres, NY AM, Lunch, NY PM), cada una con su lista y su sello; niveles del día, reglas duras, cuentas prop con la regla de consistencia, sesión de hoy con el banner en vivo y el desglose por sesión, y calendario de resultados. |
+| **Futuros** | Journal de operaciones: resumen, cuentas, análisis (R múltiple, sesión de mercado, franjas horarias, día de la semana, consistencia) y diario del día agrupado por sesión. |
 | **Inversiones** | Posiciones y operaciones por mercado, con métricas de asignación y salud de la cartera. |
 | **Playbook** | Una sección por tipo de instrumento: futuros, perpetuos, opciones, cripto, acciones y ETFs, bonos, bienes raíces. |
 | **Formas de hacer dinero** | Ideas por categoría, con estado y notas. |
@@ -20,6 +20,26 @@ tipografías de Google Fonts.
 
 Todo en español y en horario de 12 horas. La hora de referencia es Nueva York
 (ET), incluido el cambio de día: a medianoche en ET la cabina abre sesión nueva.
+
+### La sesión es la unidad
+
+La jornada se parte en ocho tramos en hora de Nueva York, sin huecos:
+
+| Sesión | Tramo ET | Lista propia |
+| --- | --- | --- |
+| Asia | 8:00 PM – 2:00 AM | sí |
+| Londres | 2:00 – 7:00 AM | sí |
+| Pre-mercado | 7:00 – 8:30 AM | no, es la preparación de NY AM |
+| NY AM Kill Zone | 8:30 – 11:00 AM | sí |
+| Lunch | 11:00 AM – 1:30 PM | sí |
+| NY PM | 1:30 – 4:00 PM | sí |
+| Cierre RTH | 4:00 – 5:00 PM | no |
+| Pausa diaria | 5:00 – 8:00 PM | no |
+
+De esa tabla salen tres cosas a la vez: el reloj de la cabecera, la sesión a la
+que pertenece cada operación (por su hora de entrada) y las cinco pre-sesiones
+que se preparan por separado. Cada una guarda su lista, se sella aparte y queda
+congelada sin tocar las demás.
 
 ### Cómo se archiva cada cosa
 
