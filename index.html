@@ -201,6 +201,27 @@
   body.editing .ced.edit-only, body.editing .edhead.edit-only { display: grid !important; }
   .check { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .check li { display: flex; gap: 12px; align-items: flex-start; padding: 9px 8px; border-radius: 4px; }
+  /* una pestaña por sesión: cada una lleva su lista y su pre-sesión */
+  .jseswrap { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px; }
+  .jses { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .jses b { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  tr.sesrow td { background: var(--bg); border-top: 1px solid var(--line-strong); padding: 7px 10px; }
+  tr.sesrow .sesn { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); margin-left: 10px; }
+  tr.sesrow .sesp { font-family: var(--font-mono); font-size: 10.5px; color: var(--dim); margin-left: 10px; }
+  .sestag { display: inline-block; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+  .sestag.live { color: var(--good); border-color: rgba(91,196,137,.45); background: var(--good-soft); }
+  .sestag.warn { color: var(--warn); border-color: rgba(224,164,88,.45); background: var(--warn-soft); }
+  .seschips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .seschip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: .03em; white-space: nowrap; }
+  .seschip:hover { border-color: var(--muted); color: var(--text); }
+  .seschip .st { font-weight: 500; font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .seschip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .seschip.on .st { color: rgba(79,179,160,.8); }
+  .seschip.done { border-color: rgba(91,196,137,.45); color: var(--good); }
+  .seschip.done .st { color: rgba(91,196,137,.75); }
+  .seschip.done.on { background: var(--good-soft); border-color: var(--good); }
+  .seschip.live::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--good); animation: blink 1.6s ease-in-out infinite; }
+  @media (max-width: 520px) { .seschip { flex: 1 1 auto; justify-content: center; } }
   .check li:hover { background: var(--surface-2); }
   .check li > input[type="checkbox"]:disabled { opacity: .45; cursor: default; }
   .check li > input[type="checkbox"]:disabled + .lbl { cursor: default; }
@@ -768,6 +789,7 @@
     <section class="panel" id="panelCheck">
       <header><h2>Pre-sesión</h2><span class="meta" id="checkMeta">0 / 0 · hoy</span></header>
       <div class="body">
+        <div class="seschips view-only" id="sesChips" role="tablist" aria-label="Sesión que se prepara"></div>
         <ul class="check" id="checkList"></ul>
         <button type="button" class="add edit-only" id="addCheck">+ Añadir paso</button>
         <div class="progress view-only"><i id="checkBar"></i></div>
@@ -811,6 +833,7 @@
           <div class="jf"><span class="lab">Regla rota</span><button type="button" class="toggle" id="jBroke" aria-pressed="false"><span id="jBrokeIcon">○</span><span id="jBrokeText">no</span></button></div>
         </div>
         <p class="synced" id="jSync"></p>
+        <div class="jseswrap" id="jSesBreak" hidden></div>
         <label class="lab" for="jNote">Nota · qué hice bien, qué rompí, qué cambia mañana</label>
         <textarea id="jNote" placeholder="Ej.: Esperé el CHoCH en 5m y entré en el pullback a la EMA 20. Cerré tras dos pérdidas, como dice la regla."></textarea>
         <div class="qt">
@@ -895,6 +918,7 @@
     <select id="ftRange" aria-label="Rango"><option value="all">todo el historial</option><option value="month">este mes</option><option value="30">últimos 30 días</option><option value="90">últimos 90 días</option><option value="year">este año</option></select>
     <select id="ftSetup" aria-label="Filtrar por setup"><option value="">todos los setups</option></select>
     <select id="ftInstr" aria-label="Instrumento"><option value="">todos los instrumentos</option></select>
+    <select id="ftSes" aria-label="Sesión"><option value="">todas las sesiones</option></select>
     <button type="button" class="btn primary" id="ftNew">+ Nueva operación</button>
   </div>
   <p class="synced" id="ftSync"></p>
@@ -959,6 +983,10 @@
           <div class="body"><p class="csub">Operaciones con las cuatro condiciones marcadas frente al resto.</p><div class="chartwrap" id="prWrap"></div><div id="prOut"></div></div>
         </section>
       </div>
+      <section class="panel">
+        <header><h2>Por sesión de mercado</h2><span class="meta" id="seMeta"></span></header>
+        <div class="body"><p class="csub">Cada operación cae en su sesión por la hora de entrada. Aquí se ve si la ventana de NY AM de verdad es la que paga, o si el dinero está en otro sitio.</p><div class="chartwrap" id="seWrap"></div><div id="seOut"></div></div>
+      </section>
       <div class="grid eq">
         <section class="panel">
           <header><h2>Por hora de entrada</h2><span class="meta" id="hrMeta"></span></header>
@@ -1257,19 +1285,39 @@
   const fmtParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour12: false, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   const fmtHM = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true });
   const fmtDay = new Intl.DateTimeFormat("es-ES", { timeZone: "America/New_York", weekday: "long", day: "numeric", month: "long" });
-  function etNow() { const p = {}; for (const x of fmtParts.formatToParts(new Date())) p[x.type] = x.value; const hour = Number(p.hour) % 24; return { date: `${p.year}-${p.month}-${p.day}`, dow: p.weekday, min: hour * 60 + Number(p.minute) }; }
-  function sessionState(n) {
-    const m = n.min, d = n.dow;
-    if (d === "Sat" || (d === "Sun" && m < 18 * 60) || (d === "Fri" && m >= 17 * 60)) return { label: "Mercado cerrado", cls: "off" };
-    if (m >= 8 * 60 + 30 && m < 11 * 60) return { label: "NY AM Kill Zone · ventana operativa", cls: "live" };
-    if (m >= 11 * 60 && m < 13 * 60 + 30) return { label: "Lunch · sin entradas", cls: "warn" };
-    if (m >= 13 * 60 + 30 && m < 16 * 60) return { label: "NY PM · fuera del protocolo", cls: "off" };
-    if (m >= 7 * 60 && m < 8 * 60 + 30) return { label: "Pre-mercado · prepara la lista", cls: "warn" };
-    if (m >= 2 * 60 && m < 5 * 60) return { label: "Londres · solo niveles", cls: "off" };
-    if (m >= 20 * 60 || m < 2 * 60) return { label: "Sesión Asia", cls: "off" };
-    if (m >= 16 * 60 && m < 18 * 60) return { label: "Cierre RTH", cls: "off" };
-    return { label: "Fuera de ventana", cls: "off" };
-  }
+  function etAt(d) { const p = {}; for (const x of fmtParts.formatToParts(d)) p[x.type] = x.value; const hour = Number(p.hour) % 24; return { date: `${p.year}-${p.month}-${p.day}`, dow: p.weekday, min: hour * 60 + Number(p.minute) }; }
+  function etNow() { return etAt(new Date()); }
+  /* ---------- las sesiones del día ----------
+     Una sola tabla manda sobre tres cosas: el reloj de arriba, a qué sesión
+     pertenece cada operación y cuántas pre-sesiones hay que preparar. Los tramos
+     van en minutos desde medianoche ET y cubren las 24 h sin huecos; el de Asia
+     cruza la medianoche, por eso su fin es menor que su inicio.
+     `pre: true` marca las sesiones que se preparan con su propia lista. */
+  const SESSIONS = [
+    { id: "asia",    short: "Asia",        start: 20 * 60,      end: 2 * 60,       cls: "off",  pre: true,  label: "Sesión Asia" },
+    { id: "londres", short: "Londres",     start: 2 * 60,       end: 7 * 60,       cls: "off",  pre: true,  label: "Londres · solo niveles" },
+    { id: "premkt",  short: "Pre-mercado", start: 7 * 60,       end: 8 * 60 + 30,  cls: "warn", pre: false, label: "Pre-mercado · prepara la lista" },
+    { id: "nyam",    short: "NY AM",       start: 8 * 60 + 30,  end: 11 * 60,      cls: "live", pre: true,  label: "NY AM Kill Zone · ventana operativa" },
+    { id: "lunch",   short: "Lunch",       start: 11 * 60,      end: 13 * 60 + 30, cls: "warn", pre: true,  label: "Lunch · sin entradas" },
+    { id: "nypm",    short: "NY PM",       start: 13 * 60 + 30, end: 16 * 60,      cls: "off",  pre: true,  label: "NY PM · fuera del protocolo" },
+    { id: "cierre",  short: "Cierre",      start: 16 * 60,      end: 17 * 60,      cls: "off",  pre: false, label: "Cierre RTH" },
+    { id: "pausa",   short: "Pausa",       start: 17 * 60,      end: 20 * 60,      cls: "off",  pre: false, label: "Pausa diaria · reabre a las 6 PM ET" },
+  ];
+  const SES_CLOSED = { id: "cerrado", short: "Cerrado", cls: "off", pre: false, label: "Mercado cerrado" };
+  const PRE_SESSIONS = SESSIONS.filter(s => s.pre);
+  function sesById(id) { return SESSIONS.find(x => x.id === id) || (id === SES_CLOSED.id ? SES_CLOSED : null); }
+  function sesShort(id) { const x = sesById(id); return x ? x.short : "—"; }
+  function sesLabel(id) { const x = sesById(id); return x ? x.label : "—"; }
+  function inSes(x, m) { return x.start <= x.end ? (m >= x.start && m < x.end) : (m >= x.start || m < x.end); }
+  function sesAt(min) { return SESSIONS.find(x => inSes(x, min)) || SESSIONS[0]; }
+  function marketClosed(n) { const m = n.min, d = n.dow; return d === "Sat" || (d === "Sun" && m < 18 * 60) || (d === "Fri" && m >= 17 * 60); }
+  function sessionState(n) { return marketClosed(n) ? SES_CLOSED : sesAt(n.min); }
+  function minOfTime(t) { const m = String(t == null ? "" : t).match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }
+  // La sesión de una operación sale de su hora de entrada (ET, como todo aquí).
+  function tradeSes(t) { const m = minOfTime(t && t.time); return m == null ? null : sesAt(m).id; }
+  function sesOfStamp(ts) { const d = new Date(Number(ts) || 0); if (!Number(ts)) return null; const n = etAt(d); return marketClosed(n) ? null : sesAt(n.min).id; }
+  // Fuera de una sesión con lista propia (pre-mercado, cierre, pausa), apunta a la siguiente que sí la tiene.
+  function nextPreSes(min) { for (let i = 0; i <= 1440; i += 5) { const x = sesAt((min + i) % 1440); if (x.pre) return x.id; } return "nyam"; }
   /* Cuánto queda de la franja actual y cuál viene después. Se calcula avanzando
      minuto a minuto sobre la misma tabla de sesiones, así nunca se desincroniza
      del reloj; el resultado se cachea hasta que cambia el minuto. */
@@ -1315,6 +1363,7 @@
     el.className = "sesnow " + s.cls;
     el.innerHTML = `<span class="dot"></span><div class="sn"><b>${esc(s.label)}</b><small>${esc(sub)}</small></div>`;
   }
+  let tickSes = "";
   function tickClock() {
     const n = etNow();
     $("etTime").textContent = fmtTime.format(new Date());
@@ -1323,13 +1372,36 @@
     $("sessionLabel").textContent = s.label;
     if (n.date !== state.today) { state.today = n.date; loadDay(); }
     renderSessionNow();
-    if (state.tab === "cabina") { try { updateGoBox(); } catch (e) { } }
+    if (state.tab === "cabina") {
+      try { updateGoBox(); } catch (e) { }
+      // al cambiar de sesión, la lista que se ve cambia con ella si no elegiste otra
+      const marca = (marketClosed(n) ? "cerrado" : sesAt(n.min).id) + "|" + sesSel();
+      if (marca !== tickSes) { tickSes = marca; try { renderChecklist(); } catch (e) { } }
+    }
   }
 
   /* =============================== STATE + STORE =============================== */
   const state = { today: etNow().date, settings: clone(DEFAULT_SETTINGS), day: null, history: [], store: "memory", db: null, unsub: [], editing: false, demo: false, tab: "cabina" };
-  function newDay(date) { return { date, checks: {}, levels: {}, result: null, trades: null, broke: false, note: "", closed: false, resultManual: false, pre: null, updatedAt: 0 }; }
+  function newDay(date) { return { date, checks: {}, checksBy: {}, levels: {}, result: null, trades: null, broke: false, note: "", closed: false, resultManual: false, pre: null, pres: {}, updatedAt: 0 }; }
   state.day = newDay(state.today);
+
+  /* Hasta ahora la cabina guardaba UNA lista y UNA pre-sesión por día. Ahora hay
+     una de cada por sesión. Los días viejos se convierten al vuelo: su lista y su
+     pre-sesión se cuelgan de la sesión en la que se guardaron, y si no consta la
+     hora, de NY AM, que era la única que se preparaba. */
+  function migrateDay(d) {
+    if (!d || typeof d !== "object") return d;
+    if (!d.checksBy || typeof d.checksBy !== "object") d.checksBy = {};
+    if (!d.pres || typeof d.pres !== "object") d.pres = {};
+    if (d.pre && !Object.keys(d.pres).length) {
+      const id = sesById(d.pre.ses) ? d.pre.ses : (sesOfStamp(d.pre.at) || "nyam");
+      d.pres[id] = Object.assign({}, d.pre, { ses: id });
+      if (d.checks && Object.keys(d.checks).length && !d.checksBy[id]) d.checksBy[id] = d.checks;
+    } else if (d.checks && Object.keys(d.checks).length && !Object.keys(d.checksBy).length) {
+      d.checksBy.nyam = d.checks;
+    }
+    return d;
+  }
 
   const LS_KEY = "cabina-mnq:v1";
   function lsRead() { try { return JSON.parse(localStorage.getItem(LS_KEY) || "null") || {}; } catch { return {}; } }
@@ -1402,7 +1474,7 @@
   function loadLocal() {
     const data = lsRead();
     if (data.settings) state.settings = normalize(data.settings);
-    if (data.days && data.days[state.today]) state.day = Object.assign(newDay(state.today), data.days[state.today]);
+    if (data.days && data.days[state.today]) state.day = migrateDay(Object.assign(newDay(state.today), data.days[state.today]));
     renderHistoryFromLocal();
     COLLS.forEach(n => coll(n).loadLocal());
   }
@@ -1439,7 +1511,7 @@
     state.unsub.forEach(u => u()); state.unsub = [];
     state.unsub.push(state.db.doc("days/" + state.today).onSnapshot(snap => {
       if (state.demo) return;
-      if (snap.exists) { const remote = snap.data(); if ((remote.updatedAt || 0) >= (state.day.updatedAt || 0)) state.day = Object.assign(newDay(state.today), remote); }
+      if (snap.exists) { const remote = snap.data(); if ((remote.updatedAt || 0) >= (state.day.updatedAt || 0)) state.day = migrateDay(Object.assign(newDay(state.today), remote)); }
       renderChecklist(); renderJournalDay(); renderLevels();
     }, () => {}));
   }
@@ -1532,12 +1604,56 @@
   $("subEdit").addEventListener("input", e => { state.settings.meta.subtitle = e.target.value; persistSettings(); $("subView").textContent = e.target.value; });
 
   /* ---------- checklist ---------- */
+  /* ---------- qué sesión se está preparando ----------
+     Por defecto sigue al reloj; en cuanto tocas una pestaña, manda tu elección
+     hasta que cambie el día. Fuera de una sesión con lista propia (pre-mercado,
+     cierre, pausa, fin de semana) apunta a la siguiente que sí la tiene. */
+  const ses = { sel: null };
+  function sesSel() {
+    if (ses.sel && sesById(ses.sel) && sesById(ses.sel).pre) return ses.sel;
+    const n = etNow();
+    if (marketClosed(n)) return "asia";  // con el mercado cerrado lo próximo que abre es Asia
+    const cur = sesAt(n.min);
+    return cur.pre ? cur.id : nextPreSes(n.min);
+  }
+  function curChecks() {
+    const d = state.day; if (!d.checksBy || typeof d.checksBy !== "object") d.checksBy = {};
+    const id = sesSel();
+    return d.checksBy[id] || (d.checksBy[id] = {});
+  }
+  function curPre() { const d = state.day; return (d.pres && d.pres[sesSel()]) || null; }
+  function presOf(d) { return (d && d.pres && typeof d.pres === "object") ? d.pres : {}; }
+  function checksOf(d, id) { return (d && d.checksBy && d.checksBy[id]) || {}; }
+
+  /* Cada pestaña dice cómo va su sesión: guardada (✓ verde), a medias (3/9) o
+     sin tocar. El punto que late marca la sesión que está corriendo ahora. */
+  function renderSesChips() {
+    const el = $("sesChips"); if (!el) return;
+    const d = state.day, sel = sesSel(), n = etNow();
+    const viva = marketClosed(n) ? null : sesAt(n.min).id;
+    const total = state.settings.checks.length;
+    el.innerHTML = PRE_SESSIONS.map(x => {
+      const pre = presOf(d)[x.id];
+      const hechos = Object.keys(checksOf(d, x.id)).filter(k => checksOf(d, x.id)[k]).length;
+      const estado = pre ? (pre.done === pre.total ? "✓" : `✓${pre.done}/${pre.total}`) : (hechos ? `${hechos}/${total}` : "—");
+      const cls = ["seschip", x.id === sel ? "on" : "", pre ? "done" : "", x.id === viva ? "live" : ""].filter(Boolean).join(" ");
+      const tit = pre ? `Pre-sesión guardada · ${pre.done} de ${pre.total}` : `${x.label} · sin guardar`;
+      return `<button type="button" class="${cls}" data-ses="${x.id}" role="tab" aria-selected="${x.id === sel}" title="${esc(tit)}">${esc(x.short)}<span class="st">${esc(estado)}</span></button>`;
+    }).join("");
+  }
+  $("sesChips").addEventListener("click", e => {
+    const b = e.target.closest("button[data-ses]"); if (!b) return;
+    ses.sel = b.dataset.ses; renderChecklist();
+  });
+
   const listEl = $("checkList");
   function renderChecklist() {
     const checks = state.settings.checks;
+    const marks = curChecks(), pre = curPre();
+    renderSesChips();
     listEl.innerHTML = checks.map((c, i) => `
       <li data-id="${c.id}">
-        <input type="checkbox" id="chk_${c.id}" aria-label="${esc(c.t)}" ${state.day.checks[c.id] ? "checked" : ""} ${state.day.pre ? "disabled" : ""}>
+        <input type="checkbox" id="chk_${c.id}" aria-label="${esc(c.t)}" ${marks[c.id] ? "checked" : ""} ${pre ? "disabled" : ""}>
         <label class="lbl" for="chk_${c.id}">${esc(c.t)}<small>${esc(c.s)}</small></label>
         <div class="ced edit-only">
           <input class="tin" type="text" data-f="t" value="${esc(c.t)}" placeholder="Paso" aria-label="Texto del paso">
@@ -1558,25 +1674,29 @@
      Guarda el texto de cada paso tal y como estaba, así que cambiar la lista
      más adelante no reescribe lo que hiciste ese día. */
   function preSnapshot() {
-    const items = state.settings.checks.map(c => ({ t: c.t, ok: !!state.day.checks[c.id], gate: !!c.gate }));
-    return { at: Date.now(), done: items.filter(i => i.ok).length, total: items.length, items };
+    const marks = curChecks();
+    const items = state.settings.checks.map(c => ({ t: c.t, ok: !!marks[c.id], gate: !!c.gate }));
+    return { at: Date.now(), ses: sesSel(), done: items.filter(i => i.ok).length, total: items.length, items };
   }
   function renderPreSession() {
     const b = $("preBanner"), sv = $("preSave"), ro = $("preReopen"); if (!b || !sv) return;
-    const pre = state.day.pre;
+    const pre = curPre();
+    const nombre = sesShort(sesSel());
+    sv.textContent = `Guardar pre-sesión de ${nombre}`;
     b.hidden = !pre; sv.hidden = !!pre; ro.hidden = !pre;
     if (!pre) return;
     const miss = pre.total - pre.done;
     const hora = fmtHM.format(new Date(pre.at));
     b.className = "closed-banner" + (miss ? " warn" : "");
     b.textContent = miss
-      ? `Pre-sesión guardada a las ${hora} con ${plu(miss, "paso sin marcar", "pasos sin marcar")}. Queda en el registro tal cual.`
-      : `Pre-sesión guardada a las ${hora} · ${pre.done} de ${pre.total}. Lista completa.`;
+      ? `${nombre}: pre-sesión guardada a las ${hora} con ${plu(miss, "paso sin marcar", "pasos sin marcar")}. Queda en el registro tal cual.`
+      : `${nombre}: pre-sesión guardada a las ${hora} · ${pre.done} de ${pre.total}. Lista completa.`;
   }
   function updateCheckProgress() {
     const checks = state.settings.checks, n = checks.length; let done = 0;
-    for (const c of checks) { const on = !!state.day.checks[c.id]; if (on) done++; const li = listEl.querySelector(`li[data-id="${c.id}"]`); if (li) li.classList.toggle("done", on); }
-    $("checkMeta").textContent = `${done} / ${n} · ${state.day.pre ? "guardada" : "hoy"}`;
+    const marks = curChecks();
+    for (const c of checks) { const on = !!marks[c.id]; if (on) done++; const li = listEl.querySelector(`li[data-id="${c.id}"]`); if (li) li.classList.toggle("done", on); }
+    $("checkMeta").textContent = `${done} / ${n} · ${sesShort(sesSel())}${curPre() ? " · guardada" : ""}`;
     $("checkBar").style.width = (n ? done / n * 100 : 0) + "%";
     $("goCount").textContent = `${done}/${n}`;
     updateGoBox();
@@ -1585,7 +1705,8 @@
   function updateGoBox() {
     const go = $("goBox"), gt = $("goText"); if (!go || !gt) return;
     const checks = state.settings.checks, n = checks.length;
-    const missing = checks.filter(c => !state.day.checks[c.id]);
+    const marks = curChecks();
+    const missing = checks.filter(c => !marks[c.id]);
     const done = n - missing.length;
     const gateMissing = missing.filter(c => c.gate);
     const t = etNow(); const weekend = t.dow === "Sat" || t.dow === "Sun";
@@ -1608,7 +1729,7 @@
   listEl.addEventListener("change", e => {
     const li = e.target.closest("li"); if (!li) return; const f = e.target.dataset.f;
     if (f === "gate") { const c = state.settings.checks.find(x => x.id === li.dataset.id); if (c) { c.gate = e.target.checked; persistSettings(); } return; }
-    if (e.target.type === "checkbox" && !f) { state.day.checks[li.dataset.id] = e.target.checked; persistDay(); updateCheckProgress(); }
+    if (e.target.type === "checkbox" && !f) { curChecks()[li.dataset.id] = e.target.checked; persistDay(); updateCheckProgress(); renderSesChips(); }
   });
   listEl.addEventListener("input", e => {
     const li = e.target.closest("li"); if (!li) return; const f = e.target.dataset.f; if (f !== "t" && f !== "s") return;
@@ -1628,14 +1749,17 @@
   function preFlash(msg) { const el = $("preSaved"); if (!el) return; el.textContent = msg; clearTimeout(timers.preflash); timers.preflash = setTimeout(() => { el.textContent = ""; }, 3500); }
   $("preSave").addEventListener("click", () => {
     if (!state.settings.checks.length) { preFlash("añade pasos a la lista antes de guardarla"); return; }
-    state.day.pre = preSnapshot();
+    const d = state.day; d.pres = d.pres || {};
+    const snap = preSnapshot(); d.pres[sesSel()] = snap;
     persistDay(); renderChecklist(); renderHistory();
-    const falta = state.day.pre.total - state.day.pre.done;
-    preFlash(falta ? `guardada con ${plu(falta, "paso sin marcar", "pasos sin marcar")}` : "guardada completa");
+    const falta = snap.total - snap.done;
+    preFlash(`${sesShort(snap.ses)}: ${falta ? `guardada con ${plu(falta, "paso sin marcar", "pasos sin marcar")}` : "guardada completa"}`);
   });
   $("preReopen").addEventListener("click", () => {
-    state.day.pre = null; persistDay(); renderChecklist(); renderHistory();
-    preFlash("reabierta: la lista vuelve a ser editable");
+    const id = sesSel(); if (state.day.pres) delete state.day.pres[id];
+    if (state.day.pre && (state.day.pre.ses === id || !state.day.pre.ses)) state.day.pre = null;
+    persistDay(); renderChecklist(); renderHistory();
+    preFlash(`${sesShort(id)}: reabierta, la lista vuelve a ser editable`);
   });
 
   /* ---------- rules ---------- */
@@ -1855,8 +1979,23 @@
     d.result = r; d.trades = g.n; d.resultManual = false;
     persistDay(); renderJournalDay();
   }
+  // Desglose de hoy por sesión, debajo del resultado: dónde se ganó y dónde se devolvió.
+  function renderDaySes() {
+    const el = $("jSesBreak"); if (!el) return;
+    const ops = coll("trades").items.filter(t => t.type === "futuros" && t.date === state.day.date).map(t => tradeCalc(Object.assign({}, t)));
+    if (!ops.length) { el.hidden = true; el.innerHTML = ""; return; }
+    const g = {}; ops.forEach(t => { const k = tradeSes(t) || "__sin"; const o = g[k] || (g[k] = { pnl: 0, n: 0, c: 0 }); o.n++; if (t.pnlEff != null) { o.pnl += t.pnlEff; o.c++; } });
+    const orden = SESSIONS.map(x => x.id).concat(["__sin"]).filter(k => g[k]);
+    el.hidden = false;
+    el.innerHTML = orden.map(k => {
+      const o = g[k], x = k === "__sin" ? null : sesById(k);
+      const pre = presOf(state.day)[k];
+      return `<div class="jses"><span class="sestag ${x ? x.cls : ""}">${esc(x ? x.short : "sin hora")}</span><b class="${o.c ? (o.pnl > 0 ? "pos" : o.pnl < 0 ? "neg" : "") : "dim"}">${o.c ? money(o.pnl) : "abiertas"}</b><span>${plu(o.n, "op", "ops")}${pre ? ` · pre ${pre.done}/${pre.total}` : x && x.pre ? " · sin pre" : ""}</span></div>`;
+    }).join("");
+  }
   function renderDaySync() {
     const el = $("jSync"); if (!el) return;
+    renderDaySes();
     const d = state.day; const g = futDayAgg(d.date);
     if (!g.n) { el.className = "synced"; el.innerHTML = `<span class="dotg" style="background:var(--dim)"></span><span>Sin operaciones de futuros hoy. Si registras alguna en Futuros, el resultado se rellena solo.</span>`; return; }
     const sum = `${plu(g.closed, "cerrada", "cerradas")} · ${money(g.pnl)}${g.open ? ` · ${plu(g.open, "abierta", "abiertas")}` : ""}`;
@@ -1936,7 +2075,7 @@
   // Historial único: días guardados en la cabina + días que solo existen como operaciones de futuros.
   function historyMerged() {
     const map = new Map();
-    (state.history || []).forEach(d => { if (d && d.date) map.set(d.date, Object.assign({}, d)); });
+    (state.history || []).forEach(d => { if (d && d.date) map.set(d.date, migrateDay(Object.assign({}, d))); });
     const t = state.day;
     if (t && t.date && (t.result != null || t.closed || t.broke)) map.set(t.date, Object.assign({}, t));
     const byDay = {};
@@ -1951,6 +2090,15 @@
     });
     return [...map.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 14);
   }
+  /* En el historial cabe un número, no cinco pestañas: cuántas sesiones se
+     prepararon ese día, en verde si todas llevaban la lista completa. */
+  function preCell(d) {
+    const ps = Object.values(presOf(d));
+    if (!ps.length) return `<td class="r dim" title="ninguna sesión preparada">—</td>`;
+    const enteras = ps.filter(x => x.done === x.total).length;
+    const tit = ps.map(x => `${sesShort(x.ses)} ${x.done}/${x.total}`).join(" · ");
+    return `<td class="r ${enteras === ps.length ? "pos" : "warn"}" title="${esc(tit)}">${ps.length}</td>`;
+  }
   function renderHistory() {
     const h = historyMerged(); const logged = h.filter(d => d.result != null);
     const green = logged.filter(d => Number(d.result) > 0).length, red = logged.filter(d => Number(d.result) < 0).length, broke = h.filter(d => d.broke).length;
@@ -1964,7 +2112,7 @@
     $("histMeta").textContent = h.length ? `${h[h.length - 1].date} → ${h[0].date}` : "";
     const wrap = $("histWrap");
     if (!h.length) { wrap.innerHTML = `<p class="empty">Todavía no hay sesiones cerradas. La primera fila aparece cuando pulses <code>Cerrar sesión de hoy</code>. Una cabina vacía durante una semana dice más que cualquier backtest.</p>`; return; }
-    wrap.innerHTML = `<table class="t"><thead><tr><th>Fecha</th><th class="r">Resultado</th><th class="r">Ops</th><th class="r">Pre</th><th>Regla</th><th>Nota</th><th></th></tr></thead><tbody>${h.map(d => { const r = d.result == null ? null : Number(d.result); return `<tr data-date="${d.date}"><td><span class="dim">${dowOf(d.date)}</span> ${d.date.slice(5)}</td><td class="r ${r > 0 ? "pos" : r < 0 ? "neg" : ""}">${r == null ? "—" : money(r)}</td><td class="r">${d.trades == null ? "—" : d.trades}</td><td class="r ${d.pre ? (d.pre.done === d.pre.total ? "pos" : "neg") : "dim"}" title="${d.pre ? "pasos marcados al guardar la pre-sesión" : "pre-sesión no guardada"}">${d.pre ? d.pre.done + "/" + d.pre.total : "—"}</td><td>${d.broke ? '<span class="neg">rota</span>' : '<span class="dim">ok</span>'}</td><td class="notes">${d.synthetic ? '<span class="dim">del journal de futuros</span>' : esc(d.note || "")}</td><td class="act">${d.synthetic ? "" : '<button type="button" class="icon del" data-act="del" title="Borrar esta sesión">×</button>'}</td></tr>`; }).join("")}</tbody></table>`;
+    wrap.innerHTML = `<table class="t"><thead><tr><th>Fecha</th><th class="r">Resultado</th><th class="r">Ops</th><th class="r">Pre</th><th>Regla</th><th>Nota</th><th></th></tr></thead><tbody>${h.map(d => { const r = d.result == null ? null : Number(d.result); return `<tr data-date="${d.date}"><td><span class="dim">${dowOf(d.date)}</span> ${d.date.slice(5)}</td><td class="r ${r > 0 ? "pos" : r < 0 ? "neg" : ""}">${r == null ? "—" : money(r)}</td><td class="r">${d.trades == null ? "—" : d.trades}</td>${preCell(d)}<td>${d.broke ? '<span class="neg">rota</span>' : '<span class="dim">ok</span>'}</td><td class="notes">${d.synthetic ? '<span class="dim">del journal de futuros</span>' : esc(d.note || "")}</td><td class="act">${d.synthetic ? "" : '<button type="button" class="icon del" data-act="del" title="Borrar esta sesión">×</button>'}</td></tr>`; }).join("")}</tbody></table>`;
   }
   $("histWrap").addEventListener("click", async e => {
     const btn = e.target.closest("button[data-act='del']"); if (!btn || !armed(btn)) return;
@@ -2004,7 +2152,7 @@
   function marketName(id) { const m = marketsMerged().find(x => x.id === id); return m ? m.name : (id || "—"); }
 
   /* =============================== FUTUROS (journal estilo TradeZella) =============================== */
-  const ft = { view: "resumen", range: "all", setup: "", instr: "", acct: "", month: state.today.slice(0, 7), day: null };
+  const ft = { view: "resumen", range: "all", setup: "", instr: "", acct: "", ses: "", month: state.today.slice(0, 7), day: null };
   const ivj = { setup: "" };
   function acctOptions() { return (state.settings.accounts || []).map(a => [a.id, `${a.firm ? a.firm + " · " : ""}${a.name || "sin nombre"}`]); }
   function acctById(id) { return (state.settings.accounts || []).find(a => a.id === id) || null; }
@@ -2027,6 +2175,7 @@
   $("ftRange").addEventListener("change", e => { ft.range = e.target.value; renderFutures(); });
   $("ftSetup").addEventListener("change", e => { ft.setup = e.target.value; renderFutures(); });
   $("ftInstr").addEventListener("change", e => { ft.instr = e.target.value; renderFutures(); });
+  $("ftSes").addEventListener("change", e => { ft.ses = e.target.value; renderFutures(); });
   $("ftAcct").addEventListener("change", e => { ft.acct = e.target.value; renderFutures(); });
   $("ivSetup").addEventListener("change", e => { ivj.setup = e.target.value; renderInvestOps(); });
   $("calPrev").addEventListener("click", () => { ft.month = shiftMonth(ft.month, -1); renderCalendar(); });
@@ -2186,7 +2335,7 @@
     return true;
   }
   function acctMatch(t) { return !ft.acct || (ft.acct === "__none" ? !t.accountId : t.accountId === ft.acct); }
-  function futFiltered() { let l = tradesOf("futuros").filter(inRange); if (ft.setup) l = l.filter(t => t.setupId === ft.setup); if (ft.instr) l = l.filter(t => t.instrument === ft.instr); if (ft.acct) l = l.filter(acctMatch); return l; }
+  function futFiltered() { let l = tradesOf("futuros").filter(inRange); if (ft.setup) l = l.filter(t => t.setupId === ft.setup); if (ft.instr) l = l.filter(t => t.instrument === ft.instr); if (ft.ses) l = l.filter(t => (tradeSes(t) || "__sin") === ft.ses); if (ft.acct) l = l.filter(acctMatch); return l; }
   function futStats(list) {
     const closed = list.filter(t => t.pnlEff != null || t.rReal != null);
     const wins = closed.filter(t => (t.pnlEff ?? t.rReal) > 0), losses = closed.filter(t => (t.pnlEff ?? t.rReal) < 0), be = closed.length - wins.length - losses.length;
@@ -2223,6 +2372,11 @@
     const sf = $("ftSetup"); sf.innerHTML = `<option value="">todos los setups</option>` + coll("playbooks").items.filter(p => p.type === "futuros").map(p => `<option value="${p.id}" ${ft.setup === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("");
     const instrs = [...new Set(all.map(t => t.instrument).filter(Boolean))].sort();
     $("ftInstr").innerHTML = `<option value="">todos los instrumentos</option>` + instrs.map(i => `<option value="${esc(i)}" ${ft.instr === i ? "selected" : ""}>${esc(i)}</option>`).join("");
+    // el selector solo ofrece sesiones con operaciones: un filtro que vacía la vista no ayuda
+    const conOps = new Set(all.map(t => tradeSes(t) || "__sin"));
+    if (ft.ses && !conOps.has(ft.ses)) ft.ses = "";
+    const opsSes = SESSIONS.filter(x => conOps.has(x.id)).map(x => [x.id, x.short]).concat(conOps.has("__sin") ? [["__sin", "sin hora"]] : []);
+    $("ftSes").innerHTML = `<option value="">todas las sesiones</option>` + opsSes.map(([v, l]) => `<option value="${esc(v)}" ${ft.ses === v ? "selected" : ""}>${esc(l)}</option>`).join("");
     const list = futFiltered(); const s = futStats(list);
     const pfTxt = s.pf == null ? "—" : s.pf === Infinity ? "∞" : s.pf.toFixed(2);
     const wl = s.avgWin != null && s.avgLoss ? (s.avgWin / s.avgLoss).toFixed(2) : "—";
@@ -2249,7 +2403,7 @@
     const fx = $("ftFixAcct"); if (fx) fx.addEventListener("click", bulkAssignAccount);
     renderCalendar(); renderEquity(list); renderUnderwater(list); renderDaily(list); renderRolling(list); renderStreakTiles(s);
     renderDay(); renderBreakdown(list); renderJournalTable(list);
-    renderScorecard(list, s); renderRDist(list); renderProto(s); renderHourChart(list); renderDowChart(list); renderConsistency(list, s);
+    renderScorecard(list, s); renderRDist(list); renderProto(s); renderSesChart(list); renderHourChart(list); renderDowChart(list); renderConsistency(list, s);
     renderFutAccounts();
   }
   function bulkAssignAccount() {
@@ -2333,10 +2487,10 @@
   let dayNoteTimer = null;
   async function saveDayNote(date, patch) {
     if (state.demo) return;
-    if (state.db) { try { const ref = state.db.doc("days/" + date); const snap = await ref.get(); const cur = snap.exists ? snap.data() : newDay(date); const next = Object.assign({}, cur, patch, { updatedAt: Date.now() }); await ref.set(next); if (date === state.today) { state.day = Object.assign(newDay(date), next); renderJournalDay(); } } catch (e) { flash("no se pudo guardar"); } }
-    else { lsPatch(d => { d.days = d.days || {}; d.days[date] = Object.assign(newDay(date), d.days[date] || {}, patch, { updatedAt: Date.now() }); }); if (date === state.today) { state.day = Object.assign(newDay(date), lsRead().days[date]); renderJournalDay(); } renderHistoryFromLocal(); }
+    if (state.db) { try { const ref = state.db.doc("days/" + date); const snap = await ref.get(); const cur = snap.exists ? snap.data() : newDay(date); const next = Object.assign({}, cur, patch, { updatedAt: Date.now() }); await ref.set(next); if (date === state.today) { state.day = migrateDay(Object.assign(newDay(date), next)); renderJournalDay(); } } catch (e) { flash("no se pudo guardar"); } }
+    else { lsPatch(d => { d.days = d.days || {}; d.days[date] = Object.assign(newDay(date), d.days[date] || {}, patch, { updatedAt: Date.now() }); }); if (date === state.today) { state.day = migrateDay(Object.assign(newDay(date), lsRead().days[date])); renderJournalDay(); } renderHistoryFromLocal(); }
   }
-  function dayDoc(date) { if (date === state.today) return state.day; const h = state.history.find(d => d.date === date); if (h) return h; const l = lsRead().days; return l && l[date] ? l[date] : null; }
+  function dayDoc(date) { if (date === state.today) return state.day; const h = state.history.find(d => d.date === date); if (h) return migrateDay(h); const l = lsRead().days; return l && l[date] ? migrateDay(l[date]) : null; }
   function renderDay() {
     const all = tradesOf("futuros"); let date = ft.day;
     if (!date) { const withTrades = all.map(t => t.date).sort(); date = withTrades.length ? withTrades[withTrades.length - 1] : state.today; ft.day = date; }
@@ -2344,7 +2498,21 @@
     $("dayTitle").textContent = `${dowOf(date)} ${dmy(date)}`;
     $("dayMeta").innerHTML = s.closed ? `<span class="${s.pnl > 0 ? "pos" : s.pnl < 0 ? "neg" : ""}">${money(s.pnl)}</span> · ${s.n} ops · ${s.wins}W ${s.losses}L${s.avgR != null ? " · " + (s.avgR >= 0 ? "+" : "") + (s.avgR * s.closed).toFixed(2) + "R" : ""}` : list.length ? `${list.length} ops abiertas` : "sin operaciones";
     const pbName = id => { const p = coll("playbooks").get(id); return p ? p.name : ""; };
-    const rows = list.length ? `<div class="twrap"><table class="t"><thead><tr><th>Hora</th><th>Instr.</th><th>Setup</th><th>Dir</th><th class="r">Ctos</th><th class="r">Entrada</th><th class="r">Salida</th><th class="r">R</th><th class="r">P&amp;L</th><th>Img</th><th>Etiquetas</th><th></th></tr></thead><tbody>${list.slice().reverse().map(t => `<tr data-id="${t.id}"><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.exit ?? '<span class="chip warn">abierta</span>'}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? "—" : money(t.pnlEff)}</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="empty">Sin operaciones este día.</p>`;
+    /* Las filas van agrupadas por sesión, cada grupo con su resultado: así se ve
+       de un vistazo en qué franja se ganó y en cuál se devolvió. */
+    const porSes = {}; list.forEach(t => { const k = tradeSes(t) || "__sin"; (porSes[k] || (porSes[k] = [])).push(t); });
+    const ordenSes = SESSIONS.map(x => x.id).concat(["__sin"]).filter(k => porSes[k]);
+    const filaOp = t => `<tr data-id="${t.id}"><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.exit ?? '<span class="chip warn">abierta</span>'}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? "—" : money(t.pnlEff)}</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
+    const grupo = k => {
+      const ops = porSes[k].slice().sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
+      const cerradas = ops.filter(t => t.pnlEff != null);
+      const pnl = cerradas.reduce((a, t) => a + t.pnlEff, 0);
+      const x = k === "__sin" ? null : sesById(k);
+      const dd2 = presOf(dayDoc(date) || {})[k];
+      const preTxt = dd2 ? `pre ${dd2.done}/${dd2.total}` : (x && x.pre ? "sin pre-sesión" : "");
+      return `<tr class="sesrow"><td colspan="12"><span class="sestag ${x ? x.cls : ""}">${esc(x ? x.short : "sin hora")}</span><span class="sesn">${plu(ops.length, "operación", "operaciones")}${cerradas.length ? ` · <b class="${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${money(pnl)}</b>` : " · abiertas"}</span>${preTxt ? `<span class="sesp">${esc(preTxt)}</span>` : ""}</td></tr>` + ops.map(filaOp).join("");
+    };
+    const rows = list.length ? `<div class="twrap"><table class="t"><thead><tr><th>Hora</th><th>Instr.</th><th>Setup</th><th>Dir</th><th class="r">Ctos</th><th class="r">Entrada</th><th class="r">Salida</th><th class="r">R</th><th class="r">P&amp;L</th><th>Img</th><th>Etiquetas</th><th></th></tr></thead><tbody>${ordenSes.map(grupo).join("")}</tbody></table></div>` : `<p class="empty">Sin operaciones este día.</p>`;
     const cab = dd && (dd.result != null || dd.broke || dd.closed) ? `<div class="kv" style="display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13px;margin-bottom:10px"><b class="lab" style="margin:0">Cabina</b><span>${dd.result != null ? `resultado ${money(dd.result)}` : "sin resultado"}${dd.trades != null ? ` · ${dd.trades} ops` : ""}${dd.broke ? ' · <span class="neg">regla rota ⚑</span>' : ""}${dd.closed ? " · sesión cerrada" : ""}</span></div>` : "";
     const withShots = list.filter(t => (t.images || []).length);
     const nShots = withShots.reduce((n, t) => n + t.images.length, 0);
@@ -2447,14 +2615,20 @@
     }).join("");
   }
   /* ---------- tabla de operaciones (futuros) ---------- */
+  // La etiqueta de sesión se pinta con el color del tramo: verde la ventana operativa.
+  function sesTag(t) {
+    const id = tradeSes(t); if (!id) return '<span class="dim">—</span>';
+    const x = sesById(id);
+    return `<span class="sestag ${x.cls}" title="${esc(x.label)}">${esc(x.short)}</span>`;
+  }
   function renderJournalTable(list) {
     $("jrMeta").textContent = list.length ? `${plu(list.length, "registro", "registros")}` : "";
     const wrap = $("jrTable");
     if (!list.length) { wrap.innerHTML = `<p class="empty">Sin operaciones de futuros en este rango. La primera fila es una entrada real con entrada, stop y salida — no una idea.</p>`; return; }
     const pbName = id => { const p = coll("playbooks").get(id); return p ? p.name : ""; };
-    wrap.innerHTML = `<table class="t"><thead><tr><th>Fecha</th><th>Hora</th><th>Cuenta</th><th>Instr.</th><th>Setup</th><th>Dir</th><th class="r">Ctos</th><th class="r">Entrada</th><th class="r">Stop</th><th class="r">Salida</th><th class="r">R plan</th><th class="r">R</th><th class="r">P&amp;L</th><th>Cal.</th><th>Prot.</th><th>Img</th><th>Etiquetas</th><th>Lección</th><th></th></tr></thead><tbody>${list.map(t => {
+    wrap.innerHTML = `<table class="t"><thead><tr><th>Fecha</th><th>Hora</th><th>Sesión</th><th>Cuenta</th><th>Instr.</th><th>Setup</th><th>Dir</th><th class="r">Ctos</th><th class="r">Entrada</th><th class="r">Stop</th><th class="r">Salida</th><th class="r">R plan</th><th class="r">R</th><th class="r">P&amp;L</th><th>Cal.</th><th>Prot.</th><th>Img</th><th>Etiquetas</th><th>Lección</th><th></th></tr></thead><tbody>${list.map(t => {
       const proto = [t.cStruct, t.cPull, t.cWindow, t.cSize].filter(Boolean).length;
-      return `<tr data-id="${t.id}"><td><span class="dim">${dowOf(t.date)}</span> ${(t.date || "").slice(5)}</td><td>${esc(t.time ? h12(t.time) : "—")}</td><td class="ui">${esc(acctLabel(t.accountId)) || '<span class="dim">—</span>'}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.stop ?? "—"}</td><td class="r">${t.exit ?? '<span class="chip warn">abierta</span>'}</td><td class="r dim">${t.rPlanned == null ? "—" : t.rPlanned.toFixed(1)}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? "—" : money(t.pnlEff)}</td><td>${esc(t.quality || "")}</td><td class="${proto === 4 ? "pos" : proto <= 2 ? "neg" : ""}">${proto}/4</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="notes">${esc(t.lesson || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
+      return `<tr data-id="${t.id}"><td><span class="dim">${dowOf(t.date)}</span> ${(t.date || "").slice(5)}</td><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${sesTag(t)}</td><td class="ui">${esc(acctLabel(t.accountId)) || '<span class="dim">—</span>'}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.stop ?? "—"}</td><td class="r">${t.exit ?? '<span class="chip warn">abierta</span>'}</td><td class="r dim">${t.rPlanned == null ? "—" : t.rPlanned.toFixed(1)}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? "—" : money(t.pnlEff)}</td><td>${esc(t.quality || "")}</td><td class="${proto === 4 ? "pos" : proto <= 2 ? "neg" : ""}">${proto}/4</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="notes">${esc(t.lesson || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
     }).join("")}</tbody></table>`;
   }
   $("jrTable").addEventListener("click", e => {
@@ -2567,6 +2741,42 @@
 
   function groupPnl(closed, keyFn) {
     const g = {}; closed.forEach(t => { const k = keyFn(t); const o = g[k] || (g[k] = { pnl: 0, n: 0, w: 0 }); o.pnl += t.pnlEff; o.n++; if (t.pnlEff > 0) o.w++; }); return g;
+  }
+  /* Reparto por sesión: barras en orden cronológico de la jornada y una tabla
+     con lo que de verdad decide si una franja merece la pena. */
+  function renderSesChart(list) {
+    const wrap = $("seWrap"), out = $("seOut"); if (!wrap) return;
+    const closed = list.filter(t => t.pnlEff != null);
+    if (!closed.length) { wrap.innerHTML = `<p class="empty">Sin operaciones cerradas.</p>`; out.innerHTML = ""; $("seMeta").textContent = ""; return; }
+    const g = {};
+    closed.forEach(t => {
+      const k = tradeSes(t) || "__sin";
+      const o = g[k] || (g[k] = { pnl: 0, n: 0, w: 0, l: 0, rs: [] });
+      o.pnl += t.pnlEff; o.n++; if (t.pnlEff > 0) o.w++; else if (t.pnlEff < 0) o.l++;
+      if (t.rReal != null) o.rs.push(t.rReal);
+    });
+    const orden = SESSIONS.map(x => x.id).concat(["__sin"]).filter(k => g[k]);
+    const items = orden.map(k => {
+      const o = g[k], name = k === "__sin" ? "sin hora" : sesShort(k);
+      return { label: name, value: o.pnl, cls: k === "nyam" ? (o.pnl >= 0 ? "pos" : "neg") : undefined, title: `${name} · ${money(o.pnl)} · ${plu(o.n, "op", "ops")} · WR ${pct(o.w / o.n)}` };
+    });
+    const mejor = items.slice().sort((a, b) => b.value - a.value)[0];
+    const kz = g.nyam, fuera = orden.filter(k => k !== "nyam").reduce((a, k) => ({ pnl: a.pnl + g[k].pnl, n: a.n + g[k].n }), { pnl: 0, n: 0 });
+    $("seMeta").innerHTML = `mejor sesión <strong>${esc(mejor.label)}</strong> ${money(mejor.value)}`;
+    wrap.innerHTML = chartBars(items, { W: chartW(wrap), H: 170, aria: "P&L por sesión de mercado", maxLabels: 10 });
+    const fila = k => {
+      const o = g[k], name = k === "__sin" ? "sin hora" : sesShort(k);
+      const avgR = o.rs.length ? o.rs.reduce((a, b) => a + b, 0) / o.rs.length : null;
+      const x = sesById(k);
+      return `<tr><td class="ui">${esc(name)}${k === "nyam" ? ' <span class="chip">ventana</span>' : ""}</td><td class="r">${o.n}</td><td class="r">${pct(o.w / o.n)}</td><td class="r">${avgR == null ? "—" : (avgR >= 0 ? "+" : "") + avgR.toFixed(2)}</td><td class="r ${o.pnl > 0 ? "pos" : o.pnl < 0 ? "neg" : ""}">${money(o.pnl)}</td><td class="r dim">${pct(o.n / closed.length)}</td></tr>`;
+    };
+    let veredicto;
+    if (!kz) veredicto = `Ninguna operación cerrada dentro de NY AM. Todo el resultado sale de ${plu(fuera.n, "operación", "operaciones")} en otras sesiones: o la ventana del protocolo ya no es la que operas, o hay que reescribirla.`;
+    else if (!fuera.n) veredicto = "Todo dentro de NY AM. Sin operaciones fuera de la ventana no hay con qué comparar.";
+    else if (kz.pnl > 0 && fuera.pnl <= 0) veredicto = `La ventana de NY AM aporta ${money(kz.pnl)} y el resto de sesiones resta ${money(fuera.pnl)}. La regla de operar solo en la ventana se sostiene con estos datos.`;
+    else if (fuera.pnl > kz.pnl) veredicto = `Fuera de NY AM llevas ${money(fuera.pnl)} en ${plu(fuera.n, "operación", "operaciones")}, más que los ${money(kz.pnl)} de la ventana. Con esta muestra el protocolo está mirando a la franja equivocada.`;
+    else veredicto = `NY AM aporta ${money(kz.pnl)} y el resto ${money(fuera.pnl)}. Las dos suman, así que operar fuera de la ventana no te está costando dinero — te está costando foco, que es otra discusión.`;
+    out.innerHTML = `<div class="twrap" style="margin-top:12px"><table class="t"><thead><tr><th>Sesión</th><th class="r">ops</th><th class="r">WR</th><th class="r">R media</th><th class="r">P&amp;L</th><th class="r">peso</th></tr></thead><tbody>${orden.map(fila).join("")}</tbody></table></div><p class="note-p" style="margin-top:10px">${esc(veredicto)}</p>`;
   }
   function renderHourChart(list) {
     const wrap = $("hrWrap"); if (!wrap) return;
@@ -3639,7 +3849,7 @@
     state.settings = normalize(Object.assign(clone(state.settings), { accounts: d.accounts }));
     state.history = d.history;
     state.day = Object.assign(newDay(state.today), { result: d.history[0] ? d.history[0].result : 0, trades: d.history[0] ? d.history[0].trades : 0, note: "Sesión de ejemplo. Nada de esto se guarda.", closed: false, levels: d.demoLevels });
-    state.settings.checks.forEach((c, i) => { if (i < 6) state.day.checks[c.id] = true; });
+    state.day.checksBy = { nyam: {} }; state.settings.checks.forEach((c, i) => { if (i < 6) state.day.checksBy.nyam[c.id] = true; });
     ft.day = null; ft.month = state.today.slice(0, 7); ft.range = "all"; ft.setup = ""; ft.instr = "";
     coll("playbooks").items = d.pbs; coll("trades").items = d.trades;
     coll("positions").items = d.positions; coll("watch").items = d.watch;
@@ -3737,11 +3947,11 @@
   // El historial en pantalla son 14 días; la copia se lleva todos los que existan.
   async function allDayDocs() {
     if (state.db) {
-      try { const q = await state.db.collection("days").limit(2000).get(); return q.docs.map(d => d.data()).filter(d => d && d.date); }
+      try { const q = await state.db.collection("days").limit(2000).get(); return q.docs.map(d => migrateDay(d.data())).filter(d => d && d.date); }
       catch (e) { }
     }
     const l = lsRead().days || {};
-    return Object.values(l).filter(d => d && d.date);
+    return Object.values(l).filter(d => d && d.date).map(migrateDay);
   }
   function imagesOf(rec) { return rec && Array.isArray(rec.images) ? rec.images : []; }
   function eachImage(b, fn) { ["trades", "playbooks"].forEach(n => Object.values(b[n] || {}).forEach(r => imagesOf(r).forEach(fn))); }
@@ -3950,7 +4160,6 @@
   function renderBackup() {
     const meta = $("bkMeta"); if (!meta) return;
     const parts = [];
-    const dias = new Set(state.history.map(d => d.date)); if (state.day && (state.day.result != null || state.day.closed || state.day.pre)) dias.add(state.day.date);
     BK_PARTS.forEach(([k, one, many]) => { if (k === "days") return; const n = coll(k).items.length; if (n) parts.push(plu(n, one, many)); });
     let imgs = 0; ["trades", "playbooks"].forEach(n => coll(n).items.forEach(r => { imgs += imagesOf(r).length; }));
     meta.textContent = parts.length ? parts.join(" · ") + (imgs ? " · " + plu(imgs, "captura", "capturas") : "") : "sin datos todavía";
