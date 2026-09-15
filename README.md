@@ -11,7 +11,7 @@ tipografías de Google Fonts.
 
 | Pestaña | Para qué |
 | --- | --- |
-| **Cabina** | Una pre-sesión por sesión de mercado (Asia, Londres, NY AM, Lunch, NY PM), cada una con su lista y su sello; niveles del día, reglas duras, **centro de mando de cada cuenta prop** (balance, estado de operación y de cobro, consistencia, drawdown, riesgo del día, rendimiento de hoy y curva), sesión de hoy con el banner en vivo y el desglose por sesión, y calendario de resultados. |
+| **Cabina** | Una pre-sesión por sesión de mercado (Asia, Londres, NY AM, Lunch, NY PM); niveles del día; **motor de reglas duras** que vigila instrumento, pérdida máxima, pérdidas seguidas, tope de ganancia y contratos con las operaciones del día; **centro de mando de cada cuenta prop** (balance, estado operativo, consistencia, drawdown, riesgo del día, rendimiento de hoy y curva); sesión de hoy con el banner en vivo y el desglose por sesión; y calendario de resultados. |
 | **Futuros** | Journal de operaciones: resumen, cuentas, análisis (R múltiple, sesión de mercado, franjas horarias, día de la semana, consistencia) y diario del día agrupado por sesión. |
 | **Inversiones** | Posiciones y operaciones por mercado, con métricas de asignación y salud de la cartera. |
 | **Playbook** | Una sección por tipo de instrumento: futuros, perpetuos, opciones, cripto, acciones y ETFs, bonos, bienes raíces. |

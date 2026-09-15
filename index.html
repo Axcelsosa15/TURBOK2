@@ -256,6 +256,59 @@
   .rule .badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); border: 1px solid rgba(79,179,160,.4); border-radius: 3px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
   .hint { font-family: var(--font-mono); font-size: 11.5px; color: var(--warn); margin: 0 0 12px; }
   .hint.ok { color: var(--dim); }
+  /* ---------- motor de reglas ----------
+     Una regla se escanea en dos líneas: qué es y si se está cumpliendo ahora.
+     La explicación larga vive detrás de «Detalle» y no compite por el espacio. */
+  .rulesstate { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .rulesstate i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .rulesstate.good { color: var(--good); } .rulesstate.warn { color: var(--warn); } .rulesstate.bad { color: var(--bad); }
+  .rules { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+  .rulec { border: 1px solid var(--line); border-left: 2px solid var(--line-strong); border-radius: 4px; padding: 10px 12px; background: var(--bg); display: grid; gap: 4px; align-content: start; min-width: 0; }
+  .rulec.good { border-left-color: var(--good); }
+  .rulec.warn { border-left-color: var(--warn); background: rgba(224,164,88,.045); }
+  .rulec.bad { border-left-color: var(--bad); background: rgba(224,96,79,.06); }
+  /* El nombre de la regla se lee entero: parte en dos líneas antes que recortarse. */
+  .rulec .rh { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: start; gap: 8px; }
+  .rulec .rn { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--dim); letter-spacing: .06em; padding-top: 2px; }
+  .rulec .rname { font-size: 13px; font-weight: 700; letter-spacing: -0.01em; min-width: 0; line-height: 1.3; }
+  .rulec .rst { display: inline-flex; align-items: center; gap: 5px; padding-top: 1px; font-family: var(--font-mono); font-size: 9.5px; font-weight: 800; letter-spacing: .09em; color: var(--dim); flex: none; }
+  .rulec .rst i { font-style: normal; font-size: 9px; line-height: 1; }
+  .rulec.good .rst { color: var(--good); } .rulec.warn .rst { color: var(--warn); } .rulec.bad .rst { color: var(--bad); }
+  .rulec .rv { display: flex; align-items: baseline; gap: 4px; font-family: var(--font-mono); font-size: 19px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .rulec .rvin { flex: 0 1 auto; min-width: 2ch; max-width: 100%; background: none; border: 1px solid transparent; border-radius: 3px; padding: 1px 2px; color: inherit; font: inherit; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }
+  .rulec .rvin::-webkit-outer-spin-button, .rulec .rvin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .rulec .rvin:hover { border-color: var(--line-strong); }
+  .rulec .rvin:focus { border-color: var(--accent); outline: none; background: var(--surface); }
+  .rulec .rvu { font-size: 13px; font-weight: 600; color: var(--dim); flex: none; }
+  .rulec .rnote { font-family: var(--font-mono); font-size: 10.5px; color: var(--dim); line-height: 1.35; }
+  .rulec .rdet { margin-top: 2px; }
+  .rulec .rtog { background: none; border: 0; padding: 0; color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .rulec .rtog:hover { color: var(--accent); }
+  .rulec .rdet p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .rulec .rrole { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
+  .rulec .ced { display: grid; gap: 7px; }
+  .rulec .ced .edrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; align-items: end; }
+  body.editing .rulec .rh .rst, body.editing .rulec .rnote { display: none; }
+  @media (max-width: 900px) { .rules { grid-template-columns: 1fr; } }
+  @media (min-width: 1500px) { .rules { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+
+  /* ---------- lo que el motor vigila en cada cuenta ---------- */
+  .acc-watch { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); padding: 0; }
+  .wch { flex: 1 1 140px; display: flex; flex-direction: column; gap: 2px; padding: 9px 16px; background: var(--surface-2); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); }
+  .wch b { font-size: 9.5px; font-weight: 700; color: var(--dim); letter-spacing: .09em; text-transform: uppercase; }
+  .wch.good { color: var(--good); } .wch.warn { color: var(--warn); } .wch.bad { color: var(--bad); background: rgba(224,96,79,.07); }
+
+  /* ---------- menú de acciones de la cuenta ---------- */
+  .acc-menu { position: relative; flex: none; }
+  .acc-menu > .icon { font-size: 13px; letter-spacing: .06em; }
+  .acc-menu .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 148px; display: grid; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 5px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  .acc-menu .menu button { text-align: left; background: none; border: 0; border-radius: 3px; padding: 7px 10px; color: var(--text); font-size: 13px; cursor: pointer; }
+  .acc-menu .menu button:hover { background: var(--surface-2); }
+  .acc-menu .menu button.del { color: var(--bad); }
+
+  /* varias cuentas caben lado a lado en pantallas anchas */
+  @media (min-width: 1600px) { .accts { grid-template-columns: repeat(2, minmax(0,1fr)); align-items: start; } }
+
   /* ---------- centro de mando de la cuenta ----------
      Jerarquía por tipografía y espacio, no por cajas: solo llevan borde los tres
      módulos de riesgo y la tabla. El resto se separa con aire y con peso. */
@@ -361,6 +414,7 @@
     /* el estado se lee primero y deja de gastar una fila en blanco a la derecha */
     .acc-head { gap: 8px; }
     .acc-state { order: -1; margin-left: 0; }
+    .acc-menu { order: -1; margin-left: auto; }
     .acc-id { flex: 1 1 100%; }
   }
   /* En un teléfono seis columnas no caben: sesión y R se leen en el journal. */
@@ -918,7 +972,7 @@
       <div class="body" id="mktLevels"></div>
     </section>
     <section class="panel" id="panelRules">
-      <header><h2>Reglas duras</h2><span class="meta">se cumplen o no se opera</span></header>
+      <header><h2>Reglas duras</h2><span class="rulesstate" id="rulesState"><i></i>—</span></header>
       <div class="body">
         <p class="hint" id="rulesHint"></p>
         <div class="rules" id="rules"></div>
@@ -928,10 +982,9 @@
   </div>
   <div class="col">
     <section class="panel" id="panelAccts">
-      <header><h2>Cuentas prop</h2><span class="meta">regla de consistencia · mejor día ÷ ganancia total</span></header>
+      <header><h2>Cuentas prop</h2><div class="hgroup"><span class="meta" id="acctsMeta"></span><button type="button" class="btn sm ghost" id="addAcct">+ Añadir cuenta</button></div></header>
       <div class="body">
         <div class="accts" id="accts"></div>
-        <button type="button" class="add edit-only" id="addAcct">+ Añadir cuenta</button>
       </div>
     </section>
     <section class="panel" id="panelJournal">
@@ -1364,11 +1417,11 @@
       { id: "consist", t: "Regla de consistencia de la cuenta revisada", s: "Tope de ganancia de hoy calculado abajo, en Cuentas prop." },
     ],
     rules: [
-      { id: "onlymnq",  kind: "fixed", name: "Solo MNQ", why: "MGC eliminado: instrumento perdedor documentado. Nada de añadir mercados en un día rojo.", role: "" },
+      { id: "onlymnq",  kind: "fixed", name: "Solo MNQ", why: "MGC eliminado: instrumento perdedor documentado. Nada de añadir mercados en un día rojo.", role: "instrument", allow: "MNQ" },
       { id: "maxloss",  kind: "num", name: "Pérdida máxima del día", why: "Al tocarla se cierra la plataforma. Sin excepciones, sin “una más”.", value: 150, prefix: "$", unit: "", role: "maxLoss" },
-      { id: "maxlosses",kind: "num", name: "Pérdidas seguidas → cierre", why: "Contra el patrón de subir tamaño para recuperar.", value: 2, prefix: "", unit: "ops", role: "" },
+      { id: "maxlosses",kind: "num", name: "Pérdidas seguidas → cierre", why: "Contra el patrón de subir tamaño para recuperar.", value: 2, prefix: "", unit: "ops", role: "maxLosses" },
       { id: "maxgain",  kind: "num", name: "Tope de ganancia del día", why: "Sesiones verdes pequeñas y repetidas: así se pasa una regla de consistencia.", value: 200, prefix: "$", unit: "", role: "maxGain" },
-      { id: "contracts",kind: "num", name: "Contratos máximos", why: "Tamaño fijo. Se decide antes de la sesión, no durante.", value: 2, prefix: "", unit: "MNQ", role: "" },
+      { id: "contracts",kind: "num", name: "Contratos máximos", why: "Tamaño fijo. Se decide antes de la sesión, no durante.", value: 2, prefix: "", unit: "MNQ", role: "maxContracts" },
       { id: "nochange", kind: "fixed", name: "Sin cambios al protocolo", why: "Ajustar el sistema en caliente es procrastinación productiva. Se revisa con datos, no con emociones.", role: "" },
     ],
     accounts: [
@@ -1379,7 +1432,13 @@
     customized: false,
   };
   const STATUSES = ["activa", "pausada", "pasada", "quemada"];
-  const ROLES = [["", "sin rol"], ["maxLoss", "pérdida máx. del día"], ["maxGain", "tope de ganancia"]];
+  /* El rol es lo que conecta una regla escrita a mano con el motor: sin rol, una
+     regla es solo un recordatorio; con rol, la cabina la vigila sola. */
+  const ROLES = [["", "sin rol"], ["maxLoss", "pérdida máx. del día"], ["maxGain", "tope de ganancia"], ["maxLosses", "pérdidas seguidas"], ["maxContracts", "contratos máximos"], ["instrument", "instrumentos permitidos"]];
+  const ROLE_KEYS = ROLES.map(r => r[0]).filter(Boolean);
+  const ROLE_TAG = { maxLoss: "pérdida máx", maxGain: "tope ganancia", maxLosses: "pérdidas seguidas", maxContracts: "contratos", instrument: "instrumentos" };
+  // Reglas que venían de los valores por defecto y aún no tenían rol.
+  const ROLE_SEED = { onlymnq: "instrument", maxloss: "maxLoss", maxlosses: "maxLosses", maxgain: "maxGain", contracts: "maxContracts" };
   const DD_KEYS = ["trailing_lock", "trailing", "estatico"];
   const LEDGER_KINDS = [["payout", "retiro / payout"], ["fee", "costo · evaluación o reset"], ["deposit", "depósito / ajuste"]];
   const LEDGER_KEYS = LEDGER_KINDS.map(k => k[0]);
@@ -1558,8 +1617,10 @@
     if (out.meta.title === "Cabina MNQ") out.meta.title = "Cabina";
     if (/^Protocolo v2\.0 · EMA 10\/20\/55/.test(out.meta.subtitle || "")) out.meta.subtitle = "";
     if (Array.isArray(s.checks)) out.checks = s.checks.filter(c => c && c.id).map(c => ({ id: String(c.id), t: String(c.t || ""), s: String(c.s || ""), gate: !!c.gate }));
-    if (Array.isArray(s.rules)) out.rules = s.rules.filter(r => r && r.id).map(r => ({ id: String(r.id), kind: r.kind === "fixed" ? "fixed" : "num", name: String(r.name || ""), why: String(r.why || ""), value: Number(r.value) || 0, prefix: String(r.prefix || ""), unit: String(r.unit || ""), role: r.role === "maxLoss" || r.role === "maxGain" ? r.role : "" }));
+    if (Array.isArray(s.rules)) out.rules = s.rules.filter(r => r && r.id).map(r => ({ id: String(r.id), kind: r.kind === "fixed" ? "fixed" : "num", name: String(r.name || ""), why: String(r.why || ""), value: Number(r.value) || 0, prefix: String(r.prefix || ""), unit: String(r.unit || ""), allow: String(r.allow == null ? "" : r.allow), role: ROLE_KEYS.includes(r.role) ? r.role : (ROLE_SEED[String(r.id)] || "") }));
     else if (s.rules && typeof s.rules === "object") { const v = s.rules; for (const r of out.rules) { if (r.id === "maxloss" && v.maxLoss != null) r.value = Number(v.maxLoss); if (r.id === "maxlosses" && v.maxLosses != null) r.value = Number(v.maxLosses); if (r.id === "maxgain" && v.maxGain != null) r.value = Number(v.maxGain); if (r.id === "contracts" && v.maxContracts != null) r.value = Number(v.maxContracts); } if (v.custom) out.customized = true; }
+    // una cabina anterior guardaba «Solo MNQ» sin decir qué instrumento permitía
+    out.rules.forEach(r => { if (r.role === "instrument" && !r.allow) r.allow = "MNQ"; });
     if (Array.isArray(s.accounts)) out.accounts = s.accounts.filter(a => a && a.id).map(a => ({ id: String(a.id), firm: String(a.firm || ""), name: String(a.name || ""), kind: String(a.kind || ""), limit: Number(a.limit) || 50, total: Number(a.total) || 0, best: Number(a.best) || 0, size: Number(a.size) || 0, dd: Number(a.dd) || 0, target: Number(a.target) || 0, ddKind: DD_KEYS.includes(a.ddKind) ? a.ddKind : "trailing_lock", ledger: Array.isArray(a.ledger) ? a.ledger.filter(e => e && e.id).map(e => ({ id: String(e.id), date: String(e.date || ""), kind: LEDGER_KEYS.includes(e.kind) ? e.kind : "payout", amount: Number(e.amount) || 0, note: String(e.note || "") })) : [], status: STATUSES.includes(a.status) ? a.status : "activa" }));
     if (s.customized) out.customized = true;
     return out;
@@ -1877,54 +1938,98 @@
   const rulesEl = $("rules");
   function renderRules() {
     const rules = state.settings.rules;
+    const k = dayRuleCheck(todayFutures());
+    const worst = rules.reduce((w, r) => { const st = ruleStatus(r, k); const rank = { bad: 3, warn: 2, good: 1, dim: 0 }[st.cls]; return rank > w.rank ? { rank, st } : w; }, { rank: -1, st: null });
+    const rotas = rules.filter(r => ruleStatus(r, k).cls === "bad").length;
+    const avisos = rules.filter(r => ruleStatus(r, k).cls === "warn").length;
+    const m = $("rulesState");
+    if (m) {
+      m.className = "rulesstate " + (rotas ? "bad" : avisos ? "warn" : "good");
+      m.innerHTML = `<i></i>${rotas ? plu(rotas, "regla rota hoy", "reglas rotas hoy") : avisos ? plu(avisos, "regla en aviso", "reglas en aviso") : plu(rules.length, "regla activa", "reglas activas")}`;
+    }
     rulesEl.innerHTML = rules.map((r, i) => {
-      const roleTag = r.role ? `<span class="badge">${r.role === "maxLoss" ? "pérdida máx" : "tope ganancia"}</span>` : "";
-      const view = r.kind === "fixed" ? `<div class="val view-only">FIJA</div>` : `<div class="val view-only">${r.prefix ? `<span class="unit">${esc(r.prefix)}</span>` : ""}<input type="number" data-f="value" value="${r.value}" step="1" aria-label="${esc(r.name)}">${r.unit ? `<span class="unit">${esc(r.unit)}</span>` : ""}</div>`;
+      const st = ruleStatus(r, k);
+      const num = String(i + 1).padStart(2, "0");
+      // Una regla fija sin valor no repite «FIJA» debajo de su propia etiqueta.
+      const val = r.kind === "fixed"
+        ? (r.role === "instrument" ? `<span class="rvt">${esc(k.allow.length ? k.allow.join(" · ") : "—")}</span>` : null)
+        : `${r.prefix ? `<span class="rvu">${esc(r.prefix)}</span>` : ""}<input class="rvin" type="number" data-f="value" value="${r.value}" step="1" style="width:${rvinW(r.value)}" aria-label="${esc(r.name)}">${r.unit ? `<span class="rvu">${esc(r.unit)}</span>` : ""}`;
       return `
-      <div class="rule ${r.kind === "fixed" ? "fixed" : ""}" data-id="${r.id}">
-        <div class="view-only"><div class="name">${esc(r.name)}${roleTag}</div><div class="why">${esc(r.why)}</div></div>
-        ${view}
-        <div class="ced edit-only" style="grid-column:1 / -1">
+      <div class="rulec ${st.cls}" data-id="${r.id}">
+        <div class="rh">
+          <span class="rn">${num}</span>
+          <span class="rname">${esc(r.name || "Sin nombre")}</span>
+          <span class="rst"><i aria-hidden="true">${st.icon}</i>${st.code}</span>
+        </div>
+        ${val == null ? "" : `<div class="rv">${val}</div>`}
+        <div class="rnote">${esc(st.note)}</div>
+        <div class="rdet view-only">
+          <button type="button" class="rtog" data-act="det" aria-expanded="false">Detalle</button>
+          <p hidden>${esc(r.why || "Sin explicación escrita.")}${r.role ? ` <span class="rrole">rol: ${esc(ROLE_TAG[r.role] || r.role)}</span>` : ` <span class="rrole">sin rol: esta regla no se vigila sola</span>`}</p>
+        </div>
+        <div class="ced edit-only">
           <input class="tin" type="text" data-f="name" value="${esc(r.name)}" placeholder="Nombre de la regla" aria-label="Nombre">
           <input class="tin small" type="text" data-f="why" value="${esc(r.why)}" placeholder="Por qué existe (opcional)" aria-label="Motivo">
           <div class="edrow">
             <div><span class="lab">Tipo</span><select data-f="kind"><option value="num" ${r.kind === "num" ? "selected" : ""}>numérica</option><option value="fixed" ${r.kind === "fixed" ? "selected" : ""}>fija</option></select></div>
-            <div ${r.kind === "fixed" ? "hidden" : ""}><span class="lab">Valor</span><input type="number" data-f="value" value="${r.value}" step="1"></div>
             <div ${r.kind === "fixed" ? "hidden" : ""}><span class="lab">Prefijo / unidad</span><div style="display:flex;gap:4px"><input class="mono" type="text" data-f="prefix" value="${esc(r.prefix)}" placeholder="$" style="width:44px"><input class="mono" type="text" data-f="unit" value="${esc(r.unit)}" placeholder="ops" style="flex:1;min-width:0"></div></div>
-            <div ${r.kind === "fixed" ? "hidden" : ""}><span class="lab">Rol en cuentas</span><select data-f="role">${ROLES.map(([v, l]) => `<option value="${v}" ${r.role === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+            <div><span class="lab">Rol en el motor</span><select data-f="role">${ROLES.map(([v, l]) => `<option value="${v}" ${r.role === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+            <div ${r.role === "instrument" ? "" : "hidden"}><span class="lab">Instrumentos permitidos</span><input class="mono" type="text" data-f="allow" value="${esc(r.allow || "")}" placeholder="MNQ, MES"></div>
           </div>
-        </div>
-        <div class="tools edit-only" style="grid-column:1 / -1;justify-content:flex-end">
-          <button type="button" class="icon" data-act="up" title="Subir" ${i === 0 ? "disabled" : ""}>▲</button>
-          <button type="button" class="icon" data-act="down" title="Bajar" ${i === rules.length - 1 ? "disabled" : ""}>▼</button>
-          <button type="button" class="icon del" data-act="del" title="Borrar regla">×</button>
+          <div class="tools" style="justify-content:flex-end">
+            <button type="button" class="icon" data-act="up" title="Subir" ${i === 0 ? "disabled" : ""}>▲</button>
+            <button type="button" class="icon" data-act="down" title="Bajar" ${i === rules.length - 1 ? "disabled" : ""}>▼</button>
+            <button type="button" class="icon del" data-act="del" title="Borrar regla">×</button>
+          </div>
         </div>
       </div>`;
     }).join("");
-    if (!rules.length) rulesEl.innerHTML = `<p class="empty">Sin reglas. Un sistema sin reglas duras no es un sistema.</p>`;
-    const h = $("rulesHint");
-    if (state.settings.customized) { h.textContent = "Cambiar una regla a mitad de una racha roja cuenta como regla rota."; h.className = "hint ok"; }
-    else { h.textContent = "Valores de ejemplo — ajústalos a tu cuenta. Se guardan al cambiarlos."; h.className = "hint"; }
+    if (!rules.length) rulesEl.innerHTML = `<p class="empty">Sin reglas. Pulsa <code>Editar</code> y escribe las tuyas: las que lleven rol se vigilan solas.</p>`;
+    const hint = $("rulesHint");
+    if (hint) { const sinRol = rules.filter(r => !r.role).length;
+      hint.textContent = sinRol ? `${plu(sinRol, "regla no tiene rol", "reglas no tienen rol")} asignado, así que la cabina no puede vigilarla${sinRol === 1 ? "" : "s"} sola${sinRol === 1 ? "" : "s"}.` : "Todas las reglas están conectadas al motor: la cabina las vigila sola con las operaciones del día."; }
   }
+  function fmtNum(v) { const n = Number(v) || 0; return n.toLocaleString("en-US"); }
+  function rvinW(v) { return Math.max(2, String(v == null ? "" : v).length) + 0.8 + "ch"; }
+  /* Refresca solo los estados, sin reconstruir las tarjetas: así no se pierde el
+     foco de un campo ni se cierran los detalles que tengas abiertos. */
+  function paintRuleStates() {
+    const k = dayRuleCheck(todayFutures());
+    state.settings.rules.forEach(r => {
+      const el = rulesEl.querySelector(`.rulec[data-id="${r.id}"]`); if (!el) return;
+      const st = ruleStatus(r, k);
+      el.className = "rulec " + st.cls;
+      const c = el.querySelector(".rst"); if (c) c.innerHTML = `<i aria-hidden="true">${st.icon}</i>${st.code}`;
+      const n = el.querySelector(".rnote"); if (n) n.textContent = st.note;
+      const t = el.querySelector(".rvt"); if (t && r.role === "instrument") t.textContent = k.allow.length ? k.allow.join(" · ") : "—";
+    });
+    const rotas = state.settings.rules.filter(r => ruleStatus(r, k).cls === "bad").length;
+    const avisos = state.settings.rules.filter(r => ruleStatus(r, k).cls === "warn").length;
+    const m = $("rulesState");
+    if (m) { m.className = "rulesstate " + (rotas ? "bad" : avisos ? "warn" : "good");
+      m.innerHTML = `<i></i>${rotas ? plu(rotas, "regla rota hoy", "reglas rotas hoy") : avisos ? plu(avisos, "regla en aviso", "reglas en aviso") : plu(state.settings.rules.length, "regla activa", "reglas activas")}`; }
+  }
+
   rulesEl.addEventListener("input", e => {
-    const el = e.target.closest(".rule"); if (!el) return; const r = state.settings.rules.find(x => x.id === el.dataset.id); if (!r) return; const f = e.target.dataset.f; if (!f) return;
-    if (f === "value") { const v = num(e.target.value); if (v == null) return; r.value = v; el.querySelectorAll("input[data-f='value']").forEach(x => { if (x !== e.target) x.value = v; }); renderAccountsMeters(); }
-    else if (["name", "why", "prefix", "unit"].includes(f)) r[f] = e.target.value;
+    const el = e.target.closest(".rulec"); if (!el) return; const r = state.settings.rules.find(x => x.id === el.dataset.id); if (!r) return; const f = e.target.dataset.f; if (!f) return;
+    if (f === "value") { const v = num(e.target.value); if (v == null) return; r.value = v; if (e.target.classList.contains("rvin")) e.target.style.width = rvinW(e.target.value); el.querySelectorAll("input[data-f='value']").forEach(x => { if (x !== e.target) x.value = v; }); debounce("rulepaint", () => { paintRuleStates(); renderAccountsMeters(); }, 350); }
+    else if (["name", "why", "prefix", "unit", "allow"].includes(f)) { r[f] = e.target.value; if (f === "allow") debounce("rulepaint", () => { paintRuleStates(); renderAccountsMeters(); }, 500); }
     persistSettings();
   });
   rulesEl.addEventListener("change", e => {
-    const el = e.target.closest(".rule"); if (!el) return; const r = state.settings.rules.find(x => x.id === el.dataset.id); if (!r) return; const f = e.target.dataset.f;
+    const el = e.target.closest(".rulec"); if (!el) return; const r = state.settings.rules.find(x => x.id === el.dataset.id); if (!r) return; const f = e.target.dataset.f;
     if (f === "kind") { r.kind = e.target.value; persistSettings(); renderRules(); renderAccounts(); }
     else if (f === "role") { if (e.target.value) state.settings.rules.forEach(x => { if (x !== r && x.role === e.target.value) x.role = ""; }); r.role = e.target.value; persistSettings(); renderRules(); renderAccounts(); }
   });
   rulesEl.addEventListener("click", e => {
     const btn = e.target.closest("button[data-act]"); if (!btn) return;
-    const el = btn.closest(".rule"); const arr = state.settings.rules; const i = arr.findIndex(x => x.id === el.dataset.id); if (i < 0) return;
+    const el = btn.closest(".rulec"); const arr = state.settings.rules; const i = arr.findIndex(x => x.id === el.dataset.id); if (i < 0) return;
+    if (btn.dataset.act === "det") { const pp = btn.nextElementSibling; pp.hidden = !pp.hidden; btn.setAttribute("aria-expanded", String(!pp.hidden)); btn.textContent = pp.hidden ? "Detalle" : "Ocultar"; return; }
     if (btn.dataset.act === "del") { if (!armed(btn)) return; arr.splice(i, 1); }
     else if (!move(arr, i, btn.dataset.act === "up" ? -1 : 1)) return;
     persistSettings(); renderRules(); renderAccounts();
   });
-  $("addRule").addEventListener("click", () => { state.settings.rules.push({ id: uid("r"), kind: "num", name: "", why: "", value: 0, prefix: "", unit: "", role: "" }); persistSettings(); renderRules(); const last = rulesEl.querySelector(".rule:last-child input[data-f='name']"); if (last) last.focus(); });
+  $("addRule").addEventListener("click", () => { state.settings.rules.push({ id: uid("r"), kind: "num", name: "", why: "", value: 0, prefix: "", unit: "", role: "", allow: "" }); persistSettings(); renderRules(); const last = rulesEl.querySelector(".rulec:last-child input[data-f='name']"); if (last) last.focus(); });
 
   /* ---------- accounts ---------- */
   const acctsEl = $("accts");
@@ -2026,32 +2131,6 @@
     return { ok: true, max, used, remaining: Math.max(0, max - used), pct: p, code: step.code, label: step.label, cls: step.cls, locked: p >= 1 };
   }
 
-  /* «¿Puedo operar?» y «¿puedo cobrar?» son dos preguntas distintas y se responden
-     por separado a propósito: la regla de consistencia NO prohíbe operar, bloquea
-     pasar la evaluación o retirar. Mezclarlas haría que la cabina te mandase a
-     parar un día en el que puedes seguir perfectamente. */
-  function getTradingStatus(a, c) {
-    c = c || consistency(a);
-    const g = c.agg, t = acctToday(a), r = riskEngine(a, t), d = ddEngine(g), ce = consEngine(c);
-    let trade;
-    if (a.status === "quemada") trade = { code: "burned", label: "CUENTA QUEMADA", cls: "bad", why: "Marcada como quemada. Aquí no se opera más." };
-    else if (a.status === "pausada") trade = { code: "paused", label: "EN PAUSA", cls: "dim", why: "La pusiste en pausa tú mismo." };
-    else if (d.ok && d.breached) trade = { code: "dd", label: "DRAWDOWN ROTO", cls: "bad", why: `El balance tocó el suelo de ${money(d.floor)}. La cuenta está quemada aunque la firma tarde en marcarlo.` };
-    else if (r.locked) trade = { code: "locked", label: "LÍMITE DIARIO ALCANZADO", cls: "bad", why: `Llevas ${money(-r.used)} hoy contra un tope de ${money(-r.max)}. Se cierra la plataforma: no hay más entradas.` };
-    else if (a.status === "pasada") trade = { code: "passed", label: "EVALUACIÓN PASADA", cls: "good", why: "Objetivo cumplido. Lo que registres aquí ya cuenta para la fondeada." };
-    else if (r.ok && r.pct >= 0.75) trade = { code: "danger", label: "PUEDES OPERAR · PELIGRO", cls: "bad", why: `Quedan ${money(r.remaining)} antes del tope diario. Una pérdida más y se acabó el día.` };
-    else if (r.ok && r.pct >= 0.50) trade = { code: "caution", label: "PUEDES OPERAR · PRECAUCIÓN", cls: "warn", why: `Ya usaste ${pct(r.pct)} del riesgo de hoy. Quedan ${money(r.remaining)}.` };
-    else if (d.ok && d.util >= 0.75) trade = { code: "thin", label: "PUEDES OPERAR · COLCHÓN FINO", cls: "warn", why: `Solo quedan ${money(d.buffer)} sobre el suelo de ${money(d.floor)}.` };
-    else trade = { code: "ready", label: "PUEDES OPERAR", cls: "good", why: r.ok ? `Riesgo de hoy intacto: ${money(r.remaining)} disponibles.` : "No hay regla de pérdida máxima escrita, así que el riesgo de hoy no se está vigilando." };
-
-    const obj = Number(a.target) || 0;
-    let payout;
-    if (!ce.hasData) payout = { code: "nodata", label: "SIN DATOS", cls: "dim", why: "Registra operaciones con esta cuenta o escribe la ganancia previa en los ajustes." };
-    else if (!ce.compliant) payout = { code: "cons", label: "CONSISTENCIA SIN CUMPLIR", cls: "warn", why: `Mejor día ${money(ce.best)} sobre ${money(ce.total)} = ${pct(ce.ratio)}, por encima del ${pct(ce.limit)}. Faltan ${money(ce.additional)} de ganancia sin superar ese mejor día${ce.days ? ` (≈ ${plu(ce.days, "día verde", "días verdes")} a tu media)` : ""}.` };
-    else if (obj > 0 && ce.total < obj) payout = { code: "target", label: "FALTA EL OBJETIVO", cls: "warn", why: `Llevas ${money(ce.total)} de ${money(obj)}. Faltan ${money(obj - ce.total)} y la consistencia ya cumple.` };
-    else payout = { code: "ok", label: obj > 0 ? "OBJETIVO Y CONSISTENCIA CUMPLIDOS" : "CONSISTENCIA CUMPLIDA", cls: "good", why: `El día más grande que aún cumpliría: ${money(ce.cap)}.` };
-    return { trade, payout, today: t, risk: r, dd: d, cons: ce, agg: g, c };
-  }
 
   /* Cuánto se puede ganar hoy sin romper nada: manda el menor entre el tope de la
      regla dura y el que impone la consistencia. Antes vivía dentro de capsHtml,
@@ -2105,9 +2184,129 @@
       start: pts[0], current: last, peak: Math.max(...pts) };
   }
 
+
+  /* =============================== MOTOR DE REGLAS ===============================
+     Las reglas duras dejan de ser un texto que se lee y pasan a vigilarse solas.
+     Una sola función mira el día y dice qué se rompió; la tarjeta de cada regla y
+     el estado de cada cuenta salen de ahí, no de dos lecturas distintas. */
+  function ruleVal(role, dflt) { const r = ruleByRole(role); return r && r.kind === "num" ? Math.abs(Number(r.value) || 0) : dflt; }
+  function allowedInstruments() {
+    const r = state.settings.rules.find(x => x.role === "instrument");
+    return String(r ? r.allow || "" : "").split(/[,;/\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+  }
+  function byTimeAsc(a, b) { return String(a.time || "").localeCompare(String(b.time || "")) || (a.updatedAt || 0) - (b.updatedAt || 0); }
+  /* Qué dice el día sobre las reglas. Recibe la lista ya calculada para poder
+     mirarla a nivel de trader (todas las cuentas) o de una cuenta concreta. */
+  function dayRuleCheck(list) {
+    const closed = list.filter(x => x.pnlEff != null).slice().sort(byTimeAsc);
+    const pnl = closed.reduce((s, x) => s + x.pnlEff, 0);
+    let streak = 0;
+    for (let i = closed.length - 1; i >= 0; i--) { if (closed[i].pnlEff < 0) streak++; else break; }
+    const allow = allowedInstruments();
+    const off = allow.length ? [...new Set(list.map(x => String(x.instrument || "").toUpperCase()).filter(x => x && allow.indexOf(x) < 0))] : [];
+    const maxC = ruleVal("maxContracts", 0);
+    const over = maxC ? list.filter(x => (Number(x.qty) || 0) > maxC) : [];
+    const maxL = ruleVal("maxLoss", 0), maxG = ruleVal("maxGain", 0), maxS = ruleVal("maxLosses", 0);
+    const lossUsed = Math.max(0, -pnl);
+    return { list, n: list.length, closed: closed.length, pnl, lossUsed,
+      lossMax: maxL, lossPct: maxL ? Math.min(1, lossUsed / maxL) : 0, lossRemaining: maxL ? Math.max(0, maxL - lossUsed) : null,
+      streak, streakMax: maxS, streakHit: !!maxS && streak >= maxS,
+      allow, off, maxC, over, gainMax: maxG, gainHit: !!maxG && pnl >= maxG };
+  }
+  function todayFutures(accountId) {
+    return coll("trades").items
+      .filter(t => t.type === "futuros" && t.date === state.today && (!accountId || t.accountId === accountId))
+      .map(t => tradeCalc(Object.assign({}, t)));
+  }
+
+  const RULE_RANK = { READY: 0, WARNING: 1, RESTRICTED: 2, LOCKED: 3, FAILED: 4 };
+  /* Devuelve el estado de la cuenta y los números que lo sostienen. La escalera va
+     de abajo a arriba: lo que quema la cuenta manda sobre lo que cierra el día, y
+     eso sobre lo que solo bloquea el cobro. */
+  function evaluateAccountRules(a, todayTrades) {
+    const c = consistency(a), g = c.agg;
+    const t = todayTrades || acctToday(a);
+    const k = dayRuleCheck(t.list);
+    const dd = ddEngine(g), ce = consEngine(c), r = riskEngine(a, t);
+
+    let status = "READY", why = "", canTrade = true;
+    const set = (st, msg, ct) => { status = st; why = msg; canTrade = ct; };
+    if (dd.ok && dd.breached) set("FAILED", `El balance tocó el suelo de ${money(dd.floor)}. La cuenta está quemada aunque la firma tarde en marcarlo.`, false);
+    else if (a.status === "quemada") set("FAILED", "Marcada como quemada. Aquí no se opera más.", false);
+    else if (r.locked) set("LOCKED", `Llevas ${money(-r.used)} hoy contra un tope de ${money(-r.max)}. Se cierra la plataforma: no hay más entradas.`, false);
+    else if (k.streakHit) set("LOCKED", `${plu(k.streak, "pérdida seguida", "pérdidas seguidas")} con un límite de ${k.streakMax}. Se cierra el día: subir tamaño para recuperar es justo lo que prohíbe la regla.`, false);
+    else if (a.status === "pausada") set("LOCKED", "Archivada: la pusiste en pausa tú mismo. Reactívala desde el menú ··· cuando vuelvas a ella.", false);
+    else if (k.off.length) set("RESTRICTED", `Hoy hay operaciones en ${k.off.join(", ")} y la regla solo permite ${k.allow.join(", ")}. Queda anotado.`, true);
+    else if (k.over.length) set("RESTRICTED", `${plu(k.over.length, "operación pasó", "operaciones pasaron")} de ${k.maxC} contratos. El tamaño se decide antes de la sesión.`, true);
+    else if (!ce.compliant && ce.hasData) set("RESTRICTED", `Consistencia ${pct(ce.ratio)} sobre un límite de ${pct(ce.limit)}. No impide operar: bloquea pasar o retirar hasta acumular ${money(ce.additional)} más sin superar el mejor día.`, true);
+    else if (a.status === "pasada") set("READY", "Objetivo cumplido. Lo que registres aquí ya cuenta para la fondeada.", true);
+    else if (r.ok && r.pct >= 0.75) set("WARNING", `Quedan ${money(r.remaining)} antes del tope diario. Una pérdida más y se acabó el día.`, true);
+    else if (k.streakMax && k.streak === k.streakMax - 1) set("WARNING", `${plu(k.streak, "pérdida seguida", "pérdidas seguidas")}. Una más y el día se cierra por regla.`, true);
+    else if (r.ok && r.pct >= 0.50) set("WARNING", `Ya usaste ${pct(r.pct)} del riesgo de hoy. Quedan ${money(r.remaining)}.`, true);
+    else if (dd.ok && dd.util >= 0.75) set("WARNING", `Solo quedan ${money(dd.buffer)} sobre el suelo de ${money(dd.floor)}.`, true);
+    else if (k.gainHit) set("WARNING", `Ya pasaste el tope de ganancia del día (${money(k.gainMax)}). La regla dice parar aquí.`, true);
+    else if (!ce.hasData) set("READY", "Sin datos aún: registra operaciones con esta cuenta o escribe la ganancia previa en los ajustes.", true);
+    else set("READY", r.ok ? `Riesgo de hoy intacto: ${money(r.remaining)} disponibles.` : "No hay regla de pérdida máxima escrita, así que el riesgo de hoy no se está vigilando.", true);
+
+    return {
+      canTrade, status, why,
+      instrumentAllowed: !k.off.length, offInstruments: k.off, allowedInstruments: k.allow,
+      dailyLossUsed: r.ok ? r.used : k.lossUsed, dailyLossRemaining: r.ok ? r.remaining : null, dailyLossLimit: r.ok ? r.max : null,
+      consecutiveLosses: k.streak, consecutiveLossLimit: k.streakMax,
+      consistency: ce.ratio, consistencyLimit: ce.limit,
+      drawdownUsed: dd.ok ? dd.used : null, drawdownRemaining: dd.ok ? dd.buffer : null, drawdownMax: dd.ok ? dd.max : null,
+      maxContracts: k.maxC, oversized: k.over.length,
+      today: t, day: k, risk: r, dd, cons: ce, agg: g, c,
+    };
+  }
+
+  /* Estado de cada regla escrita, mirando el día del trader entero (las reglas son
+     del protocolo, no de una cuenta). LOCKED/FIJA para las que no se tocan,
+     ACTIVA mientras se cumple, AVISO cerca del límite y ROTA cuando ya se rompió. */
+  const RULE_ST = {
+    fixed:    { code: "FIJA",   cls: "dim",  icon: "▪" },
+    active:   { code: "ACTIVA", cls: "good", icon: "●" },
+    warning:  { code: "AVISO",  cls: "warn", icon: "▲" },
+    breached: { code: "ROTA",   cls: "bad",  icon: "✕" },
+  };
+  function ruleStatus(r, k) {
+    if (r.role === "instrument") {
+      if (k.off.length) return Object.assign({ note: `hoy en ${k.off.join(", ")}` }, RULE_ST.breached);
+      if (!k.allow.length) return Object.assign({ note: "sin instrumento fijado: no se vigila" }, RULE_ST.warning);
+      const hoy = [...new Set(k.list.map(x => String(x.instrument || "").toUpperCase()).filter(Boolean))];
+      return Object.assign({ note: hoy.length ? `hoy: ${hoy.join(", ")}` : "sin operaciones hoy" }, RULE_ST.fixed);
+    }
+    if (r.role === "maxLoss") {
+      if (!k.lossMax) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (k.lossPct >= 1) return Object.assign({ note: "tope alcanzado" }, RULE_ST.breached);
+      if (k.lossPct >= 0.5) return Object.assign({ note: `${money(k.lossUsed)} de ${money(k.lossMax)}` }, RULE_ST.warning);
+      return Object.assign({ note: `${money(k.lossUsed)} de ${money(k.lossMax)}` }, RULE_ST.active);
+    }
+    if (r.role === "maxLosses") {
+      if (!k.streakMax) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (k.streakHit) return Object.assign({ note: "día cerrado por regla" }, RULE_ST.breached);
+      if (k.streak === k.streakMax - 1) return Object.assign({ note: `${k.streak} de ${k.streakMax}` }, RULE_ST.warning);
+      return Object.assign({ note: `${k.streak} de ${k.streakMax}` }, RULE_ST.active);
+    }
+    if (r.role === "maxGain") {
+      if (!k.gainMax) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (k.gainHit) return Object.assign({ note: "tope alcanzado: toca parar" }, RULE_ST.warning);
+      return Object.assign({ note: `${money(Math.max(0, k.pnl))} de ${money(k.gainMax)}` }, RULE_ST.active);
+    }
+    if (r.role === "maxContracts") {
+      if (!k.maxC) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (k.over.length) return Object.assign({ note: plu(k.over.length, "operación pasada", "operaciones pasadas") }, RULE_ST.breached);
+      return Object.assign({ note: `máximo ${k.maxC}` }, RULE_ST.fixed);
+    }
+    return Object.assign({ note: r.kind === "fixed" ? "no se negocia" : "sin rol: no se vigila sola" }, r.kind === "fixed" ? RULE_ST.fixed : RULE_ST.active);
+  }
+
+  const ST_LABEL = { READY: "LISTA", WARNING: "AVISO", RESTRICTED: "RESTRINGIDA", LOCKED: "BLOQUEADA", FAILED: "QUEMADA" };
+  const ST_CLS = { READY: "good", WARNING: "warn", RESTRICTED: "warn", LOCKED: "bad", FAILED: "bad" };
+  const ST_ICON = { READY: "●", WARNING: "▲", RESTRICTED: "▲", LOCKED: "✕", FAILED: "✕" };
   function acctCard(a, i, n) {
-    const c = consistency(a), s = getTradingStatus(a, c);
-    const g = s.agg, t = s.today, r = s.risk, d = s.dd, ce = s.cons, cap = gainCap(c);
+    const c = consistency(a), ev = evaluateAccountRules(a);
+    const g = ev.agg, t = ev.today, r = ev.risk, d = ev.dd, ce = ev.cons, k = ev.day, cap = gainCap(c);
     const ESTADO = { activa: "ACTIVA", pausada: "EN PAUSA", quemada: "QUEMADA", pasada: "PASADA" };
     const estCls = a.status === "quemada" ? "bad" : a.status === "pausada" ? "dim" : "good";
     const delta = g.balance - g.size, deltaPct = g.size ? delta / g.size : null;
@@ -2119,6 +2318,15 @@
         ${a.kind ? `<span class="kind">${esc(a.kind)}</span>` : ""}
       </div>
       <span class="acc-state ${estCls}"><i></i>${esc(ESTADO[a.status] || String(a.status || "").toUpperCase())}</span>
+      <div class="acc-menu">
+        <button type="button" class="icon" data-act="menu" aria-haspopup="true" aria-expanded="false" title="Acciones de la cuenta">•••</button>
+        <div class="menu" hidden>
+          <button type="button" data-act="cfg">Editar</button>
+          <button type="button" data-act="dup">Duplicar</button>
+          <button type="button" data-act="arch">${a.status === "pausada" ? "Reactivar" : "Archivar"}</button>
+          <button type="button" class="del" data-act="del">Borrar</button>
+        </div>
+      </div>
     </div>`;
 
     const balance = `<div class="acc-bal">
@@ -2132,12 +2340,21 @@
       </div>
     </div>`;
 
-    const statusRow = (q, st) => `<div class="acc-st ${st.cls}">
-      <span class="q">${esc(q)}</span>
-      <span class="tag"><i></i>${esc(st.label)}</span>
-      <span class="why">${esc(st.why)}</span>
+    /* Un solo veredicto con la escalera FAILED > LOCKED > RESTRICTED > WARNING >
+       READY, y debajo la lista de lo que vigila el motor ahora mismo. */
+    const chips = [
+      { k: "Instrumento", v: ev.instrumentAllowed ? (ev.allowedInstruments.join(" · ") || "sin fijar") : ev.offInstruments.join(", "), cls: ev.instrumentAllowed ? "" : "bad" },
+      { k: "Contratos", v: ev.maxContracts ? "máx " + ev.maxContracts : "sin fijar", cls: ev.oversized ? "bad" : "" },
+      { k: "Pérdidas seguidas", v: ev.consecutiveLossLimit ? `${ev.consecutiveLosses} / ${ev.consecutiveLossLimit}` : String(ev.consecutiveLosses), cls: ev.consecutiveLossLimit && ev.consecutiveLosses >= ev.consecutiveLossLimit ? "bad" : ev.consecutiveLossLimit && ev.consecutiveLosses === ev.consecutiveLossLimit - 1 ? "warn" : "" },
+    ];
+    const status = `<div class="acc-sts">
+      <div class="acc-st ${ST_CLS[ev.status]}">
+        <span class="q">Estado operativo</span>
+        <span class="tag"><i aria-hidden="true">${ST_ICON[ev.status]}</i>${ST_LABEL[ev.status]}</span>
+        <span class="why">${esc(ev.why)}</span>
+      </div>
+      <div class="acc-watch">${chips.map(x => `<span class="wch ${x.cls}"><b>${esc(x.k)}</b>${esc(x.v)}</span>`).join("")}</div>
     </div>`;
-    const status = `<div class="acc-sts">${statusRow("¿Puedo operar hoy?", s.trade)}${statusRow("¿Puedo cobrar o pasar?", s.payout)}</div>`;
 
     const cell = (k, v, cls, sub) => `<div class="acc-kpi"><span class="k">${esc(k)}</span><div class="v ${cls || ""}">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
     const kpis = `<div class="acc-kpis">
@@ -2231,7 +2448,6 @@
     const orden = `<div class="acc-order edit-only">
       <button type="button" class="icon" data-act="up" title="Subir" ${i === 0 ? "disabled" : ""}>▲</button>
       <button type="button" class="icon" data-act="down" title="Bajar" ${i === n - 1 ? "disabled" : ""}>▼</button>
-      <button type="button" class="icon del" data-act="del" title="Borrar cuenta">×</button>
       <select data-f="status" aria-label="Estado de ${esc(a.name)}">${STATUSES.map(x => `<option value="${x}" ${a.status === x ? "selected" : ""}>${x}</option>`).join("")}</select>
     </div>`;
 
@@ -2249,6 +2465,15 @@
   }
   function renderAccounts() {
     const accts = state.settings.accounts;
+    const meta = $("acctsMeta");
+    if (meta) {
+      // El resumen mira solo las cuentas activas: una archivada o quemada no es un problema de hoy.
+      const vivas = accts.filter(a => a.status === "activa");
+      const peor = vivas.map(a => evaluateAccountRules(a).status).reduce((w, st) => RULE_RANK[st] > RULE_RANK[w] ? st : w, "READY");
+      meta.innerHTML = accts.length
+        ? `${plu(accts.length, "cuenta", "cuentas")} · ${vivas.length} ${vivas.length === 1 ? "activa" : "activas"}${vivas.length ? ` · <span class="${ST_CLS[peor]}">${ST_LABEL[peor]}</span>` : ""}`
+        : "ninguna todavía";
+    }
     if (!accts.length) { acctsEl.innerHTML = `<p class="empty">Sin cuentas registradas. Pulsa <code>+ Añadir cuenta</code> y pon firma, tamaño y drawdown: con eso ya salen el colchón, la consistencia y el riesgo de hoy.</p>`; return; }
     acctsEl.innerHTML = accts.map((a, i) => acctCard(a, i, accts.length)).join("");
   }
@@ -2276,6 +2501,17 @@
     const card = btn.closest(".acct"); const arr = state.settings.accounts; const i = arr.findIndex(x => x.id === card.dataset.id); if (i < 0) return;
     const a = arr[i], act = btn.dataset.act;
     // Todo esto entra por puertas que ya existen: nada de flujos paralelos.
+    if (act === "menu") {
+      const m = btn.nextElementSibling, abierto = !m.hidden;
+      acctsEl.querySelectorAll(".acc-menu .menu").forEach(x => { x.hidden = true; x.previousElementSibling.setAttribute("aria-expanded", "false"); });
+      m.hidden = abierto; btn.setAttribute("aria-expanded", String(!abierto)); return;
+    }
+    if (act === "dup") {
+      const copia = Object.assign(clone(a), { id: uid("a"), name: (a.name || "Cuenta") + " (copia)", total: 0, best: 0, ledger: [], status: "activa" });
+      arr.splice(i + 1, 0, copia); persistSettings(); renderAccounts();
+      flash(`«${copia.name}» creada sin ganancia previa ni movimientos: es una cuenta nueva con la misma configuración.`); return;
+    }
+    if (act === "arch") { a.status = a.status === "pausada" ? "activa" : "pausada"; persistSettings(); renderAccounts(); return; }
     if (act === "newtrade") { openTrade(null, "futuros", { accountId: a.id }); return; }
     if (act === "cfg") { openAccountEditor(a); return; }
     if (act === "journal") { ft.acct = a.id; showTab("futuros"); setFtView("diario"); return; }
@@ -2298,6 +2534,9 @@
     flash(`${a.name || a.firm} cargada en la calculadora de riesgo`);
   }
   $("addAcct").addEventListener("click", () => openAccountEditor(null));
+  // el menú ··· se cierra al tocar fuera o con Escape
+  document.addEventListener("click", e => { if (!e.target.closest(".acc-menu")) acctsEl.querySelectorAll(".acc-menu .menu").forEach(m => { m.hidden = true; m.previousElementSibling.setAttribute("aria-expanded", "false"); }); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") acctsEl.querySelectorAll(".acc-menu .menu").forEach(m => { m.hidden = true; m.previousElementSibling.setAttribute("aria-expanded", "false"); }); });
 
   /* ---------- day journal ---------- */
   const jResult = $("jResult"), jTrades = $("jTrades"), jNote = $("jNote"), jBroke = $("jBroke");
@@ -4221,7 +4460,7 @@
 
   /* =============================== WIRING =============================== */
   function counts() { $("nFut").textContent = coll("trades").items.filter(t => t.type === "futuros").length || ""; $("nPlaybook").textContent = coll("playbooks").items.length || ""; $("nIdeas").textContent = coll("ideas").items.length || ""; $("nInvest").textContent = coll("positions").items.length || ""; }
-  coll("trades").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); try { renderInvestMetrics(); } catch (e) { } try { syncDayFromTrades(); } catch (e) { } try { renderHistory(); renderAccounts(); } catch (e) { } try { renderBackup(); } catch (e) { } });
+  coll("trades").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); try { renderInvestMetrics(); } catch (e) { } try { syncDayFromTrades(); } catch (e) { } try { renderHistory(); renderAccounts(); renderRules(); } catch (e) { } try { renderBackup(); } catch (e) { } });
   coll("playbooks").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); });
   coll("ideas").subscribe(() => { renderIdeas(); counts(); });
   coll("markets").subscribe(() => { renderInvest(); try { fillQtDest(); renderQtNote(); } catch (e) { } });
