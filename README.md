@@ -39,6 +39,37 @@ Escribes el instrumento en «Registrar operación» y la app decide el destino:
 
 Siempre se puede forzar el destino a mano antes de guardar.
 
+## Traer los datos desde el artefacto
+
+Las dos copias no se hablan solas: cada una guarda en su sitio. El puente es un
+archivo JSON, y está construido en las dos direcciones.
+
+1. Abre la Cabina del artefacto y baja hasta **«Copia de seguridad y traspaso»**,
+   al final de la primera pestaña.
+2. Marca **«Meter las capturas dentro del archivo»** si quieres que los gráficos
+   de cada operación viajen también. Sin eso el archivo pesa poco, pero las
+   capturas se quedan atrás: viven en el almacenamiento del artefacto y desde
+   fuera no se pueden leer.
+3. Pulsa **«Descargar copia»**. Se descarga `cabina-AAAA-MM-DD.json`.
+   Si la descarga no está disponible en esa vista, **«Ver el texto»** te lo deja
+   en el portapapeles.
+4. Abre esta copia, ve al mismo panel, elige **«Reemplazar todo»** y pulsa
+   **«Elegir archivo…»** (o **«Pegar el texto»**).
+5. Revisa el resumen que sale — dice qué trae y qué va a pasar — escribe
+   `IMPORTAR` y confirma. La página se recarga con los datos dentro.
+
+Funciona igual al revés. Un par de detalles que conviene saber:
+
+- **`format` y `version`.** El archivo lleva las dos marcas. Si algún día cambia
+  la forma de los datos, quien importe sabrá de qué versión viene en vez de
+  romperse en silencio. Una copia más nueva que la cabina que la lee se rechaza
+  con un aviso claro.
+- **Reemplazar vs. añadir.** En el navegador se puede empezar de cero. Contra la
+  base del artefacto la importación solo escribe encima por id y **nunca borra**
+  lo que no venga en la copia: un borrado masivo en la nube no se deshace.
+- **Las capturas importadas se ven pero no se editan** en una copia estática: sin
+  almacenamiento de imágenes se pueden mirar y quitar, no añadir nuevas.
+
 ## Dónde se guardan los datos
 
 Depende de dónde se abra la página:

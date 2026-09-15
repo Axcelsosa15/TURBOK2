@@ -295,6 +295,18 @@
   .qgrid .btn { white-space: nowrap; }
   .qt .synced { margin: 10px 0 0; }
   @media (max-width: 640px) { .qgrid { grid-template-columns: 1fr; } .qgrid .btn { width: 100%; } }
+  /* copia de seguridad y traspaso */
+  .bkgrid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 12px; }
+  .bkcard { border: 1px solid var(--line); border-radius: 5px; padding: 12px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+  .bkcard > .lab { margin: 0; }
+  .bkchk { display: flex; gap: 8px; align-items: flex-start; font-family: var(--font-mono); font-size: 12px; color: var(--muted); line-height: 1.35; cursor: pointer; }
+  .bkchk input { width: 15px; height: 15px; margin: 1px 0 0; flex: none; accent-color: var(--accent); }
+  .bkcard .help { font-family: var(--font-mono); font-size: 11px; color: var(--dim); margin: 0; line-height: 1.4; }
+  .bkbtns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
+  #bkNote { margin: 12px 0 0; }
+  #bkNote.bad .dotg { background: var(--bad); }
+  #bkNote.bad { color: var(--bad); }
+  @media (max-width: 640px) { .bkgrid { grid-template-columns: 1fr; } .bkbtns .btn { flex: 1 1 auto; } }
 
   /* ---------- inversiones ---------- */
   .mlist { display: grid; gap: 2px; }
@@ -832,6 +844,38 @@
   <div class="body" style="padding:12px">
     <div class="cal" id="calCab"></div>
     <p class="csub" style="margin:10px 0 0">Resultado de cada sesión. Toca un día para abrirlo en el diario de futuros.</p>
+  </div>
+</section>
+
+<section class="panel" id="panelDatos" style="margin-top:24px">
+  <header><h2>Copia de seguridad y traspaso</h2><span class="meta" id="bkMeta">—</span></header>
+  <div class="body">
+    <p class="hint">Un solo archivo con todo: ajustes, reglas duras, cuentas, sesiones, operaciones, playbook, ideas e inversiones. Sirve de respaldo y es la vía para llevar los datos a otra copia de Cabina.</p>
+    <div class="bkgrid">
+      <div class="bkcard">
+        <span class="lab">Exportar</span>
+        <label class="bkchk"><input type="checkbox" id="bkImgs"> Meter las capturas dentro del archivo</label>
+        <p class="help" id="bkImgsNote">Sin esto el archivo pesa poco, pero las capturas se quedan atrás: solo existen en esta cabina.</p>
+        <div class="bkbtns">
+          <button type="button" class="btn primary" id="bkExport">Descargar copia</button>
+          <button type="button" class="btn ghost" id="bkShow">Ver el texto</button>
+        </div>
+      </div>
+      <div class="bkcard">
+        <span class="lab">Importar</span>
+        <div id="bkModes">
+          <label class="bkchk"><input type="radio" name="bkmode" value="replace" checked> Reemplazar todo lo que haya aquí</label>
+          <label class="bkchk"><input type="radio" name="bkmode" value="merge"> Añadir sin borrar nada</label>
+        </div>
+        <p class="help" id="bkModeNote"></p>
+        <div class="bkbtns">
+          <button type="button" class="btn" id="bkImport">Elegir archivo…</button>
+          <button type="button" class="btn ghost" id="bkPaste">Pegar el texto</button>
+        </div>
+      </div>
+    </div>
+    <p class="synced" id="bkNote"></p>
+    <input type="file" id="bkFile" accept="application/json,.json" hidden aria-hidden="true">
   </div>
 </section>
 
@@ -1402,6 +1446,7 @@
   function setStoreLabel() {
     const el = $("saveState"), f = $("footerStore");
     if (state.demo) { el.textContent = "demo · sin guardar"; el.className = "save-state"; f.textContent = "Modo demo: datos inventados, no se guarda nada."; return; }
+    if (typeof renderBackup === "function") { try { renderBackup(); } catch (e) { } }
     if (state.store === "db") { el.textContent = "sincronizado"; el.className = "save-state cloud"; f.textContent = "Los cambios se guardan y se comparten con quien tenga acceso a esta página."; }
     else if (state.store === "local") { el.textContent = "guardado local"; el.className = "save-state"; f.textContent = "Guardado solo en este navegador."; }
     else { el.textContent = "sin guardado"; el.className = "save-state"; f.textContent = "Sin almacenamiento disponible: lo que escribas se pierde al recargar."; }
@@ -1930,7 +1975,7 @@
   });
   function renderSettings() { renderMeta(); renderChecklist(); renderRules(); renderAccounts(); if (typeof renderFutAccounts === "function") { try { renderFutAccounts(); } catch (e) { } } }
   const _renderHistory = renderHistory; renderHistory = function () { _renderHistory(); if (typeof renderCalendar === "function" && $("cal")) { try { renderCalendar(); } catch {} } if (typeof renderCabCalendar === "function") { try { renderCabCalendar(); } catch {} } };
-  function renderAll() { renderSettings(); renderJournalDay(); renderHistory(); renderLevels(); }
+  function renderAll() { renderSettings(); renderJournalDay(); renderHistory(); renderLevels(); if (typeof renderBackup === "function") { try { renderBackup(); } catch (e) { } } }
 
   /* =============================== SHARED TRADING DATA =============================== */
   const MULT = { MNQ: 2, NQ: 20, MES: 5, ES: 50, MYM: 0.5, YM: 5, M2K: 5, RTY: 50, MGC: 10, GC: 100, MCL: 100, CL: 1000, SIL: 1000, SI: 5000, M6E: 12500, "6E": 125000 };
@@ -2001,7 +2046,11 @@
   /* =============================== CAPTURAS =============================== */
   const ASSET_MAX = 20 * 1024 * 1024;
   function assetsReady() { return !!(typeof pb !== "undefined" && pb && pb.assets); }
-  function imgSrc(im) { return "/_blob/" + im.id; }
+  /* Una captura vive de dos formas: subida al almacenamiento del artefacto
+     (se sirve en /_blob/<id>) o metida dentro del propio dato como data URI,
+     que es como llega cuando se importa una copia en otra cabina. */
+  function imgSrc(im) { return im && im.data ? String(im.data) : "/_blob/" + ((im && im.id) || ""); }
+  function hasImg(x) { return !!(x && (x.id || x.data)); }
   async function uploadShot(file) {
     if (!assetsReady()) throw { code: "no_assets" };
     if (!/^image\//.test(file.type)) throw { code: "type" };
@@ -2019,15 +2068,18 @@
   }
   // Bloque de capturas dentro del editor modal. Devuelve el estado para leerlo al guardar.
   function attachShots(fieldsEl, initial) {
-    const st = { imgs: (initial || []).filter(x => x && x.id).map(x => Object.assign({}, x)) };
+    const st = { imgs: (initial || []).filter(hasImg).map(x => Object.assign({}, x)) };
     const box = document.createElement("div");
     box.className = "fld w6"; box.id = "edShots";
     fieldsEl.appendChild(box);
     const draw = () => {
-      box.innerHTML = `<span class="lab">Capturas · antes, durante y después</span>` + (assetsReady()
-        ? `<div class="pbimgs">${st.imgs.map((im, i) => `<figure class="pbimg" data-i="${i}"><img src="${esc(imgSrc(im))}" alt="captura ${i + 1}" loading="lazy"><input class="tin small cap" type="text" data-cap="${i}" value="${esc(im.caption || "")}" placeholder="qué se ve" aria-label="Nota de la captura ${i + 1}"><button type="button" class="icon del" data-act="rm" data-i="${i}" title="Quitar captura">×</button></figure>`).join("")}</div>
-           <div class="imgbar"><button type="button" class="btn sm" data-act="add">+ Añadir captura</button><span class="help">${st.imgs.length ? st.imgs.length + (st.imgs.length === 1 ? " captura adjunta" : " capturas adjuntas") : "sin gráfico, la lección se olvida en una semana"}</span></div>`
-        : `<p class="help" style="font-family:var(--font-mono);font-size:11.5px;color:var(--dim);margin:4px 0 0">Esta vista no da acceso al almacenamiento de imágenes, así que no se pueden adjuntar capturas.</p>`);
+      // Las capturas que ya existen se ven siempre; añadir nuevas necesita almacenamiento.
+      const grid = st.imgs.length
+        ? `<div class="pbimgs">${st.imgs.map((im, i) => `<figure class="pbimg" data-i="${i}"><img src="${esc(imgSrc(im))}" alt="captura ${i + 1}" loading="lazy"><input class="tin small cap" type="text" data-cap="${i}" value="${esc(im.caption || "")}" placeholder="qué se ve" aria-label="Nota de la captura ${i + 1}"><button type="button" class="icon del" data-act="rm" data-i="${i}" title="Quitar captura">×</button></figure>`).join("")}</div>`
+        : "";
+      box.innerHTML = `<span class="lab">Capturas · antes, durante y después</span>` + grid + (assetsReady()
+        ? `<div class="imgbar"><button type="button" class="btn sm" data-act="add">+ Añadir captura</button><span class="help">${st.imgs.length ? plu(st.imgs.length, "captura adjunta", "capturas adjuntas") : "sin gráfico, la lección se olvida en una semana"}</span></div>`
+        : `<p class="help" style="font-family:var(--font-mono);font-size:11.5px;color:var(--dim);margin:4px 0 0">${st.imgs.length ? plu(st.imgs.length, "captura adjunta", "capturas adjuntas") + ", traídas en una copia. Esta vista no da acceso al almacenamiento de imágenes, así que no se pueden añadir nuevas." : "Esta vista no da acceso al almacenamiento de imágenes, así que no se pueden adjuntar capturas."}</p>`);
     };
     draw();
     box.addEventListener("input", e => { const i = e.target.dataset.cap; if (i != null && st.imgs[Number(i)]) st.imgs[Number(i)].caption = e.target.value.slice(0, 120); });
@@ -2037,7 +2089,7 @@
       if (b.dataset.act === "rm") {
         if (!armed(b)) return;
         const i = Number(b.dataset.i); const im = st.imgs[i]; st.imgs.splice(i, 1); draw();
-        if (im) { try { await pb.assets.delete(im.id); } catch (err) { } }
+        if (im && im.id && !im.data && assetsReady()) { try { await pb.assets.delete(im.id); } catch (err) { } }
         return;
       }
       if (b.dataset.act === "add") {
@@ -2919,7 +2971,7 @@
       if (fam === "futuros") { const st = futStats(trades); const full = conds.length ? trades.filter(t => t.setupChecks && conds.every((c, i) => t.setupChecks[i])).length : null; stats = `<span>ops <strong>${st.n}</strong></span><span>WR <strong>${st.wr == null ? "—" : pct(st.wr)}</strong></span><span>R prom. <strong>${st.avgR == null ? "—" : (st.avgR >= 0 ? "+" : "") + st.avgR.toFixed(2)}</strong></span><span>PF <strong>${st.pf == null ? "—" : st.pf === Infinity ? "∞" : st.pf.toFixed(2)}</strong></span><span>P&amp;L <strong class="${st.pnl > 0 ? "pos" : st.pnl < 0 ? "neg" : ""}">${st.closed ? money(st.pnl) : "—"}</strong></span>${full != null && st.n ? `<span>condiciones completas <strong class="${full / st.n >= .9 ? "pos" : full / st.n < .6 ? "neg" : ""}">${pct(full / st.n)}</strong></span>` : ""}`; }
       else { const invested = trades.filter(t => t.op === "compra" || t.op === "aporte").reduce((a, t) => a + (t.qty || 0) * (t.price || 0), 0); const real = trades.reduce((a, t) => a + (t.pnl || 0), 0); const income = trades.filter(t => t.op === "dividendo").reduce((a, t) => a + (t.pnl || 0), 0); stats = `<span>ops <strong>${trades.length}</strong></span><span>desplegado <strong>${invested ? money(invested) : "—"}</strong></span><span>cobrado <strong class="${income > 0 ? "pos" : ""}">${income ? money(income) : "—"}</strong></span><span>realizado <strong class="${real > 0 ? "pos" : real < 0 ? "neg" : ""}">${real ? money(real) : "—"}</strong></span>${invested && real ? `<span>sobre lo desplegado <strong class="${real > 0 ? "pos" : "neg"}">${(real / invested * 100).toFixed(1)}%</strong></span>` : ""}`; }
       const kv = [["contexto", p.context], ["entrada", p.entry], [inv ? "salida" : "stop", p.stop], ["objetivo", p.target], ["gestión", p.management], ["invalida", p.invalidation], ["costes", p.costs], ["impuestos", p.taxes], ["edge", p.edge], ["A", p.gradeA], ["C", p.gradeC]].filter(x => x[1]);
-      const imgs = (p.images || []).map((im, i) => `<figure class="pbimg" data-i="${i}"><img src="/_blob/${esc(im.id)}" alt="${esc(im.caption || p.name)}" loading="lazy"><figcaption>${esc(im.caption || "sin nota")}</figcaption>${pb.assets ? `<button type="button" class="icon" data-act="imgcap" data-i="${i}" title="Escribir qué se ve" style="left:2px;right:auto">✎</button><button type="button" class="icon del" data-act="imgdel" data-i="${i}" title="Quitar captura">×</button>` : ""}</figure>`).join("");
+      const imgs = (p.images || []).map((im, i) => `<figure class="pbimg" data-i="${i}"><img src="${esc(imgSrc(im))}" alt="${esc(im.caption || p.name)}" loading="lazy"><figcaption>${esc(im.caption || "sin nota")}</figcaption>${pb.assets ? `<button type="button" class="icon" data-act="imgcap" data-i="${i}" title="Escribir qué se ve" style="left:2px;right:auto">✎</button><button type="button" class="icon del" data-act="imgdel" data-i="${i}" title="Quitar captura">×</button>` : ""}</figure>`).join("");
       return `<div class="card ${p.status === "retirado" ? "retired" : ""}" data-id="${p.id}">
         <div class="ch"><h3>${esc(p.name)}${p.version > 1 ? ` <span class="chip">v${p.version}</span>` : ""}</h3><select class="pbst" data-act="status" aria-label="Estado" style="font-size:11px;padding:2px 22px 2px 6px">${PB_STATUS.map(([v, l]) => `<option value="${v}" ${p.status === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="chips"><span class="chip ${inv ? "inv" : "fut"}">${esc(def.label)}</span>${p.market ? `<span class="chip">${esc(p.market)}</span>` : ""}${p.timeframe ? `<span class="chip">${esc(p.timeframe)}</span>` : ""}${p.window ? `<span class="chip">${esc(p.window)}</span>` : ""}${(p.tags || "").split(",").map(t => t.trim()).filter(Boolean).map(t => `<span class="chip">#${esc(t)}</span>`).join("")}</div>
@@ -3604,7 +3656,7 @@
 
   /* =============================== WIRING =============================== */
   function counts() { $("nFut").textContent = coll("trades").items.filter(t => t.type === "futuros").length || ""; $("nPlaybook").textContent = coll("playbooks").items.length || ""; $("nIdeas").textContent = coll("ideas").items.length || ""; $("nInvest").textContent = coll("positions").items.length || ""; }
-  coll("trades").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); try { renderInvestMetrics(); } catch (e) { } try { syncDayFromTrades(); } catch (e) { } try { renderHistory(); renderAccounts(); } catch (e) { } });
+  coll("trades").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); try { renderInvestMetrics(); } catch (e) { } try { syncDayFromTrades(); } catch (e) { } try { renderHistory(); renderAccounts(); } catch (e) { } try { renderBackup(); } catch (e) { } });
   coll("playbooks").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); });
   coll("ideas").subscribe(() => { renderIdeas(); counts(); });
   coll("markets").subscribe(() => { renderInvest(); try { fillQtDest(); renderQtNote(); } catch (e) { } });
@@ -3663,6 +3715,266 @@
     if (btn.dataset.act === "del") { if (!armed(btn)) return; coll("risk").remove(id); return; }
     setRiskForm(s2); flash(`escenario «${s2.name}» cargado`);
   });
+
+  /* =============================== COPIA DE SEGURIDAD Y TRASPASO ===============================
+     Un archivo JSON con todo lo que guarda la cabina. Dos usos: respaldo, y llevar
+     los datos a otra copia de Cabina (la del repositorio, por ejemplo). El formato
+     va versionado: si algún día cambia la forma de los datos, quien importe sabrá
+     de qué versión viene y podrá convertirla en vez de romperse en silencio. */
+  const BK_FORMAT = "cabina-backup";
+  const BK_VERSION = 1;
+  const BK_PARTS = [
+    ["days", "sesión", "sesiones"],
+    ["trades", "operación", "operaciones"],
+    ["playbooks", "estrategia", "estrategias"],
+    ["ideas", "idea", "ideas"],
+    ["positions", "posición", "posiciones"],
+    ["watch", "activo en seguimiento", "activos en seguimiento"],
+    ["markets", "mercado propio", "mercados propios"],
+    ["scenarios", "escenario", "escenarios"],
+    ["risk", "escenario de riesgo", "escenarios de riesgo"],
+  ];
+  // El historial en pantalla son 14 días; la copia se lleva todos los que existan.
+  async function allDayDocs() {
+    if (state.db) {
+      try { const q = await state.db.collection("days").limit(2000).get(); return q.docs.map(d => d.data()).filter(d => d && d.date); }
+      catch (e) { }
+    }
+    const l = lsRead().days || {};
+    return Object.values(l).filter(d => d && d.date);
+  }
+  function imagesOf(rec) { return rec && Array.isArray(rec.images) ? rec.images : []; }
+  function eachImage(b, fn) { ["trades", "playbooks"].forEach(n => Object.values(b[n] || {}).forEach(r => imagesOf(r).forEach(fn))); }
+  async function buildBundle(opts) {
+    opts = opts || {};
+    const days = {};
+    (await allDayDocs()).forEach(d => { days[d.date] = clone(d); });
+    if (state.day && state.day.date) days[state.day.date] = clone(state.day);
+    const b = {
+      format: BK_FORMAT, version: BK_VERSION,
+      exportedAt: new Date().toISOString(),
+      source: state.db ? "artefacto" : "navegador",
+      settings: clone(state.settings),
+      days,
+    };
+    COLLS.forEach(n => { const m = {}; coll(n).items.forEach(x => { if (x && x.id) m[x.id] = clone(x); }); b[n] = m; });
+    if (opts.images) await inlineImages(b, opts.onStep);
+    return b;
+  }
+  /* Las capturas no viven dentro del dato: se sirven en /_blob/<id> desde el
+     almacenamiento de ESTA cabina. Para que viajen hay que meterlas dentro como
+     data URI; si no, la copia llega con las operaciones pero sin los gráficos. */
+  async function inlineImages(b, onStep) {
+    const pend = []; eachImage(b, im => { if (im && im.id && !im.data) pend.push(im); });
+    let done = 0, failed = 0;
+    for (const im of pend) {
+      if (onStep) onStep(done, pend.length);
+      try {
+        const r = await fetch(imgSrc(im));
+        if (!r.ok) throw new Error("http " + r.status);
+        const blob = await r.blob();
+        im.data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = () => rej(fr.error); fr.readAsDataURL(blob); });
+      } catch (e) { failed++; }
+      done++;
+    }
+    if (onStep) onStep(done, pend.length);
+    b.imagesInlined = { total: pend.length, failed };
+    return b;
+  }
+  function bundleStats(b) {
+    const parts = [];
+    BK_PARTS.forEach(([k, one, many]) => { const n = Object.keys(b[k] || {}).length; if (n) parts.push(plu(n, one, many)); });
+    let imgs = 0, inl = 0; eachImage(b, im => { imgs++; if (im && im.data) inl++; });
+    return { parts, images: imgs, inlined: inl, text: parts.length ? parts.join(" · ") : "nada guardado todavía" };
+  }
+  function bkSize(txt) {
+    const n = new Blob([txt]).size;
+    return n < 1024 ? n + " B" : n < 1024 * 1024 ? (n / 1024).toFixed(0) + " KB" : (n / 1024 / 1024).toFixed(1) + " MB";
+  }
+  function bkName() { return `cabina-${etNow().date}.json`; }
+  function bkSay(msg, bad) {
+    const el = $("bkNote"); if (!el) return;
+    el.className = "synced" + (bad ? " bad" : "");
+    el.innerHTML = `<span class="dotg"${bad ? "" : ""}></span><span>${esc(msg)}</span>`;
+  }
+  /* Dentro del artefacto la página no puede descargar por su cuenta: lo hace la
+     cápsula, que enseña al usuario el nombre y el tamaño y espera su permiso.
+     Servida como archivo suelto vale la descarga normal del navegador. */
+  async function bkDownload(text, name) {
+    let dl = null;
+    try { dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch { dl = null; }
+    if (dl) { await dl.save({ filename: name, data: text }); return "guardado"; }
+    if (window.claude) throw { code: "unavailable" };
+    const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    const a = document.createElement("a"); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    return "descargado";
+  }
+  function bkDownloadErr(err) {
+    const c = err && err.code;
+    if (c === "declined") return "descarga cancelada.";
+    if (c === "too_large") return "el archivo es demasiado grande para descargarlo. Prueba sin meter las capturas.";
+    if (c === "rate_limited") return "hay otra descarga esperando respuesta. Termina esa y vuelve.";
+    if (c === "unavailable" || c === "not_granted") return "esta vista no deja descargar archivos. Usa «Ver el texto» y cópialo a mano.";
+    return "no se pudo descargar el archivo.";
+  }
+  async function bkBuildWithProgress(withImgs) {
+    const b = await buildBundle({
+      images: withImgs,
+      onStep: (d, t) => { if (t) bkSay(`Metiendo capturas dentro del archivo… ${d} de ${t}.`); },
+    });
+    return b;
+  }
+  $("bkExport").addEventListener("click", async function () {
+    const btn = this, withImgs = $("bkImgs").checked;
+    btn.disabled = true; btn.textContent = "preparando…";
+    try {
+      const b = await bkBuildWithProgress(withImgs);
+      const txt = JSON.stringify(b);
+      const st = bundleStats(b);
+      const how = await bkDownload(txt, bkName());
+      const perdidas = b.imagesInlined && b.imagesInlined.failed;
+      bkSay(`Archivo ${how} · ${bkSize(txt)} · ${st.text}.` + (withImgs ? ` ${plu(st.inlined, "captura va dentro", "capturas van dentro")}${perdidas ? `, ${plu(perdidas, "no se pudo leer", "no se pudieron leer")}` : ""}.` : st.images ? ` ${plu(st.images, "captura se queda", "capturas se quedan")} en esta cabina.` : ""));
+    } catch (err) { bkSay(bkDownloadErr(err), true); }
+    btn.disabled = false; btn.textContent = "Descargar copia";
+  });
+  $("bkShow").addEventListener("click", async function () {
+    const btn = this; btn.disabled = true; btn.textContent = "preparando…";
+    try {
+      const b = await bkBuildWithProgress($("bkImgs").checked);
+      const txt = JSON.stringify(b, null, 1);
+      const st = bundleStats(b);
+      let copiado = false;
+      try { await navigator.clipboard.writeText(txt); copiado = true; } catch { copiado = false; }
+      bkSay(`${copiado ? "Copiado al portapapeles" : "Copia el texto del cuadro"} · ${bkSize(txt)} · ${st.text}.`);
+      openEditor({ title: "Copia de Cabina · " + bkName(), fields: [{ key: "j", label: copiado ? "Ya está en el portapapeles. Pégalo donde quieras guardarlo." : "Selecciona todo y cópialo", type: "textarea", w: 6, rows: 14 }], values: { j: txt }, onSave: () => { } });
+    } catch (err) { bkSay("no se pudo preparar la copia.", true); }
+    btn.disabled = false; btn.textContent = "Ver el texto";
+  });
+  // Acepta tanto {id: doc} como [doc]: así una copia editada a mano sigue entrando.
+  function bkMap(v, key) {
+    const m = {};
+    if (Array.isArray(v)) v.forEach(x => { if (x && typeof x === "object" && x[key]) m[String(x[key])] = x; });
+    else if (v && typeof v === "object") Object.keys(v).forEach(k => { const x = v[k]; if (x && typeof x === "object") m[String(x[key] || k)] = x; });
+    return m;
+  }
+  function bkParse(txt) {
+    let raw; try { raw = JSON.parse(txt); } catch { return { err: "El texto no es JSON válido." }; }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { err: "El archivo no tiene la forma de una copia de Cabina." };
+    if (raw.format !== BK_FORMAT) return { err: "Esto no es una copia de Cabina: falta la marca del formato." };
+    if (Number(raw.version) > BK_VERSION) return { err: `La copia es de una versión más nueva (v${raw.version}) que esta cabina (v${BK_VERSION}). Actualiza la página antes de importarla.` };
+    const b = { days: bkMap(raw.days, "date") };
+    COLLS.forEach(n => { b[n] = bkMap(raw[n], "id"); });
+    if (raw.settings && typeof raw.settings === "object") b.settings = raw.settings;
+    b.exportedAt = raw.exportedAt; b.source = raw.source; b.version = raw.version;
+    const st = bundleStats(b);
+    if (!st.parts.length && !b.settings) return { err: "La copia está vacía: no trae nada que importar." };
+    return { bundle: b, stats: st };
+  }
+  async function applyBundle(b, mode) {
+    if (state.db) return applyBundleDb(b);
+    const cur = mode === "replace" ? {} : lsRead();
+    const next = Object.assign({}, cur);
+    if (b.settings) next.settings = clone(normalize(b.settings));
+    next.days = Object.assign({}, next.days || {}, b.days);
+    COLLS.forEach(n => { next[n] = Object.assign({}, next[n] || {}, b[n]); });
+    if (!lsWrite(next)) throw new Error("almacenamiento lleno");
+    return { escritos: Object.keys(b.days).length + COLLS.reduce((n, k) => n + Object.keys(b[k]).length, 0) };
+  }
+  /* En la base del artefacto se escribe encima por id y no se borra nada que no
+     venga en la copia: un borrado masivo en la nube no se deshace, y la cabina
+     nunca va a provocarlo desde un botón de importar. */
+  async function applyBundleDb(b) {
+    const tareas = [];
+    if (b.settings) tareas.push(() => state.db.doc("settings/main").set(clone(normalize(b.settings))));
+    Object.keys(b.days).forEach(d => tareas.push(() => state.db.doc("days/" + d).set(clone(b.days[d]))));
+    COLLS.forEach(n => Object.keys(b[n]).forEach(id => tareas.push(() => state.db.collection(n).doc(id).set(Object.assign(clone(b[n][id]), { id })))));
+    let hechos = 0, fallos = 0;
+    for (const t of tareas) {
+      try { await t(); } catch (e) { fallos++; }
+      hechos++;
+      if (hechos % 10 === 0 || hechos === tareas.length) bkSay(`Escribiendo en la base del artefacto… ${hechos} de ${tareas.length}.`);
+    }
+    if (fallos && fallos === tareas.length) throw new Error("no se pudo escribir nada");
+    return { escritos: hechos - fallos, fallos };
+  }
+  function bkMode() { const r = document.querySelector('input[name="bkmode"]:checked'); return r ? r.value : "replace"; }
+  function bkConfirmImport(txt) {
+    const r = bkParse(txt);
+    if (r.err) { bkSay(r.err, true); return; }
+    const modo = state.db ? "merge" : bkMode();
+    const cuando = r.bundle.exportedAt ? dmy(String(r.bundle.exportedAt).slice(0, 10)) : "fecha desconocida";
+    const aviso = state.db
+      ? "Se escribe encima por id en la base del artefacto. No se borra nada que no venga en la copia."
+      : modo === "replace"
+        ? "REEMPLAZA todo lo que haya en esta cabina. Lo que no esté en la copia se pierde."
+        : "Se añade encima de lo que ya hay. Lo que coincida por id se sobreescribe.";
+    openEditor({
+      title: "Importar copia de Cabina",
+      fields: [
+        { key: "resumen", label: "Qué trae la copia", type: "textarea", w: 6, rows: 4 },
+        { key: "ok", label: `Escribe IMPORTAR para confirmar`, w: 6, ph: "IMPORTAR" },
+      ],
+      values: { resumen: `Exportada el ${cuando} desde ${r.bundle.source || "una cabina"}.\n${r.stats.text}.\n${r.stats.images ? plu(r.stats.images, "captura", "capturas") + (r.stats.inlined ? `, ${r.stats.inlined} dentro del archivo` : ", ninguna dentro del archivo (se verán rotas)") + "." : "Sin capturas."}\n\n${aviso}` },
+      validate: v => (String(v.ok || "").trim().toUpperCase() === "IMPORTAR" ? null : "Escribe IMPORTAR para confirmar"),
+      onSave: async () => {
+        bkSay("Importando…");
+        try {
+          const res = await applyBundle(r.bundle, modo);
+          bkSay(`Importado: ${plu(res.escritos, "registro escrito", "registros escritos")}${res.fallos ? `, ${res.fallos} con error` : ""}. Recargando…`);
+          setTimeout(() => location.reload(), 1200);
+        } catch (e) { bkSay("No se pudo importar: " + ((e && e.message) || "error desconocido") + ".", true); }
+      },
+    });
+    const sv = $("edSave"); sv.textContent = "Importar";
+    const obs = new MutationObserver(() => { if (!ov.classList.contains("open")) { sv.textContent = "Guardar"; obs.disconnect(); } });
+    obs.observe(ov, { attributes: true, attributeFilter: ["class"] });
+  }
+  $("bkImport").addEventListener("click", () => { const f = $("bkFile"); f.value = ""; f.click(); });
+  $("bkFile").addEventListener("change", async e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    bkSay(`Leyendo ${f.name}…`);
+    try { const txt = await f.text(); setTimeout(() => bkConfirmImport(txt), 40); }
+    catch (err) { bkSay("No se pudo leer el archivo.", true); }
+  });
+  $("bkPaste").addEventListener("click", () => {
+    openEditor({ title: "Pegar una copia de Cabina", fields: [{ key: "j", label: "Pega aquí el contenido del archivo", type: "textarea", w: 6, rows: 10 }], values: { j: "" },
+      validate: v => { const r = bkParse(String(v.j || "")); return r.err || null; },
+      // El modal es uno solo: hay que dejar que este se cierre antes de abrir el de confirmación.
+      onSave: v => { const txt = String(v.j || ""); setTimeout(() => bkConfirmImport(txt), 40); } });
+    const sv = $("edSave"); sv.textContent = "Revisar";
+    const obs = new MutationObserver(() => { if (!ov.classList.contains("open")) { sv.textContent = "Guardar"; obs.disconnect(); } });
+    obs.observe(ov, { attributes: true, attributeFilter: ["class"] });
+  });
+  function renderBackup() {
+    const meta = $("bkMeta"); if (!meta) return;
+    const parts = [];
+    const dias = new Set(state.history.map(d => d.date)); if (state.day && (state.day.result != null || state.day.closed || state.day.pre)) dias.add(state.day.date);
+    BK_PARTS.forEach(([k, one, many]) => { if (k === "days") return; const n = coll(k).items.length; if (n) parts.push(plu(n, one, many)); });
+    let imgs = 0; ["trades", "playbooks"].forEach(n => coll(n).items.forEach(r => { imgs += imagesOf(r).length; }));
+    meta.textContent = parts.length ? parts.join(" · ") + (imgs ? " · " + plu(imgs, "captura", "capturas") : "") : "sin datos todavía";
+    const nota = $("bkModeNote"), modos = $("bkModes");
+    if (state.db) {
+      modos.hidden = true;
+      nota.textContent = "Conectada a la base del artefacto: la importación escribe encima por id y nunca borra lo que no venga en la copia.";
+    } else {
+      modos.hidden = false;
+      nota.textContent = "Guardado en este navegador: aquí sí se puede empezar de cero.";
+    }
+    const inote = $("bkImgsNote");
+    inote.textContent = !imgs
+      ? "Todavía no hay capturas adjuntas a ninguna operación."
+      : $("bkImgs").checked
+        ? plu(imgs, "captura viaja", "capturas viajan") + " dentro del archivo. Pesa mucho más, pero la copia llega completa."
+        : imgs === 1
+          ? "Sin esto el archivo pesa poco, pero la única captura que tienes se queda en esta cabina."
+          : `Sin esto el archivo pesa poco, pero las ${imgs} capturas se quedan en esta cabina.`;
+  }
+  $("bkImgs").addEventListener("change", renderBackup);
+  // renderAll() ya corrió más arriba, cuando las constantes de este bloque aún no existían.
+  renderBackup();
+
   setCalcView("classic");
   renderRisk();
   showTab((location.hash || "#cabina").slice(1));
