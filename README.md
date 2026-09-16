@@ -90,6 +90,28 @@ Funciona igual al revés. Un par de detalles que conviene saber:
 - **Las capturas importadas se ven pero no se editan** en una copia estática: sin
   almacenamiento de imágenes se pueden mirar y quitar, no añadir nuevas.
 
+## Cómo fluye un dato
+
+No hay framework: una colección en memoria es la única fuente y todo lo demás
+son lectores suscritos a ella.
+
+```
+openTrade() ─► coll("trades").set(id, rec) ─► localStorage | base del artefacto
+                        │
+                        └─ emit() ─► renderFutures()      (journal, tiles, calendario)
+                                     renderAccounts()     (balance, drawdown, estado)
+                                     syncDayFromTrades()  (P&L del día en Cabina)
+                                     renderRules()        (motor de reglas duras)
+                                     renderHistory()      (historial y calendario)
+                                     invalidatePre()      (vista de pre-sesiones)
+```
+
+Un detalle que confunde: **un stop es un plan, no un hecho.** Una operación con
+entrada y stop pero sin salida sigue ABIERTA y su P&L es cero, así que el
+balance no se mueve — que es lo correcto. Cuando de verdad toca el stop, el
+botón `abierta · tocó el stop` de la columna de salida la cierra al precio del
+stop y el resto se actualiza solo.
+
 ## Dónde se guardan los datos
 
 Depende de dónde se abra la página:

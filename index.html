@@ -208,6 +208,19 @@
   tr.sesrow td { background: var(--bg); border-top: 1px solid var(--line-strong); padding: 7px 10px; }
   tr.sesrow .sesn { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); margin-left: 10px; }
   tr.sesrow .sesp { font-family: var(--font-mono); font-size: 10.5px; color: var(--dim); margin-left: 10px; }
+  .btn.gated { background: var(--bad-soft); border-color: rgba(224,96,79,.5); color: var(--bad); }
+  .btn.gated:hover { background: rgba(224,96,79,.22); }
+  .gate { border: 1px solid rgba(224,96,79,.45); border-left: 3px solid var(--bad); border-radius: 5px; background: rgba(224,96,79,.08); padding: 11px 13px; }
+  .gate .gh { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--bad); margin-bottom: 8px; }
+  .gate .gh i { font-style: normal; }
+  .gate ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .gate li { display: grid; gap: 1px; }
+  .gate li b { font-family: var(--font-mono); font-size: 11.5px; color: var(--bad); letter-spacing: .02em; }
+  .gate li span { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+  .gate p { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+  .hitstop { background: var(--warn-soft); border: 1px solid rgba(224,164,88,.45); border-radius: 3px; color: var(--warn); font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; padding: 2px 7px; cursor: pointer; white-space: nowrap; }
+  .hitstop:hover:not(:disabled) { background: var(--bad-soft); border-color: rgba(224,96,79,.5); color: var(--bad); }
+  .hitstop:disabled { background: none; border-color: var(--line); color: var(--dim); cursor: default; }
   .sestag { display: inline-block; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
   .sestag.live { color: var(--good); border-color: rgba(91,196,137,.45); background: var(--good-soft); }
   .sestag.warn { color: var(--warn); border-color: rgba(224,164,88,.45); background: var(--warn-soft); }
@@ -1908,6 +1921,7 @@
     const marks = curChecks();
     for (const c of checks) { const on = !!marks[c.id]; if (on) done++; const li = listEl.querySelector(`li[data-id="${c.id}"]`); if (li) li.classList.toggle("done", on); }
     $("checkMeta").textContent = `${done} / ${n} · ${sesShort(sesSel())}${curPre() ? " · guardada" : ""}`;
+    try { paintGateButtons(); } catch (e) { }
     $("checkBar").style.width = (n ? done / n * 100 : 0) + "%";
     $("goCount").textContent = `${done}/${n}`;
     updateGoBox();
@@ -2593,6 +2607,7 @@
     [jResult, jTrades, jNote, jBroke].forEach(el => { el.disabled = d.closed; });
     renderDaySync();
     fillQtDest(); renderQtNote();
+    try { paintGateButtons(); } catch (e) { }
   }
   /* ---------- puente Cabina ↔ Journal de futuros ----------
      El resultado del día no se escribe dos veces: sale de las operaciones de futuros
@@ -2962,12 +2977,19 @@
 
   function tradeCalc(t) {
     if (t.type !== "futuros") return t;
-    const dir = t.direction === "short" ? -1 : 1; const mult = MULT[(t.instrument || "").toUpperCase()] ?? t.mult ?? 2;
+    /* Antes, un instrumento fuera de la tabla caía al multiplicador del MNQ ($2)
+       sin avisar, fabricando el P&L de esa operación. Ahora se marca y el P&L
+       queda sin calcular salvo que escribas el resultado a mano. */
+    const dir = t.direction === "short" ? -1 : 1;
+    const sym = (t.instrument || "").toUpperCase();
+    const known = MULT[sym] != null ? MULT[sym] : (Number(t.mult) > 0 ? Number(t.mult) : null);
+    t.multUnknown = known == null && !!sym;
+    const mult = known;
     const risk = t.entry != null && t.stop != null ? Math.abs(t.entry - t.stop) : null;
     t.rPlanned = risk && t.target != null ? Math.abs(t.target - t.entry) / risk : null;
     t.rReal = risk && t.exit != null ? ((t.exit - t.entry) * dir) / risk : null;
-    t.pnlEff = t.pnl != null ? t.pnl : (t.exit != null && t.entry != null ? (t.exit - t.entry) * dir * (t.qty || 1) * mult - (t.fees || 0) : null);
-    t.riskUsd = risk != null ? risk * (t.qty || 1) * mult : null;
+    t.pnlEff = t.pnl != null ? t.pnl : (mult != null && t.exit != null && t.entry != null ? (t.exit - t.entry) * dir * (t.qty || 1) * mult - (t.fees || 0) : null);
+    t.riskUsd = risk != null && mult != null ? risk * (t.qty || 1) * mult : null;
     return t;
   }
   /* =============================== CAPTURAS =============================== */
@@ -3076,6 +3098,48 @@
       { key: "lesson", label: "Lección / seguimiento", type: "text", w: 6 },
     ];
   }
+  /* ---------- puerta de reglas antes de registrar ----------
+     Bloquear el botón NO te impide operar: operas en el bróker, no aquí. Lo único
+     que impediría es REGISTRAR lo que ya hiciste, y entonces el journal miente
+     justo en los días que peor te fueron — que son los que hay que mirar.
+     Así que avisa fuerte, deja registrar, y marca la operación como fuera de
+     protocolo para que salga en el análisis. */
+  function tradeGate() {
+    const razones = [];
+    const id = defaultAccountId();
+    const a = id ? acctById(id) : null;
+    if (a) {
+      const ev = evaluateAccountRules(a);
+      if (!ev.canTrade) razones.push({ t: `${a.name || a.firm}: ${ST_LABEL[ev.status]}`, d: ev.why });
+      else if (ev.status === "RESTRICTED") razones.push({ t: `${a.name || a.firm}: RESTRINGIDA`, d: ev.why });
+    }
+    const k = dayRuleCheck(todayFutures());
+    if (k.lossMax && k.lossPct >= 1) razones.push({ t: "Pérdida máxima del día alcanzada", d: `${money(-k.lossUsed)} contra un tope de ${money(-k.lossMax)}.` });
+    if (k.streakHit) razones.push({ t: `${plu(k.streak, "pérdida seguida", "pérdidas seguidas")}`, d: `El límite son ${k.streakMax}. La regla dice cerrar el día.` });
+    const n = state.settings.checks.length, marks = curChecks();
+    const hechos = state.settings.checks.filter(c => marks[c.id]).length;
+    if (n && hechos < n) razones.push({ t: `Pre-sesión de ${sesShort(sesSel())} incompleta`, d: `${hechos} de ${n} pasos marcados.` });
+    return { blocked: razones.length > 0, razones };
+  }
+  function gateHtml(g) {
+    if (!g.blocked) return "";
+    return `<div class="fld w6"><div class="gate">
+      <div class="gh"><i aria-hidden="true">✕</i>Estás fuera de protocolo</div>
+      <ul>${g.razones.map(r => `<li><b>${esc(r.t)}</b><span>${esc(r.d)}</span></li>`).join("")}</ul>
+      <p>Regístrala igual si ya la tomaste: el journal tiene que decir la verdad. Queda marcada <b>fuera de protocolo</b> y sale aparte en el análisis.</p>
+    </div></div>`;
+  }
+  function paintGateButtons() {
+    const g = tradeGate();
+    const tit = g.blocked ? "Fuera de protocolo: " + g.razones.map(r => r.t).join(" · ") : "";
+    [["ftNew", "+ Nueva operación"], ["qtGo", "+ Registrar"]].forEach(([id, txt]) => {
+      const b = $(id); if (!b) return;
+      b.classList.toggle("gated", g.blocked);
+      b.title = tit;
+      b.textContent = g.blocked ? "⚠ " + txt : txt;
+    });
+  }
+
   function openTrade(t, typeForNew, seed) {
     const type = t ? t.type : typeForNew; const isNew = !t; let shots = null;
     const values = t || Object.assign(type === "futuros" ? { date: ft.day || todayISO(), type, instrument: "MNQ", direction: "long", qty: 1, quality: "A", accountId: defaultAccountId() } : { date: todayISO(), type, op: "compra", horizon: "largo", market: "etfs" }, seed || {});
@@ -3089,6 +3153,10 @@
       title: isNew ? (type === "futuros" ? "Nueva operación · Futuros" : "Nueva operación · Inversión") : "Editar operación",
       fields: tradeFields(type), values,
       after: (fieldsEl, vals) => {
+        if (isNew && type === "futuros") {
+          const g = tradeGate();
+          if (g.blocked) { const d = document.createElement("div"); d.innerHTML = gateHtml(g); const node = d.firstElementChild; if (node) fieldsEl.insertBefore(node, fieldsEl.firstChild); }
+        }
         const sel = fieldsEl.querySelector("#ef_setupId");
         if (sel) { renderConds(fieldsEl, sel.value, vals.setupChecks); sel.addEventListener("change", () => renderConds(fieldsEl, sel.value, null)); }
         shots = attachShots(fieldsEl, vals.images);
@@ -3101,9 +3169,10 @@
       onSave: v => {
         const rec = Object.assign({}, values, v, { type, id: isNew ? uid("t") : t.id });
         if (type === "futuros") rec.instrument = rec.instrument.toUpperCase();
-        delete rec.pnlEff; delete rec.rReal; delete rec.rPlanned; delete rec.riskUsd;
+        delete rec.pnlEff; delete rec.rReal; delete rec.rPlanned; delete rec.riskUsd; delete rec.multUnknown;
+        if (isNew && type === "futuros") { const g = tradeGate(); if (g.blocked) { rec.offProtocol = g.razones.map(r => r.t); } }
         coll("trades").set(rec.id, rec);
-        if (type === "futuros") revealTrade(rec);
+        if (type === "futuros") { revealTrade(rec); if (rec.offProtocol) flash("registrada y marcada fuera de protocolo"); }
       },
       onDelete: isNew ? null : () => coll("trades").remove(t.id),
     });
@@ -3222,6 +3291,7 @@
     $("ftSync").className = "synced" + (noAcct ? " manual" : "");
     $("ftSync").innerHTML = `<span class="dotg"></span><span>${all.length ? `${plu(all.length, "operación de futuros", "operaciones de futuros")} · ${plu(brokeN, "día", "días")} con regla rota en las últimas ${plu(hist.length, "sesión", "sesiones")} · la Cabina, el calendario y las cuentas leen todos de aquí.` : "Sin operaciones todavía. Lo que registres aquí alimenta la Cabina, el calendario y la consistencia de cada cuenta."}</span>${noAcct ? `<span style="color:var(--warn)">${noAcct} sin cuenta asignada</span><button type="button" id="ftFixAcct">asignar en bloque</button>` : ""}`;
     const fx = $("ftFixAcct"); if (fx) fx.addEventListener("click", bulkAssignAccount);
+    try { paintGateButtons(); } catch (e) { }
     renderCalendar(); renderEquity(list); renderUnderwater(list); renderDaily(list); renderRolling(list); renderStreakTiles(s);
     renderDay(); renderBreakdown(list); renderJournalTable(list);
     renderScorecard(list, s); renderRDist(list); renderProto(s); renderSesChart(list); renderHourChart(list); renderDowChart(list); renderConsistency(list, s);
@@ -3323,7 +3393,7 @@
        de un vistazo en qué franja se ganó y en cuál se devolvió. */
     const porSes = {}; list.forEach(t => { const k = tradeSes(t) || "__sin"; (porSes[k] || (porSes[k] = [])).push(t); });
     const ordenSes = SESSIONS.map(x => x.id).concat(["__sin"]).filter(k => porSes[k]);
-    const filaOp = t => `<tr data-id="${t.id}"><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.exit ?? '<span class="chip warn">abierta</span>'}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? "—" : money(t.pnlEff)}</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
+    const filaOp = t => `<tr data-id="${t.id}"><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.exit ?? `<button type="button" class="hitstop" data-act="hitstop" title="Marcar que tocó el stop"${t.stop == null ? " disabled" : ""}>abierta${t.stop != null ? " · tocó el stop" : ""}</button>`}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? (t.multUnknown ? `<span class="chip warn" title="No hay valor de punto para ${esc(String(t.instrument || ""))}. Escribe el resultado a mano en «Resultado $» o usa un instrumento conocido.">falta $/punto</span>` : "—") : money(t.pnlEff)}</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
     const grupo = k => {
       const ops = porSes[k].slice().sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
       const cerradas = ops.filter(t => t.pnlEff != null);
@@ -3348,6 +3418,7 @@
     $("dayNote").addEventListener("input", e => { clearTimeout(dayNoteTimer); const v = e.target.value.slice(0, 2000); dayNoteTimer = setTimeout(() => saveDayNote(date, { note: v }), 600); });
     $("dayBroke").addEventListener("change", e => { saveDayNote(date, { broke: e.target.checked }).then(() => renderCalendar()); });
     $("dayBody").querySelectorAll("button[data-act='edit']").forEach(b => b.addEventListener("click", () => { const t = coll("trades").get(b.closest("tr").dataset.id); if (t) openTrade(t); }));
+    $("dayBody").querySelectorAll("button[data-act='hitstop']").forEach(b => b.addEventListener("click", () => hitStop(b.closest("tr").dataset.id)));
     $("dayBody").addEventListener("click", e => { if (e.target.tagName === "IMG" && (e.target.classList.contains("thumb") || e.target.closest("figure.pbimg"))) openLightbox(e.target.src, e.target.alt); });
     if (state.db && !dd) { state.db.doc("days/" + date).get().then(snap => { if (!snap.exists || ft.day !== date) return; const d = snap.data(); const ta = $("dayNote"), cb = $("dayBroke"); if (ta && document.activeElement !== ta) ta.value = d.note || ""; if (cb) cb.checked = !!d.broke; }).catch(() => {}); }
   }
@@ -3449,11 +3520,26 @@
     const pbName = id => { const p = coll("playbooks").get(id); return p ? p.name : ""; };
     wrap.innerHTML = `<table class="t"><thead><tr><th>Fecha</th><th>Hora</th><th>Sesión</th><th>Cuenta</th><th>Instr.</th><th>Setup</th><th>Dir</th><th class="r">Ctos</th><th class="r">Entrada</th><th class="r">Stop</th><th class="r">Salida</th><th class="r">R plan</th><th class="r">R</th><th class="r">P&amp;L</th><th>Cal.</th><th>Prot.</th><th>Img</th><th>Etiquetas</th><th>Lección</th><th></th></tr></thead><tbody>${list.map(t => {
       const proto = [t.cStruct, t.cPull, t.cWindow, t.cSize].filter(Boolean).length;
-      return `<tr data-id="${t.id}"><td><span class="dim">${dowOf(t.date)}</span> ${(t.date || "").slice(5)}</td><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${sesTag(t)}</td><td class="ui">${esc(acctLabel(t.accountId)) || '<span class="dim">—</span>'}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.stop ?? "—"}</td><td class="r">${t.exit ?? '<span class="chip warn">abierta</span>'}</td><td class="r dim">${t.rPlanned == null ? "—" : t.rPlanned.toFixed(1)}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? "—" : money(t.pnlEff)}</td><td>${esc(t.quality || "")}</td><td class="${proto === 4 ? "pos" : proto <= 2 ? "neg" : ""}">${proto}/4</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="notes">${esc(t.lesson || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
+      return `<tr data-id="${t.id}"><td><span class="dim">${dowOf(t.date)}</span> ${(t.date || "").slice(5)}</td><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${sesTag(t)}</td><td class="ui">${esc(acctLabel(t.accountId)) || '<span class="dim">—</span>'}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.stop ?? "—"}</td><td class="r">${t.exit ?? `<button type="button" class="hitstop" data-act="hitstop" title="Marcar que tocó el stop"${t.stop == null ? " disabled" : ""}>abierta${t.stop != null ? " · tocó el stop" : ""}</button>`}</td><td class="r dim">${t.rPlanned == null ? "—" : t.rPlanned.toFixed(1)}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? (t.multUnknown ? `<span class="chip warn" title="No hay valor de punto para ${esc(String(t.instrument || ""))}. Escribe el resultado a mano en «Resultado $» o usa un instrumento conocido.">falta $/punto</span>` : "—") : money(t.pnlEff)}</td><td>${esc(t.quality || "")}</td><td class="${proto === 4 ? "pos" : proto <= 2 ? "neg" : ""}">${proto}/4</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="notes">${esc(t.lesson || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
     }).join("")}</tbody></table>`;
+  }
+  /* Una operación con stop pero sin salida sigue ABIERTA: el stop es un plan, no
+     un hecho. Cuando de verdad lo toca, esto rellena la salida con el stop y el
+     resto (balance, P&L del día, calendario, reglas) se mueve solo. */
+  function hitStop(id) {
+    const t = coll("trades").get(id); if (!t) return;
+    if (t.stop == null) { flash("esta operación no tiene stop escrito"); return; }
+    if (t.exit != null) return;
+    const rec = Object.assign({}, t, { exit: Number(t.stop) });
+    delete rec.pnlEff; delete rec.rReal; delete rec.rPlanned; delete rec.riskUsd;
+    coll("trades").set(rec.id, rec);
+    const c = tradeCalc(Object.assign({}, rec));
+    flash(c.pnlEff == null ? "cerrada en el stop" : `cerrada en el stop: ${money(c.pnlEff)}`);
   }
   $("jrTable").addEventListener("click", e => {
     if (e.target.classList.contains("thumb")) { openLightbox(e.target.src, e.target.alt); return; }
+    const hs = e.target.closest("button[data-act='hitstop']");
+    if (hs) { hitStop(hs.closest("tr").dataset.id); return; }
     const btn = e.target.closest("button[data-act='edit']"); if (!btn) return; const t = coll("trades").get(btn.closest("tr").dataset.id); if (t) openTrade(t);
   });
 
