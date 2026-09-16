@@ -256,6 +256,18 @@
   .rule .badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); border: 1px solid rgba(79,179,160,.4); border-radius: 3px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
   .hint { font-family: var(--font-mono); font-size: 11.5px; color: var(--warn); margin: 0 0 12px; }
   .hint.ok { color: var(--dim); }
+  /* Filtros activos, siempre a la vista: una operación que no aparece porque hay
+     un filtro puesto es un dato perdido, y el filtro se ponía sin decirlo. */
+  .toolbar.sub { padding: 0 0 4px; border: 0; background: none; }
+  .ftfilt { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 0 0 12px; padding: 9px 12px; border: 1px solid rgba(224,164,88,.4); border-radius: 5px; background: var(--warn-soft); }
+  .ftfilt .lb { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--warn); }
+  .ftfilt .fchip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 5px 3px 9px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--bg); font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+  .ftfilt .fchip b { color: var(--muted); font-weight: 600; }
+  .ftfilt .fchip button { background: none; border: 0; color: var(--dim); font-size: 14px; line-height: 1; padding: 0 3px; cursor: pointer; }
+  .ftfilt .fchip button:hover { color: var(--bad); }
+  .ftfilt .clr { margin-left: auto; background: none; border: 1px solid var(--line-strong); border-radius: 4px; padding: 4px 10px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; cursor: pointer; }
+  .ftfilt .clr:hover { color: var(--text); border-color: var(--muted); }
+
   /* ---------- motor de reglas ----------
      Una regla se escanea en dos líneas: qué es y si se está cumpliendo ahora.
      La explicación larga vive detrás de «Detalle» y no compite por el espacio. */
@@ -1076,6 +1088,7 @@
       <button data-v="cuentas">Cuentas</button>
       <button data-v="analisis">Análisis</button>
       <button data-v="diario">Diario</button>
+      <button data-v="presesion">Pre-sesión</button>
     </div>
     <span class="sp"></span>
     <select id="ftAcct" aria-label="Cuenta"><option value="">todas las cuentas</option></select>
@@ -1085,6 +1098,7 @@
     <select id="ftSes" aria-label="Sesión"><option value="">todas las sesiones</option></select>
     <button type="button" class="btn primary" id="ftNew">+ Nueva operación</button>
   </div>
+  <div class="ftfilt" id="ftFilters" hidden></div>
   <p class="synced" id="ftSync"></p>
 
   <!-- ---------- resumen ---------- -->
@@ -1168,6 +1182,31 @@
       <section class="panel">
         <header><h2>Desglose</h2><span class="meta">dónde está el edge y dónde se va el dinero</span></header>
         <div class="body"><div class="bk" id="ftBreak"></div></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ---------- pre-sesión ---------- -->
+  <div class="ftview" data-v="presesion">
+    <div class="stack">
+      <div class="toolbar sub">
+        <select id="prSes" aria-label="Sesión"><option value="">todas las sesiones</option></select>
+        <select id="prRange" aria-label="Rango"><option value="all">todo el historial</option><option value="30">últimos 30 días</option><option value="90">últimos 90 días</option><option value="year">este año</option></select>
+        <span class="sp"></span>
+        <span class="meta" id="prCount"></span>
+      </div>
+      <section class="panel"><div class="tiles" id="prTiles"></div></section>
+      <section class="panel">
+        <header><h2>¿Preparar paga?</h2><span class="meta" id="prPayMeta"></span></header>
+        <div class="body"><p class="csub">Resultado medio de una sesión según cómo llegó su pre-sesión. Es la única forma de saber si la lista sirve o es un ritual.</p><div class="chartwrap" id="prPayWrap"></div><div id="prPayOut"></div></div>
+      </section>
+      <section class="panel">
+        <header><h2>Pasos que más te saltas</h2><span class="meta" id="prStepMeta"></span></header>
+        <div class="body"><p class="csub">Cada paso, cuántas veces quedó sin marcar y qué resultado dio la sesión en cada caso.</p><div class="twrap" id="prSteps"></div></div>
+      </section>
+      <section class="panel">
+        <header><h2>Historial de pre-sesiones</h2><span class="meta" id="prHistMeta"></span></header>
+        <div class="body"><div class="twrap" id="prHist"></div></div>
       </section>
     </div>
   </div>
@@ -1923,14 +1962,14 @@
     if (!state.settings.checks.length) { preFlash("añade pasos a la lista antes de guardarla"); return; }
     const d = state.day; d.pres = d.pres || {};
     const snap = preSnapshot(); d.pres[sesSel()] = snap;
-    persistDay(); renderChecklist(); renderHistory();
+    persistDay(); renderChecklist(); renderHistory(); invalidatePre();
     const falta = snap.total - snap.done;
     preFlash(`${sesShort(snap.ses)}: ${falta ? `guardada con ${plu(falta, "paso sin marcar", "pasos sin marcar")}` : "guardada completa"}`);
   });
   $("preReopen").addEventListener("click", () => {
     const id = sesSel(); if (state.day.pres) delete state.day.pres[id];
     if (state.day.pre && (state.day.pre.ses === id || !state.day.pre.ses)) state.day.pre = null;
-    persistDay(); renderChecklist(); renderHistory();
+    persistDay(); renderChecklist(); renderHistory(); invalidatePre();
     preFlash(`${sesShort(id)}: reabierta, la lista vuelve a ser editable`);
   });
 
@@ -2758,12 +2797,157 @@
     const act = (state.settings.accounts || []).find(a => a.status === "activa");
     return act ? act.id : "";
   }
+
+  /* =============================== PRE-SESIONES ===============================
+     Cada pre-sesión guardada queda archivada con la sesión a la que pertenece.
+     Aquí se juntan todas con el resultado que dio esa sesión, que es la única
+     forma de contestar si la lista sirve o es un ritual. */
+  const prf = { range: "all", ses: "", rows: [], loaded: false, loading: false };
+  function sesIdx(id) { const i = SESSIONS.findIndex(x => x.id === id); return i < 0 ? 99 : i; }
+  async function loadPreRows() {
+    if (prf.loading) return;
+    prf.loading = true;
+    let days = [];
+    try { days = await allDayDocs(); } catch (e) { days = []; }
+    if (state.day && state.day.date && !days.some(d => d.date === state.day.date)) days = days.concat([state.day]);
+    // resultado real de cada (día, sesión), del journal de futuros
+    const byKey = {};
+    coll("trades").items.filter(t => t.type === "futuros").forEach(t => {
+      const c = tradeCalc(Object.assign({}, t)); if (!c.date) return;
+      const key = c.date + "|" + (tradeSes(c) || "__sin");
+      const o = byKey[key] || (byKey[key] = { pnl: 0, n: 0, closed: 0 });
+      o.n++; if (c.pnlEff != null) { o.pnl += c.pnlEff; o.closed++; }
+    });
+    const rows = [];
+    days.forEach(d => {
+      const ps = presOf(migrateDay(d));
+      Object.keys(ps).forEach(id => {
+        const x = ps[id]; if (!x || !x.total) return;
+        const t = byKey[d.date + "|" + id];
+        rows.push({ date: d.date, ses: id, at: x.at || 0, done: x.done, total: x.total,
+          items: Array.isArray(x.items) ? x.items : [], full: x.done === x.total, sinPre: false,
+          pnl: t && t.closed ? t.pnl : null, n: t ? t.n : 0 });
+      });
+    });
+    // sesiones que se operaron sin guardar la pre-sesión: también son dato
+    Object.keys(byKey).forEach(key => {
+      const i = key.lastIndexOf("|"); const date = key.slice(0, i), id = key.slice(i + 1);
+      if (id === "__sin") return;
+      const d = days.find(x => x.date === date);
+      if (d && presOf(d)[id]) return;
+      const t = byKey[key];
+      rows.push({ date, ses: id, at: 0, done: null, total: null, items: [], full: false, sinPre: true,
+        pnl: t.closed ? t.pnl : null, n: t.n });
+    });
+    rows.sort((a, b) => b.date.localeCompare(a.date) || sesIdx(a.ses) - sesIdx(b.ses));
+    prf.rows = rows; prf.loaded = true; prf.loading = false;
+    renderPre();
+  }
+  function preFiltered() {
+    let l = prf.rows;
+    if (prf.ses) l = l.filter(x => x.ses === prf.ses);
+    if (prf.range !== "all") {
+      const now = new Date(state.today + "T12:00:00Z");
+      let desde;
+      if (prf.range === "year") desde = state.today.slice(0, 4) + "-01-01";
+      else { const d = new Date(now); d.setUTCDate(d.getUTCDate() - Number(prf.range)); desde = d.toISOString().slice(0, 10); }
+      l = l.filter(x => x.date >= desde);
+    }
+    return l;
+  }
+  const PRE_GRUPOS = [
+    { id: "full", lb: "Lista completa", test: r => !r.sinPre && r.full },
+    { id: "part", lb: "Lista a medias", test: r => !r.sinPre && !r.full },
+    { id: "none", lb: "Sin pre-sesión", test: r => r.sinPre },
+  ];
+  function renderPre() {
+    if (!$("prTiles")) return;
+    if (!prf.loaded) { $("prTiles").innerHTML = `<p class="empty" style="grid-column:1/-1">Cargando pre-sesiones…</p>`; return; }
+    const sel = $("prSes");
+    if (sel && !sel.dataset.done) { sel.innerHTML = `<option value="">todas las sesiones</option>` + PRE_SESSIONS.map(x => `<option value="${x.id}">${esc(x.short)}</option>`).join(""); sel.dataset.done = "1"; }
+    if (sel) sel.value = prf.ses;
+    const rr = $("prRange"); if (rr) rr.value = prf.range;
+    const l = preFiltered();
+    $("prCount").textContent = l.length ? `${plu(l.length, "sesión", "sesiones")} con datos` : "";
+
+    const conPre = l.filter(x => !x.sinPre);
+    const completas = conPre.filter(x => x.full);
+    const sinPre = l.filter(x => x.sinPre);
+    const cerradas = x => x.pnl != null;
+    const media = arr => { const c = arr.filter(cerradas); return c.length ? c.reduce((s, x) => s + x.pnl, 0) / c.length : null; };
+    const mFull = media(completas), mResto = media(conPre.filter(x => !x.full).concat(sinPre));
+    const nCerr = l.filter(cerradas).length;  // por debajo de 10 la diferencia no dice nada
+    const dif = mFull != null && mResto != null ? mFull - mResto : null;
+    $("prTiles").innerHTML = `
+      <div class="tile"><span class="lab">Pre-sesiones guardadas</span><div class="v">${conPre.length}</div><div class="s">${sinPre.length ? `${plu(sinPre.length, "sesión operada", "sesiones operadas")} sin guardarla` : "ninguna sesión sin preparar"}</div></div>
+      <div class="tile"><span class="lab">Listas completas</span><div class="v ${!conPre.length ? "" : completas.length / conPre.length >= .8 ? "good" : completas.length / conPre.length >= .5 ? "warn" : "bad"}">${conPre.length ? pct(completas.length / conPre.length) : "—"}</div><div class="s">${completas.length} de ${conPre.length}</div></div>
+      <div class="tile"><span class="lab">Media con lista completa</span><div class="v ${mFull == null ? "" : mFull > 0 ? "good" : mFull < 0 ? "bad" : ""}">${mFull == null ? "—" : money(mFull)}</div><div class="s">por sesión cerrada</div></div>
+      <div class="tile"><span class="lab">Diferencia</span><div class="v ${dif == null ? "" : dif > 0 ? "good" : dif < 0 ? "bad" : ""}">${dif == null ? "—" : (dif >= 0 ? "+" : "") + money(dif)}</div><div class="s">${dif == null ? "hace falta más muestra" : nCerr < 10 ? `frente a llegar sin lista · <span class="warn">muestra corta</span>` : "frente a llegar sin la lista"}</div></div>`;
+
+    // ¿preparar paga?
+    const wrap = $("prPayWrap"), out = $("prPayOut");
+    const grupos = PRE_GRUPOS.map(g => { const arr = l.filter(g.test), c = arr.filter(cerradas);
+      return { g, arr, c, avg: c.length ? c.reduce((s, x) => s + x.pnl, 0) / c.length : null, wr: c.length ? c.filter(x => x.pnl > 0).length / c.length : null }; }).filter(x => x.arr.length);
+    if (!grupos.some(x => x.c.length)) {
+      wrap.innerHTML = `<p class="empty">Todavía no hay sesiones cerradas con pre-sesión guardada. Guarda la lista antes de operar y la comparación se construye sola.</p>`;
+      out.innerHTML = ""; $("prPayMeta").textContent = "";
+    } else {
+      const items = grupos.map(x => ({ label: x.g.lb, value: x.avg || 0, title: `${x.g.lb} · media ${money(x.avg || 0)} · ${plu(x.c.length, "sesión cerrada", "sesiones cerradas")}` }));
+      wrap.innerHTML = chartBars(items, { W: chartW(wrap), H: 150, aria: "Resultado medio por estado de la pre-sesión", maxLabels: 3 });
+      const best = grupos.slice().filter(x => x.avg != null).sort((a, b) => b.avg - a.avg)[0];
+      $("prPayMeta").innerHTML = best ? `mejor: <strong>${esc(best.g.lb)}</strong> ${money(best.avg)}` : "";
+      const fila = x => `<tr><td class="ui">${esc(x.g.lb)}</td><td class="r">${x.arr.length}</td><td class="r">${x.c.length}</td><td class="r">${x.wr == null ? "—" : pct(x.wr)}</td><td class="r ${x.avg > 0 ? "pos" : x.avg < 0 ? "neg" : ""}">${x.avg == null ? "—" : money(x.avg)}</td></tr>`;
+      const gf = grupos.find(x => x.g.id === "full"), gr = grupos.filter(x => x.g.id !== "full").reduce((a, x) => ({ n: a.n + x.c.length, sum: a.sum + x.c.reduce((s, y) => s + y.pnl, 0) }), { n: 0, sum: 0 });
+      let veredicto;
+      const muestra = (gf ? gf.c.length : 0) + gr.n;
+      if (!gf || !gf.c.length) veredicto = "Ninguna sesión cerrada llegó con la lista completa. Sin eso no hay nada que comparar.";
+      else if (!gr.n) veredicto = `Todas las sesiones cerradas llegaron con la lista completa. Sin sesiones sin preparar no hay con qué contrastar — que es la mejor forma de no tener este dato.`;
+      else if (muestra < 10) veredicto = `Con ${plu(muestra, "sesión cerrada", "sesiones cerradas")} la diferencia todavía no significa nada. Vuelve cuando pasen de diez.`;
+      else { const dd = gf.avg - gr.sum / gr.n;
+        veredicto = dd > 0 ? `Llegar con la lista completa vale ${money(dd)} más por sesión. El proceso está pagando.` : dd < 0 ? `Las sesiones sin lista completa van ${money(-dd)} mejor por sesión. O la lista sobra, o los días que te la saltas son días distintos por otra razón — míralo antes de tirarla.` : "No hay diferencia medible entre preparar y no preparar.";
+      }
+      out.innerHTML = `<div class="twrap" style="margin-top:12px"><table class="t"><thead><tr><th></th><th class="r">sesiones</th><th class="r">cerradas</th><th class="r">verdes</th><th class="r">media</th></tr></thead><tbody>${grupos.map(fila).join("")}</tbody></table></div><p class="note-p" style="margin-top:10px">${esc(veredicto)}</p>`;
+    }
+
+    // pasos que más se saltan
+    const pasos = {};
+    conPre.forEach(r => r.items.forEach(it => {
+      const t = String(it.t || "").trim(); if (!t) return;
+      const o = pasos[t] || (pasos[t] = { t, ok: 0, no: 0, gate: !!it.gate, pnlOk: 0, nOk: 0, pnlNo: 0, nNo: 0 });
+      if (it.gate) o.gate = true;
+      if (it.ok) { o.ok++; if (r.pnl != null) { o.pnlOk += r.pnl; o.nOk++; } }
+      else { o.no++; if (r.pnl != null) { o.pnlNo += r.pnl; o.nNo++; } }
+    }));
+    const lista = Object.values(pasos).sort((a, b) => b.no - a.no || a.t.localeCompare(b.t));
+    const saltados = lista.filter(x => x.no);
+    $("prStepMeta").textContent = lista.length ? (saltados.length ? `${plu(saltados.length, "paso se salta", "pasos se saltan")} alguna vez` : "ningún paso se salta nunca") : "";
+    $("prSteps").innerHTML = lista.length
+      ? `<table class="t"><thead><tr><th>Paso</th><th class="r">marcado</th><th class="r">sin marcar</th><th class="r">media marcado</th><th class="r">media sin marcar</th></tr></thead><tbody>${lista.map(x => {
+          const mo = x.nOk ? x.pnlOk / x.nOk : null, mn = x.nNo ? x.pnlNo / x.nNo : null;
+          return `<tr><td class="ui">${esc(x.t)}${x.gate ? ' <span class="chip">bloquea</span>' : ""}</td><td class="r">${x.ok}</td><td class="r ${x.no ? "neg" : "dim"}">${x.no}</td><td class="r ${mo > 0 ? "pos" : mo < 0 ? "neg" : ""}">${mo == null ? "—" : money(mo)}</td><td class="r ${mn > 0 ? "pos" : mn < 0 ? "neg" : ""}">${mn == null ? "—" : money(mn)}</td></tr>`;
+        }).join("")}</tbody></table>`
+      : `<p class="empty" style="padding:0">Sin pre-sesiones guardadas todavía. Cada vez que pulses <code>Guardar pre-sesión</code> en la Cabina, la lista de ese momento queda archivada aquí.</p>`;
+
+    // historial
+    $("prHistMeta").textContent = l.length ? `${l[l.length - 1].date} → ${l[0].date}` : "";
+    $("prHist").innerHTML = l.length
+      ? `<table class="t"><thead><tr><th>Fecha</th><th>Sesión</th><th>Guardada</th><th class="r">Marcados</th><th class="r">Ops</th><th class="r">Resultado</th><th>Sin marcar</th></tr></thead><tbody>${l.map(r => {
+          const falta = r.items.filter(i => !i.ok).map(i => i.t);
+          return `<tr><td><span class="dim">${dowOf(r.date)}</span> ${dmy(r.date)}</td><td><span class="sestag ${(sesById(r.ses) || {}).cls || ""}">${esc(sesShort(r.ses))}</span></td><td>${r.sinPre ? '<span class="neg">no se guardó</span>' : esc(fmtHM.format(new Date(r.at)))}</td><td class="r ${r.sinPre ? "dim" : r.full ? "pos" : "warn"}">${r.sinPre ? "—" : r.done + "/" + r.total}</td><td class="r">${r.n || "—"}</td><td class="r ${r.pnl > 0 ? "pos" : r.pnl < 0 ? "neg" : ""}">${r.pnl == null ? "—" : money(r.pnl)}</td><td class="notes">${falta.length ? esc(falta.join(" · ")) : r.sinPre ? "" : '<span class="dim">ninguno</span>'}</td></tr>`;
+        }).join("")}</tbody></table>`
+      : `<p class="empty" style="padding:0">Nada que mostrar con estos filtros.</p>`;
+  }
+  $("prSes").addEventListener("change", e => { prf.ses = e.target.value; renderPre(); });
+  $("prRange").addEventListener("change", e => { prf.range = e.target.value; renderPre(); });
+  function invalidatePre() { prf.loaded = false; if (ft.view === "presesion") loadPreRows(); }
+
   function setFtView(v) {
-    ft.view = ["resumen", "cuentas", "analisis", "diario"].includes(v) ? v : "resumen";
+    ft.view = ["resumen", "cuentas", "analisis", "diario", "presesion"].includes(v) ? v : "resumen";
     document.querySelectorAll(".ftview").forEach(x => x.classList.toggle("active", x.dataset.v === ft.view));
     $("ftSeg").querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.v === ft.view));
     // los gráficos se dibujan al ancho real del panel: hay que rehacerlos al mostrarse
     try { renderFutures(); } catch (e) { }
+    if (ft.view === "presesion") { if (prf.loaded) renderPre(); else loadPreRows(); }
   }
   $("ftSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; setFtView(b.dataset.v); });
   $("ftRange").addEventListener("change", e => { ft.range = e.target.value; renderFutures(); });
@@ -2914,9 +3098,29 @@
         out.images = shots ? shots.imgs : (values.images || []);
       },
       validate: v => { if (!v.date) return "Falta la fecha"; if (type === "futuros" && !v.instrument) return "Falta el instrumento"; if (type !== "futuros" && !v.asset) return "Falta el activo"; return null; },
-      onSave: v => { const rec = Object.assign({}, values, v, { type, id: isNew ? uid("t") : t.id }); if (type === "futuros") rec.instrument = rec.instrument.toUpperCase(); delete rec.pnlEff; delete rec.rReal; delete rec.rPlanned; delete rec.riskUsd; coll("trades").set(rec.id, rec); },
+      onSave: v => {
+        const rec = Object.assign({}, values, v, { type, id: isNew ? uid("t") : t.id });
+        if (type === "futuros") rec.instrument = rec.instrument.toUpperCase();
+        delete rec.pnlEff; delete rec.rReal; delete rec.rPlanned; delete rec.riskUsd;
+        coll("trades").set(rec.id, rec);
+        if (type === "futuros") revealTrade(rec);
+      },
       onDelete: isNew ? null : () => coll("trades").remove(t.id),
     });
+  }
+  /* Acabas de guardar una operación: verla es lo que esperas. Si un filtro la
+     escondería, se quita ese filtro y se dice cuál era, en vez de dejarte
+     mirando una tabla vacía con el contador diciendo que hay una. */
+  function revealTrade(rec) {
+    const quitados = [];
+    if (ft.acct && !acctMatch(rec)) { quitados.push("cuenta"); ft.acct = ""; }
+    if (ft.setup && rec.setupId !== ft.setup) { quitados.push("setup"); ft.setup = ""; }
+    if (ft.instr && rec.instrument !== ft.instr) { quitados.push("instrumento"); ft.instr = ""; }
+    if (ft.ses && (tradeSes(rec) || "__sin") !== ft.ses) { quitados.push("sesión"); ft.ses = ""; }
+    if (ft.range !== "all" && !inRange(tradeCalc(Object.assign({}, rec)))) { quitados.push("rango de fechas"); ft.range = "all"; }
+    if (!quitados.length) return;
+    try { renderFutures(); } catch (e) { }
+    flash(`se quitó el filtro de ${quitados.join(" y ")} para que veas la operación`);
   }
   $("ftNew").addEventListener("click", () => openTrade(null, "futuros"));
   $("ivNew").addEventListener("click", () => openTrade(null, "inversion"));
@@ -2929,6 +3133,28 @@
     return true;
   }
   function acctMatch(t) { return !ft.acct || (ft.acct === "__none" ? !t.accountId : t.accountId === ft.acct); }
+  const FT_FILTROS = [
+    { k: "acct", lb: "Cuenta", txt: v => v === "__none" ? "sin cuenta asignada" : acctLabel(v) },
+    { k: "range", lb: "Rango", txt: v => ({ month: "este mes", "30": "últimos 30 días", "90": "últimos 90 días", year: "este año" })[v] || v, off: "all" },
+    { k: "setup", lb: "Setup", txt: v => { const q = coll("playbooks").get(v); return q ? q.name : v; } },
+    { k: "instr", lb: "Instrumento", txt: v => v },
+    { k: "ses", lb: "Sesión", txt: v => v === "__sin" ? "sin hora" : sesShort(v) },
+  ];
+  function activeFilters() { return FT_FILTROS.filter(f => { const v = ft[f.k]; return v && v !== (f.off || ""); }); }
+  function renderFtFilters() {
+    const el = $("ftFilters"); if (!el) return;
+    const act = activeFilters();
+    el.hidden = !act.length;
+    if (!act.length) { el.innerHTML = ""; return; }
+    el.innerHTML = `<span class="lb">Filtrando</span>` + act.map(f => `<span class="fchip"><b>${esc(f.lb)}</b>${esc(String(f.txt(ft[f.k])))}<button type="button" data-clr="${f.k}" title="Quitar este filtro" aria-label="Quitar filtro de ${esc(f.lb)}">×</button></span>`).join("")
+      + `<button type="button" class="clr" data-clr="all">Ver todo</button>`;
+  }
+  $("ftFilters").addEventListener("click", e => {
+    const b = e.target.closest("button[data-clr]"); if (!b) return;
+    if (b.dataset.clr === "all") FT_FILTROS.forEach(f => { ft[f.k] = f.off || ""; });
+    else { const f = FT_FILTROS.find(x => x.k === b.dataset.clr); if (f) ft[f.k] = f.off || ""; }
+    renderFutures();
+  });
   function futFiltered() { let l = tradesOf("futuros").filter(inRange); if (ft.setup) l = l.filter(t => t.setupId === ft.setup); if (ft.instr) l = l.filter(t => t.instrument === ft.instr); if (ft.ses) l = l.filter(t => (tradeSes(t) || "__sin") === ft.ses); if (ft.acct) l = l.filter(acctMatch); return l; }
   function futStats(list) {
     const closed = list.filter(t => t.pnlEff != null || t.rReal != null);
@@ -2971,6 +3197,7 @@
     if (ft.ses && !conOps.has(ft.ses)) ft.ses = "";
     const opsSes = SESSIONS.filter(x => conOps.has(x.id)).map(x => [x.id, x.short]).concat(conOps.has("__sin") ? [["__sin", "sin hora"]] : []);
     $("ftSes").innerHTML = `<option value="">todas las sesiones</option>` + opsSes.map(([v, l]) => `<option value="${esc(v)}" ${ft.ses === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+    renderFtFilters();
     const list = futFiltered(); const s = futStats(list);
     const pfTxt = s.pf == null ? "—" : s.pf === Infinity ? "∞" : s.pf.toFixed(2);
     const wl = s.avgWin != null && s.avgLoss ? (s.avgWin / s.avgLoss).toFixed(2) : "—";
@@ -4460,7 +4687,7 @@
 
   /* =============================== WIRING =============================== */
   function counts() { $("nFut").textContent = coll("trades").items.filter(t => t.type === "futuros").length || ""; $("nPlaybook").textContent = coll("playbooks").items.length || ""; $("nIdeas").textContent = coll("ideas").items.length || ""; $("nInvest").textContent = coll("positions").items.length || ""; }
-  coll("trades").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); try { renderInvestMetrics(); } catch (e) { } try { syncDayFromTrades(); } catch (e) { } try { renderHistory(); renderAccounts(); renderRules(); } catch (e) { } try { renderBackup(); } catch (e) { } });
+  coll("trades").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); try { renderInvestMetrics(); } catch (e) { } try { syncDayFromTrades(); } catch (e) { } try { renderHistory(); renderAccounts(); renderRules(); } catch (e) { } try { renderBackup(); } catch (e) { } try { invalidatePre(); } catch (e) { } });
   coll("playbooks").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); });
   coll("ideas").subscribe(() => { renderIdeas(); counts(); });
   coll("markets").subscribe(() => { renderInvest(); try { fillQtDest(); renderQtNote(); } catch (e) { } });
