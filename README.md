@@ -90,6 +90,36 @@ Funciona igual al revés. Un par de detalles que conviene saber:
 - **Las capturas importadas se ven pero no se editan** en una copia estática: sin
   almacenamiento de imágenes se pueden mirar y quitar, no añadir nuevas.
 
+## El motor de cálculo
+
+Todos los números salen de `engine/MathEngine.js`: funciones puras, sin reloj,
+sin DOM, sin dependencias, con 92 pruebas (`node engine/MathEngine.test.js`).
+
+| Función | Devuelve |
+| --- | --- |
+| `getInstrumentConfig(symbol)` | multiplicador, tick, comisión y valor del tick |
+| `calculatePnL(dir, entrada, salida, ctos, symbol, stop?)` | bruto, comisiones, neto, R y riesgo inicial |
+| `calculatePlannedR` / `calculateRealR` | R planeado y R real, como proporción de precio |
+| `calculateDrawdown(balance, pico, maxDD, {tipo, balanceInicial})` | pico, usado, suelo, colchón y estado |
+| `calculateConsistency(dailySessions, {limitePorcentaje})` | mejor día, %, total necesario y lo que falta |
+| `calculatePositionSize(balance, entrada, stop, symbol, %, {topes})` | contratos enteros y qué límite mandó |
+
+`index.html` lleva una copia literal del motor dentro de un ámbito propio
+(`const ME = (function(){…})()`), porque la app es un solo archivo sin imports.
+Ese encierro no es decorativo: el motor y la app tienen funciones con el mismo
+nombre y distinto comportamiento — `num("")` da `null` en el motor y `0` en la
+app — y sueltas en el mismo ámbito la del motor ganaría por hoisting sobre todos
+los formularios. Si tocas una copia, toca la otra; el archivo suelto es el que
+tiene las pruebas.
+
+`tradeCalc` ya no calcula: pregunta al motor y devuelve las mismas claves de
+siempre, así que ninguna función de render cambió.
+
+**Comisiones automáticas apagadas por defecto.** El motor las conoce por
+instrumento, pero encenderlas bajaría el P&L de todo el histórico; hasta que
+`settings.meta.autoFees` sea `true`, manda el campo «Comisiones $» escrito a
+mano y ningún número del pasado cambia de valor.
+
 ## Cómo fluye un dato
 
 No hay framework: una colección en memoria es la única fuente y todo lo demás
