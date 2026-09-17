@@ -418,3 +418,75 @@ if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("
 }
 console.log(`\n${pass} ok · ${fail} fallos (con resolucion MC)`);
 if (fallos.length) process.exit(1);
+
+/* ═══ números en negativo ═══ */
+grupo("negativos · consistencia sin ganancia");
+{
+  const k = Q.evaluarConsistencia([{ pnl: 100 }, { pnl: -220 }], 50).value;
+  eq(k.total, -120, "total negativo se conserva");
+  eq(k.ratio, null, "sin ganancia el ratio es null, NUNCA el centinela 1 pintado como 100%");
+  eq(k.sinGanancia, true, "y se marca explícitamente");
+  eq(k.cumple, null, "cumple es null: no es ni cumplir ni incumplir");
+  ok(/no hay ganancia/i.test(k.razonSinRatio), "y dice por qué");
+  eq(k.falta, 320, "lo que falta para cobrar sigue siendo medible: 100/0.5 - (-120)");
+  eq(k.topeDiaHoy, 0, "no hay tope de día que calcular");
+}
+{
+  const k = Q.evaluarConsistencia([{ pnl: -50 }, { pnl: -70 }], 50).value;
+  eq(k.mejor, 0, "sin días verdes el mejor día es 0");
+  eq(k.ratio, null, "ratio null");
+  eq(k.falta, 0, "sin mejor día no hay nada que exigir");
+}
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-01", pnl: 100 }, { fecha: "2026-09-02", pnl: -220 }], { saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000 }).value;
+  const k = Q.evaluarConsistencia([{ pnl: 100 }, { pnl: -220 }], 50).value;
+  const v = Q.evaluarCumplimiento({ curva: c, consistencia: k, hoy: { pnl: -220 }, reglas: {} }).value;
+  ok(v.notas.some(n => n.codigo === "SIN_GANANCIA"), "el veredicto nombra la falta de ganancia");
+  ok(!v.notas.some(n => n.codigo === "CONSISTENCIA"), "y NO la reporta como violación de consistencia");
+  eq(v.estado, "lista", "estar en rojo sin tocar ningún límite no restringe la cuenta");
+}
+
+grupo("negativos · ganancia previa y mejor día previos en rojo");
+{
+  const k = Q.evaluarConsistencia([{ pnl: 200 }], 50, { gananciaPrevia: -500, mejorDiaPrevio: 0 }).value;
+  eq(k.total, -300, "ganancia previa negativa se suma correctamente");
+  eq(k.ratio, null, "y deja la consistencia sin aplicar");
+}
+{
+  const k = Q.evaluarConsistencia([{ pnl: 200 }, { pnl: 300 }], 50, { gananciaPrevia: -100 }).value;
+  eq(k.total, 400, "previa negativa + journal positivo");
+  near(k.ratio, 300 / 400, 1e-6, "el ratio vuelve a existir en cuanto hay ganancia");
+  eq(k.cumple, false, "75% supera el límite del 50%");
+}
+grupo("negativos · curva y ventaja");
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-01", pnl: -300 }, { fecha: "2026-09-02", pnl: -400 }], { saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000 }).value;
+  eq(c.equity, 24300, "equity por debajo del inicio");
+  eq(c.pico, 25000, "el pico es el arranque: nunca se subió de ahí");
+  eq(c.suelo, 24000, "suelo correcto");
+  eq(c.colchon, 300, "colchón positivo pero pequeño");
+  eq(c.quemadaEn, null, "aún no quemada");
+}
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-01", pnl: -1200 }], { saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000 }).value;
+  eq(c.colchon, -200, "colchón NEGATIVO cuando se pasa del suelo");
+  ok(c.quemadaEn !== null, "y la cuenta queda marcada como quemada");
+}
+{
+  const e = Q.analizarEdge([{ pnl: -100, r: -1 }, { pnl: -100, r: -1 }, { pnl: 80, r: 0.8 }, { pnl: -100, r: -1 }]).value;
+  ok(e.pnlTotal < 0, "P&L total negativo");
+  ok(e.esperanzaR.valor < 0, "esperanza negativa");
+  ok(e.kelly.completo < 0, "Kelly negativo");
+  ok(/no operar/.test(e.kelly.razon), "y dice que la fracción óptima es no operar");
+  eq(e.kelly.recomendado, null, "sin fracción recomendada sobre una ventaja negativa");
+  eq(e.concentracion, null, "sin ganancia total no hay concentración que medir");
+}
+{
+  const rs = [-1, -1, -1, 1.2, -1, -1, 1, -1, -1, -1];
+  const s = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 100, saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000, objetivoGanancia: 1500, caminos: 800, semilla: 4 }).value;
+  eq(s.pPasar, 0, "con ventaja negativa no se pasa la cuenta en ningún camino");
+  eq(s.pQuemar, 1, "y se quema en todos");
+  ok(s.colchonMinimo.mediana <= 0, "el colchón mínimo esperado es negativo o cero");
+}
+console.log(`\n${pass} ok · ${fail} fallos (con negativos)`);
+if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("  ✗ " + f)); process.exit(1); }

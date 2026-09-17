@@ -169,6 +169,10 @@
   .qhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;
            margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
   .qhead:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  .qdemo { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+           border: 1px dashed var(--warn); border-radius: 4px; padding: 10px 13px; margin-bottom: 14px;
+           font-size: 13px; line-height: 1.5; color: var(--muted); background: rgba(0,0,0,.14); }
+  .qdemo b { color: var(--warn); }
   .qhead h3 { font: 700 13px/1 "Archivo", sans-serif; letter-spacing: .07em; text-transform: uppercase; color: var(--text); margin: 0; }
   .qhead .qsub { font-size: 12px; color: var(--dim); }
   @media (max-width: 560px) { .qeg { grid-template-columns: 1fr 1fr; } .qec .qv { font-size: 18px; } }
@@ -1706,7 +1710,7 @@
     else if (s.rules && typeof s.rules === "object") { const v = s.rules; for (const r of out.rules) { if (r.id === "maxloss" && v.maxLoss != null) r.value = Number(v.maxLoss); if (r.id === "maxlosses" && v.maxLosses != null) r.value = Number(v.maxLosses); if (r.id === "maxgain" && v.maxGain != null) r.value = Number(v.maxGain); if (r.id === "contracts" && v.maxContracts != null) r.value = Number(v.maxContracts); } if (v.custom) out.customized = true; }
     // una cabina anterior guardaba «Solo MNQ» sin decir qué instrumento permitía
     out.rules.forEach(r => { if (r.role === "instrument" && !r.allow) r.allow = "MNQ"; });
-    if (Array.isArray(s.accounts)) out.accounts = s.accounts.filter(a => a && a.id).map(a => ({ id: String(a.id), firm: String(a.firm || ""), name: String(a.name || ""), kind: String(a.kind || ""), limit: Number(a.limit) || 50, total: Number(a.total) || 0, best: Number(a.best) || 0, size: Number(a.size) || 0, dd: Number(a.dd) || 0, target: Number(a.target) || 0, ddKind: DD_KEYS.includes(a.ddKind) ? a.ddKind : "trailing_lock", ledger: Array.isArray(a.ledger) ? a.ledger.filter(e => e && e.id).map(e => ({ id: String(e.id), date: String(e.date || ""), kind: LEDGER_KEYS.includes(e.kind) ? e.kind : "payout", amount: Number(e.amount) || 0, note: String(e.note || "") })) : [], status: STATUSES.includes(a.status) ? a.status : "activa" }));
+    if (Array.isArray(s.accounts)) out.accounts = s.accounts.filter(a => a && a.id).map(a => ({ id: String(a.id), firm: String(a.firm || ""), name: String(a.name || ""), kind: String(a.kind || ""), limit: Number(a.limit) || 50, total: Number(a.total) || 0, best: Number(a.best) || 0, size: Math.max(0, Number(a.size) || 0), dd: Math.max(0, Number(a.dd) || 0), target: Math.max(0, Number(a.target) || 0), ddKind: DD_KEYS.includes(a.ddKind) ? a.ddKind : "trailing_lock", ledger: Array.isArray(a.ledger) ? a.ledger.filter(e => e && e.id).map(e => ({ id: String(e.id), date: String(e.date || ""), kind: LEDGER_KEYS.includes(e.kind) ? e.kind : "payout", amount: Math.abs(Number(e.amount) || 0), note: String(e.note || "") })) : [], status: STATUSES.includes(a.status) ? a.status : "activa" }));
     if (s.customized) out.customized = true;
     return out;
   }
@@ -2128,7 +2132,10 @@
     const greens = days.filter(d => d.pnl > 0);
     const jBest = greens.length ? Math.max(...greens.map(d => d.pnl)) : 0;
     const led = a.ledger || [];
-    const sumK = k => led.filter(e => e.kind === k).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    /* El tipo del movimiento decide el signo (retiro resta, depósito suma), así que
+       el importe se lee SIEMPRE como magnitud. Un retiro guardado como -500 en un
+       respaldo viejo sumaba 500 al balance: un retiro que te hacía más rico. */
+    const sumK = k => led.filter(e => e.kind === k).reduce((s, e) => s + Math.abs(Number(e.amount) || 0), 0);
     const payouts = sumK("payout"), fees = sumK("fee"), deposits = sumK("deposit");
     const base = Number(a.total) || 0, baseBest = Number(a.best) || 0;
     const total = base + jTotal;
@@ -2147,13 +2154,21 @@
     g = g || acctAgg(a);
     const L = Math.min(Math.max(Number(a.limit) || 0, 1), 99) / 100;
     const total = g.total, best = g.best;
-    const ratio = total > 0 ? best / total : (best > 0 ? 1 : 0);
-    const capToday = total > 0 ? L * total / (1 - L) : 0;
-    const needed = total > 0 ? Math.max(0, best / L - total) : 0;
+    /* La consistencia reparte GANANCIAS. Sin ganancia acumulada no hay nada que
+       repartir y el cociente no existe: antes se devolvía 1 como centinela y se
+       imprimía como «consistencia 100%» — un número inventado sobre una cuenta
+       en rojo. Ahora es null y el estado se llama por su nombre. */
+    const noProfit = total <= 0;
+    const ratio = noProfit ? null : best / total;
+    const capToday = noProfit ? 0 : L * total / (1 - L);
+    /* Lo que falta para poder cobrar sigue siendo medible aunque estés en rojo:
+       es la ganancia que hay que acumular, no un porcentaje de consistencia. */
+    const needed = best > 0 ? Math.max(0, best / L - total) : 0;
     const daysToComply = needed > 0 && g.avgGreen > 0 ? Math.ceil(needed / g.avgGreen) : 0;
-    return { L, total, best, ratio, capToday, needed, daysToComply, agg: g, over: ratio > L, near: ratio > L * 0.85 && ratio <= L };
+    return { L, total, best, ratio, capToday, needed, daysToComply, agg: g, noProfit,
+      over: !noProfit && ratio > L, near: !noProfit && ratio > L * 0.85 && ratio <= L };
   }
-  function verdictOf(c) { if (c.total <= 0 && c.best <= 0) return "Sin datos aún: registra operaciones con esta cuenta o escribe la ganancia previa."; if (c.over) return `Rompe la regla: hace falta acumular ${money(c.needed)} más sin superar el mejor día${c.daysToComply ? ` (≈ ${c.daysToComply} ${c.daysToComply === 1 ? "día verde" : "días verdes"} a tu media)` : ""}.`; return `Cumple. El día más grande que aún cumple: ${money(c.capToday)}.`; }
+  function verdictOf(c) { if (c.total <= 0 && c.best <= 0) return "Sin datos aún: registra operaciones con esta cuenta o escribe la ganancia previa."; if (c.noProfit) return `Sin ganancia acumulada que repartir: la cuenta va ${money(c.total)}. La consistencia se mide sobre ganancias, así que todavía no aplica${c.needed ? `; para cobrar harían falta ${money(c.needed)} de ganancia` : ""}.`; if (c.over) return `Rompe la regla: hace falta acumular ${money(c.needed)} más sin superar el mejor día${c.daysToComply ? ` (≈ ${c.daysToComply} ${c.daysToComply === 1 ? "día verde" : "días verdes"} a tu media)` : ""}.`; return `Cumple. El día más grande que aún cumple: ${money(c.capToday)}.`; }
 
   /* =============================== MOTORES DE CUENTA ===============================
      acctAgg() y consistency() siguen siendo la única fuente de los números; esto
@@ -2196,7 +2211,7 @@
   function consEngine(c) {
     const limit = c.L, best = c.best, total = c.total;
     const required = limit > 0 && best > 0 ? best / limit : 0;
-    return { limit, best, total, ratio: c.ratio, required,
+    return { limit, best, total, ratio: c.ratio, required, noProfit: c.noProfit,
       additional: Math.max(0, required - total),
       cap: c.capToday, compliant: !c.over, near: c.near,
       hasData: total > 0 || best > 0, days: c.daysToComply };
@@ -2448,21 +2463,23 @@
       ${cell("Drawdown", d.ok ? money(d.used) : "—", d.ok ? (d.util >= .75 ? "bad" : d.util >= .5 ? "warn" : "good") : "dim", d.ok ? `de ${money(d.max)} · ${pct(d.util)} usado` : "falta tamaño o drawdown")}
       ${cell("Colchón", d.ok ? money(d.buffer) : "—", d.ok ? (d.buffer <= 0 ? "bad" : d.buffer < d.max * .3 ? "warn" : "good") : "dim", d.ok ? `suelo ${money(d.floor)}` : "")}
       ${cell("Mejor día", g.best ? money(g.best) : "—", g.best > 0 ? "good" : "dim", g.jBest && g.jBest >= g.baseBest ? "del journal" : g.baseBest ? "escrito a mano" : "")}
-      ${cell("Consistencia", ce.hasData && ce.total > 0 ? pct(ce.ratio) : "—", !ce.hasData || ce.total <= 0 ? "dim" : ce.compliant ? "good" : "bad", `límite ${pct(ce.limit)}${ce.compliant || !ce.hasData ? "" : " · lo supera"}`)}
+      ${cell("Consistencia", ce.noProfit || !ce.hasData ? "—" : pct(ce.ratio), !ce.hasData || ce.noProfit ? "dim" : ce.compliant ? "good" : "bad", ce.noProfit ? "sin ganancia que repartir" : `límite ${pct(ce.limit)}${ce.compliant || !ce.hasData ? "" : " · lo supera"}`)}
       ${cell("Riesgo de hoy", r.ok ? money(r.used) : "—", r.ok ? r.cls : "dim", r.ok ? `de ${money(r.max)} · quedan ${money(r.remaining)}` : "sin regla de pérdida máxima")}
     </div>`;
 
     const modCons = `<div class="acc-mod">
-      <header><h3>Consistencia</h3><span class="chip ${ce.compliant ? "ok" : "no"}">${ce.hasData ? (ce.compliant ? "CUMPLE" : "NO CUMPLE") : "SIN DATOS"}</span></header>
+      <header><h3>Consistencia</h3><span class="chip ${!ce.hasData || ce.noProfit ? "" : ce.compliant ? "ok" : "no"}">${!ce.hasData ? "SIN DATOS" : ce.noProfit ? "NO APLICA" : ce.compliant ? "CUMPLE" : "NO CUMPLE"}</span></header>
       <div class="big ${!ce.hasData || ce.total <= 0 ? "dim" : ce.compliant ? "good" : "bad"}">${ce.hasData && ce.total > 0 ? (ce.ratio * 100).toFixed(2) + "%" : "—"}</div>
       ${pbar(ce.ratio, ce.compliant ? "good" : "bad", ce.limit)}
       <div class="acc-rows">
         <div><span>Mejor día</span><b>${money(ce.best)}</b></div>
         <div><span>Ganancia total</span><b>${money(ce.total)}</b></div>
         <div><span>Total necesario</span><b>${ce.required ? money(ce.required) : "—"}</b></div>
-        <div class="hi"><span>${ce.compliant ? "Tope de ganancia hoy" : "Ganancia que falta"}</span><b class="${ce.compliant ? "good" : "bad"}">${ce.compliant ? (cap.value == null ? "—" : money(cap.value)) : "+" + money(ce.additional)}</b></div>
+        <div class="hi"><span>${ce.noProfit ? "Ganancia que falta para cobrar" : ce.compliant ? "Tope de ganancia hoy" : "Ganancia que falta"}</span><b class="${ce.noProfit ? "warn" : ce.compliant ? "good" : "bad"}">${ce.noProfit ? (ce.additional > 0 ? "+" + money(ce.additional) : "—") : ce.compliant ? (cap.value == null ? "—" : money(cap.value)) : "+" + money(ce.additional)}</b></div>
       </div>
-      <p class="note">${esc(ce.compliant
+      <p class="note">${esc(ce.noProfit
+        ? `La cuenta va ${money(ce.total)}. La consistencia reparte ganancias: sin ganancia acumulada el cociente no existe, y el problema no es la consistencia — es el resultado.`
+        : ce.compliant
         ? (cap.value == null ? `La marca de la barra es el límite del ${pct(ce.limit)}.` : `${cap.why[0].toUpperCase() + cap.why.slice(1)}. Un día mayor que ${money(ce.cap)} rompería la consistencia.`)
         : `Mejor día ÷ total = ${pct(ce.ratio)}, el límite es ${pct(ce.limit)}. Tope de hoy ${cap.value == null ? "sin escribir" : money(cap.value)}.`)}</p>
     </div>`;
@@ -2840,6 +2857,12 @@
      Fuente modular y 190 pruebas: repo TURBOK2, engine/quant/.
      Este bloque está GENERADO por engine/quant/bundle.mjs — no editarlo a mano. */
 
+  /* =========================================================================
+     QuantEngine 2.0.0 — bundle de un solo ambito
+     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
+     en engine/quant/ y volver a ejecutar el empaquetador.
+     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
+     ========================================================================= */
   /* =========================================================================
      QuantEngine 2.0.0 — bundle de un solo ambito
      GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
@@ -3894,19 +3917,28 @@
 
     if (!L) return Ok({ aplica: false, razon: "no hay limite de consistencia definido", total, mejor });
 
-    const ratio = total > 0 ? mejor / total : (mejor > 0 ? 1 : 0);
+    /* La consistencia reparte GANANCIAS. Sin ganancia acumulada el cociente no
+       existe: devolver 1 como centinela y pintarlo como «100%» es fabricar un
+       numero sobre una cuenta en rojo. Aqui es null y se dice por que. */
+    const sinGanancia = total <= 0;
+    const ratio = sinGanancia ? null : roundTo(mejor / total, 6);
     const requerido = mejor > 0 ? mejor / L : 0;
-    const falta = Math.max(0, roundTo(requerido - total, 2));
-    const tope = total > 0 ? roundTo(L * total / (1 - L), 2) : 0;
+    /* Sin ningun dia verde no hay mejor dia, asi que la consistencia no impone
+       nada y no "falta" nada por su culpa. Restar un total negativo de un
+       requerido de cero producia una exigencia inventada. */
+    const falta = requerido > 0 ? Math.max(0, roundTo(requerido - total, 2)) : 0;
+    const tope = sinGanancia ? 0 : roundTo(L * total / (1 - L), 2);
     const mediaVerde = verdes.length ? verdes.reduce((s, x) => s + x, 0) / verdes.length : 0;
 
     return Ok({
       aplica: true,
       limite: L,
       total, mejor,
-      ratio: roundTo(ratio, 6),
-      cumple: !(ratio > L),
-      cerca: ratio > L * 0.85 && ratio <= L,
+      ratio,
+      sinGanancia,
+      razonSinRatio: sinGanancia ? `No hay ganancia acumulada que repartir (total ${total}). La consistencia se mide sobre ganancias.` : null,
+      cumple: sinGanancia ? null : !(ratio > L),
+      cerca: !sinGanancia && ratio > L * 0.85 && ratio <= L,
       /* total que haria falta para cumplir */
       totalRequerido: roundTo(requerido, 2),
       falta,
@@ -4248,7 +4280,11 @@
       avisos.push({ codigo: "CONTRATOS", texto: `Se opero con ${hoy.contratosMax} contratos y el tope es ${maxC}.` });
     }
 
-    if (cons && cons.aplica && !cons.cumple) {
+    if (cons && cons.aplica && cons.sinGanancia) {
+      /* Estar en rojo NO es incumplir la consistencia: es otro problema, peor y
+         distinto. Marcarlo como violacion de regla esconde el de verdad. */
+      notas.push({ codigo: "SIN_GANANCIA", texto: `Sin ganancia acumulada (${roundTo(cons.total, 2)}). La consistencia todavia no aplica: no hay nada que repartir. El problema no es la regla, es el resultado.` });
+    } else if (cons && cons.aplica && cons.cumple === false) {
       subir(ESTADOS.RESTRINGIDA);
       notas.push({ codigo: "CONSISTENCIA", texto: `Consistencia ${roundTo(cons.ratio * 100, 2)}% sobre un limite de ${roundTo(cons.limite * 100, 0)}%: faltan ${cons.falta} de ganancia acumulada para poder cobrar. Operar sigue permitido.` });
     } else if (cons && cons.aplica && cons.cerca) {
@@ -4974,6 +5010,10 @@
       (sub ? `<div class="qs">${sub}</div>` : "") + `</div>`;
   }
   function qeR(x, dec) { return x == null ? "—" : (x >= 0 ? "+" : "") + Number(x).toFixed(dec == null ? 2 : dec) + "R"; }
+  /* Dinero con signo SIEMPRE visible. En una rejilla de cifras un menos fino se
+     pierde de vista; "+$120" frente a "-$120" no se confunde nunca. */
+  function qeM(x) { return x == null ? "—" : (x > 0 ? "+" : "") + money(x); }
+  function qeCls(x) { return x == null ? "" : x > 0 ? "good" : x < 0 ? "bad" : "dim"; }
   function qeP(x) { return x == null ? "—" : (x * 100).toFixed(1) + "%"; }
   /* Una probabilidad de Monte Carlo no se imprime como un hecho. Con 2.000
      caminos la resolución es 0,05%: escribir "100,0%" afirma una certeza que
@@ -4988,25 +5028,49 @@
   }
 
   let qeSweep = null;   // resultado del barrido, solo cuando se pide
+  let qeDemo = false;   // ejemplo en rojo; NUNCA toca las operaciones reales
+
+  /* Un sistema perdedor realista para ver la radiografía en rojo sin tener que
+     perder dinero de verdad: 32% de acierto con payoff 1.6:1 sobre MNQ, que es
+     exactamente el perfil que a ojo parece "casi rentable" y no lo es.
+     Es data sintética y se dice en pantalla; no entra en ninguna colección. */
+  const QE_DEMO = (function () {
+    const rs = [-1, -1, 1.6, -1, -1, -1, 2.1, -1, -1, 1.4, -1, -1, -1, -1, 1.8, -1,
+                -1, 1.2, -1, -1, -1, 2.4, -1, -1, -1, 1.5, -1, -1, 1.1, -1, -1, -1,
+                1.9, -1, -1, -1, -1, 1.3, -1, -1];
+    const riesgo = 40;                       // 10 puntos MNQ x 2 contratos
+    const ops = rs.map((r, i) => {
+      const d = new Date(Date.UTC(2026, 6, 6 + Math.floor(i / 2) + Math.floor(i / 10) * 2));
+      return { pnl: Math.round(r * riesgo * 100) / 100, r, fecha: d.toISOString().slice(0, 10) };
+    });
+    return { rs, ops, riesgo, cuenta: { name: "Cuenta de ejemplo 25K", size: 25000, dd: 1000,
+             ddKind: "trailing_lock", limit: 50, target: 1500 } };
+  })();
 
   function renderQE() {
     const el = $("qePanel"); if (!el) return;
     const meta = $("qeMeta");
-    const list = futFiltered();
-    const cerradas = list.filter(t => t.pnlEff != null);
-    const ops = cerradas.map(t => ({ pnl: t.pnlEff, r: t.rReal, fecha: t.date }));
+    const list = qeDemo ? [] : futFiltered();
+    const cerradas = qeDemo ? [] : list.filter(t => t.pnlEff != null);
+    const ops = qeDemo ? QE_DEMO.ops : cerradas.map(t => ({ pnl: t.pnlEff, r: t.rReal, fecha: t.date }));
     const e = QE.analizarEdge(ops).value;
 
     if (!e.n) {
-      el.innerHTML = `<p class="empty">Sin operaciones cerradas en este filtro. El motor no inventa una ventaja a partir de nada.</p>`;
+      el.innerHTML = `<p class="empty">Sin operaciones cerradas en este filtro. El motor no inventa una ventaja a partir de nada.</p>
+        <div style="margin-top:12px"><button type="button" class="btn" id="qeDemoBtn">Ver un ejemplo en rojo</button></div>`;
       if (meta) meta.textContent = "";
+      const db0 = $("qeDemoBtn"); if (db0) db0.addEventListener("click", () => { qeDemo = true; qeSweep = null; renderQE(); });
       return;
     }
-    if (meta) meta.textContent = `${plu(e.n, "operación cerrada", "operaciones cerradas")} en el filtro actual`;
+    if (meta) meta.textContent = qeDemo ? "datos de ejemplo" : `${plu(e.n, "operación cerrada", "operaciones cerradas")} en el filtro actual`;
 
     const vd = e.veredicto;
     const vcls = vd.fiable ? "ok" : vd.nivel === "anecdota" ? "bad" : "no";
     const out = [];
+
+    out.push(qeDemo
+      ? `<div class="qdemo"><div><b>Ejemplo · estos NO son tus datos.</b> Sistema sintético de ${e.n} operaciones con 32% de acierto y payoff 1.6:1 sobre MNQ — el perfil que a ojo parece casi rentable y no lo es. Nada de esto se guarda en ninguna cuenta.</div><button type="button" class="btn" id="qeDemoOff">Volver a mis datos</button></div>`
+      : `<div style="display:flex;justify-content:flex-end"><button type="button" class="btn ghost" id="qeDemoBtn">Ver un ejemplo en rojo</button></div>`);
 
     /* ---------- ventaja ---------- */
     out.push(`<div class="qhead"><h3>Ventaja medida</h3><span class="qsub"><span class="qflag ${vcls}">${esc(vd.nivel.replace("_", " "))}</span> ${esc(vd.razon)}</span></div>`);
@@ -5016,10 +5080,14 @@
     const wr = e.tasaAcierto;
 
     out.push(`<div class="qeg">`);
+    out.push(qeCard("Resultado del filtro", qeM(e.pnlTotal), qeCls(e.pnlTotal),
+      `${e.ganadoras} ganadoras · ${e.perdedoras} perdedoras${e.planas ? " · " + e.planas + " planas" : ""}`));
     out.push(qeCard("Esperanza por operación", eR ? qeR(eR.valor) : "—",
-      eR == null ? "" : eR.positiva ? "good" : "warn",
+      eR == null ? "" : eR.positiva ? "good" : (eR.valor < 0 ? "bad" : "warn"),
       eR == null ? "hacen falta stops registrados para medir R"
         : eR.positiva ? "El intervalo entero está por encima de cero: la ventaja es real."
+        : (eR.icBootstrap && eR.icBootstrap[1] < 0) ? "<b>El intervalo entero está por debajo de cero.</b> Esto no es mala suerte: el sistema pierde."
+        : eR.valor < 0 ? "<b>La media es negativa</b> y el intervalo cruza el cero. Ni confirmado ni descartado, pero apuntando hacia abajo."
         : "<b>El intervalo cruza el cero.</b> Con esta muestra no se puede afirmar que ganes.", icR));
 
     out.push(qeCard("Profit factor",
@@ -5034,11 +5102,11 @@
 
     out.push(qeCard("SQN", e.sqn == null ? "—" : e.sqn.toFixed(2),
       e.sqn == null ? "" : e.sqn >= 2 ? "good" : e.sqn >= 1.6 ? "warn" : "bad",
-      e.sqnEscala ? esc(e.sqnEscala) : "calidad del sistema"));
+      e.sqn == null ? "calidad del sistema" : e.sqn < 0 ? "negativo: el sistema destruye capital de forma medible" : esc(e.sqnEscala)));
 
     out.push(qeCard("Payoff", e.payoff == null ? "—" : e.payoff.toFixed(2) + " : 1",
       e.payoff == null ? "" : e.payoff >= 1.5 ? "good" : "",
-      `media ${e.gananciaMedia == null ? "—" : money(e.gananciaMedia)} / ${e.perdidaMedia == null ? "—" : money(-e.perdidaMedia)}`));
+      `media <span class="good">${e.gananciaMedia == null ? "—" : qeM(e.gananciaMedia)}</span> / <span class="bad">${e.perdidaMedia == null ? "—" : qeM(-e.perdidaMedia)}</span>`));
 
     const ra = e.rachas;
     out.push(qeCard("Peor racha", ra.maxPerdedoras + " seguidas",
@@ -5063,9 +5131,9 @@
     }
 
     /* ---------- supervivencia ---------- */
-    const ac = ft.acct && ft.acct !== "__none" ? acctById(ft.acct) : null;
-    const rs = cerradas.map(t => t.rReal).filter(x => x != null);
-    const riesgos = cerradas.map(t => t.riskUsd).filter(x => x != null && x > 0);
+    const ac = qeDemo ? QE_DEMO.cuenta : (ft.acct && ft.acct !== "__none" ? acctById(ft.acct) : null);
+    const rs = qeDemo ? QE_DEMO.rs : cerradas.map(t => t.rReal).filter(x => x != null);
+    const riesgos = qeDemo ? [QE_DEMO.riesgo] : cerradas.map(t => t.riskUsd).filter(x => x != null && x > 0);
     const riesgoTipico = riesgos.length ? riesgos.reduce((a, b) => a + b, 0) / riesgos.length : null;
 
     if (!ac) {
@@ -5076,14 +5144,13 @@
         <div class="qnote">Hacen falta al menos 5 operaciones con stop registrado para remuestrear tu propia distribución. Llevas ${rs.length}. Sin eso, cualquier probabilidad sería una opinión disfrazada de número.</div>`);
     } else {
       const ddTipo = ac.ddKind === "estatico" ? "estatico" : ac.ddKind === "trailing" ? "trailing" : "trailing_lock";
-      const g = acctAgg(ac);
-      const cons = consistency(ac, g);
+      const g = qeDemo ? null : acctAgg(ac);
       const objetivo = Number(ac.target) || (Number(ac.size) ? Number(ac.size) * 0.06 : null);
-      const reglaP = ruleByRole("maxLoss");
-      const dias = g.jDays || 1;
+      const reglaP = qeDemo ? null : ruleByRole("maxLoss");
+      const dias = qeDemo ? new Set(QE_DEMO.ops.map(o => o.fecha)).size : (g.jDays || 1);
       const base = {
         rMultiples: rs, riesgoPorOperacion: riesgoTipico,
-        operacionesPorDia: Math.max(1, cerradas.length / dias),
+        operacionesPorDia: Math.max(1, (qeDemo ? QE_DEMO.ops.length : cerradas.length) / dias),
         saldoInicial: Number(ac.size) || 25000, ddTipo, ddMaximo: Number(ac.dd) || null,
         objetivoGanancia: objetivo, limiteConsistencia: Number(ac.limit) || null,
         perdidaDiariaMax: reglaP ? Math.abs(Number(reglaP.value) || 0) || null : null,
@@ -5106,9 +5173,9 @@
           `arriesgando ${money(riesgoTipico)} por operación`));
         out.push(qeCard("Días hasta pasarla", v.diasPasarMediana == null ? "—" : v.diasPasarMediana,
           "", v.diasPasarP90 == null ? "mediana" : `mediana · el 10% más lento tarda ${v.diasPasarP90}`));
-        out.push(qeCard("Colchón mínimo esperado", v.colchonMinimo ? money(v.colchonMinimo.mediana) : "—",
-          v.colchonMinimo && v.colchonMinimo.p05 <= 0 ? "bad" : "",
-          v.colchonMinimo ? `en el 5% peor de los casos: ${money(v.colchonMinimo.p05)}` : ""));
+        out.push(qeCard("Colchón mínimo esperado", v.colchonMinimo ? qeM(v.colchonMinimo.mediana) : "—",
+          v.colchonMinimo ? (v.colchonMinimo.mediana <= 0 ? "bad" : v.colchonMinimo.p05 <= 0 ? "warn" : "good") : "",
+          v.colchonMinimo ? `en el 5% peor de los casos: <span class="${qeCls(v.colchonMinimo.p05)}">${qeM(v.colchonMinimo.p05)}</span>${v.colchonMinimo.p05 <= 0 ? " — ahí la cuenta ya está quemada" : ""}` : ""));
         out.push(`</div>`);
         if (v.pSinResolver > 0.25) {
           out.push(`<div class="qnote">En el ${qeP(v.pSinResolver)} de los caminos la cuenta sigue viva pero sin pasar a los ${v.supuestos.diasMax} días. Ni éxito ni fracaso: tiempo.</div>`);
@@ -5127,6 +5194,8 @@
     }
 
     el.innerHTML = out.join("");
+    const don = $("qeDemoBtn"); if (don) don.addEventListener("click", () => { qeDemo = true; qeSweep = null; renderQE(); });
+    const dof = $("qeDemoOff"); if (dof) dof.addEventListener("click", () => { qeDemo = false; qeSweep = null; renderQE(); });
     const btn = $("qeBarrer");
     if (btn) btn.addEventListener("click", () => {
       const base = el.__qeBase; if (!base) return;
@@ -5606,7 +5675,7 @@
     $("cnMeta").innerHTML = `${ac ? esc(acctLabel(ac.id)) + " · límite " + pct(L) : "sin cuenta filtrada · referencia " + pct(L)} · ${over} ${over === 1 ? "día lo supera" : "días lo superan"}`;
     wrap.innerHTML = chartBars(items, { W: chartW(wrap), H: 170, pl: 42, fmt: v => (v * 100).toFixed(0) + "%", aria: "Peso de cada día en la ganancia", maxLabels: 14 });
     const accts = (state.settings.accounts || []).filter(a => a.status !== "quemada");
-    out.innerHTML = accts.length ? `<div class="twrap" style="margin-top:14px"><table class="t"><thead><tr><th>Cuenta</th><th class="r">Ganancia</th><th class="r">Mejor día</th><th class="r">Ratio</th><th class="r">Límite</th><th>Estado</th></tr></thead><tbody>${accts.map(a => { const c = consistency(a); return `<tr><td class="ui">${esc(a.name || a.firm || "sin nombre")}</td><td class="r">${money(c.total)}</td><td class="r">${money(c.best)}</td><td class="r ${c.over ? "neg" : "pos"}">${c.total > 0 ? pct(c.ratio) : "—"}</td><td class="r">${pct(c.L)}</td><td class="ui">${c.total <= 0 ? '<span class="dim">sin datos</span>' : c.over ? `<span class="chip bad">falta ${money(c.needed)}</span>` : `<span class="chip good">cumple · tope hoy ${money(c.capToday)}</span>`}</td></tr>`; }).join("")}</tbody></table></div>` : "";
+    out.innerHTML = accts.length ? `<div class="twrap" style="margin-top:14px"><table class="t"><thead><tr><th>Cuenta</th><th class="r">Ganancia</th><th class="r">Mejor día</th><th class="r">Ratio</th><th class="r">Límite</th><th>Estado</th></tr></thead><tbody>${accts.map(a => { const c = consistency(a); return `<tr><td class="ui">${esc(a.name || a.firm || "sin nombre")}</td><td class="r">${money(c.total)}</td><td class="r">${money(c.best)}</td><td class="r ${c.noProfit ? "dim" : c.over ? "neg" : "pos"}">${c.noProfit ? "—" : pct(c.ratio)}</td><td class="r">${pct(c.L)}</td><td class="ui">${c.noProfit ? `<span class="dim">sin ganancia${c.total < 0 ? ` · ${money(c.total)}` : ""}</span>` : c.over ? `<span class="chip bad">falta ${money(c.needed)}</span>` : `<span class="chip good">cumple · tope hoy ${money(c.capToday)}</span>`}</td></tr>`; }).join("")}</tbody></table></div>` : "";
   }
 
   /* ---------- ¿funciona el sistema? ---------- */
@@ -5669,8 +5738,8 @@
     { key: "limit", label: "Límite de consistencia (%)", type: "number", step: "1" },
     { key: "target", label: "Objetivo de la evaluación ($)", type: "number", step: "100", help: "0 si ya está fondeada" },
     { key: "status", label: "Estado", type: "select", options: STATUSES.map(s => [s, s]) },
-    { key: "total", label: "Ganancia previa ($)", type: "number", step: "10", w: 3, help: "lo que ya llevaba la cuenta antes de empezar a registrar aquí" },
-    { key: "best", label: "Mejor día previo ($)", type: "number", step: "10", w: 3 },
+    { key: "total", label: "Ganancia previa ($)", type: "number", step: "10", w: 3, help: "lo que ya llevaba la cuenta antes de empezar a registrar aquí · en rojo se escribe con signo: -450" },
+    { key: "best", label: "Mejor día previo ($)", type: "number", step: "10", w: 3, help: "el día verde más grande antes de registrar aquí · 0 si nunca hubo uno" },
   ];
   function openAccountEditor(a) {
     const isNew = !a;
@@ -5678,7 +5747,17 @@
     openEditor({
       title: isNew ? "Registrar cuenta" : "Editar cuenta",
       fields, values: a || { limit: 50, size: 50000, dd: 2000, ddKind: "trailing_lock", status: "activa", target: 3000, total: 0, best: 0 },
-      validate: v => v.name || v.firm ? null : "Ponle al menos un nombre o una firma",
+      validate: v => {
+        if (!(v.name || v.firm)) return "Ponle al menos un nombre o una firma";
+        /* La ganancia previa SÍ puede ir en rojo: es un resultado, no un tamaño.
+           El tamaño, el drawdown y el objetivo no: un drawdown negativo no
+           significa nada y envenena el suelo, el colchón y toda la simulación. */
+        if (v.size != null && v.size < 0) return "El tamaño de la cuenta no puede ser negativo";
+        if (v.dd != null && v.dd < 0) return "El drawdown máximo no puede ser negativo: es una distancia, no un resultado";
+        if (v.target != null && v.target < 0) return "El objetivo no puede ser negativo";
+        if (v.best != null && v.best < 0) return "El mejor día previo no puede ser negativo: si nunca hubo un día verde, escribe 0";
+        return null;
+      },
       onSave: v => {
         const arr = state.settings.accounts;
         const rec = Object.assign({}, a || { id: uid("a"), ledger: [] }, v, { limit: Math.min(99, Math.max(1, Number(v.limit) || 50)) });
@@ -5747,7 +5826,7 @@
           </div>
           <div>
             <div class="lab">Movimientos · retiros, costos y depósitos</div>
-            ${led.length ? `<div class="twrap"><table class="t"><thead><tr><th>Fecha</th><th>Tipo</th><th class="r">Importe</th><th>Nota</th><th></th></tr></thead><tbody>${led.map(e => `<tr data-le="${e.id}"><td>${esc(e.date || "")}</td><td class="ui">${esc(kindOf(e.kind))}</td><td class="r ${e.kind === "fee" ? "neg" : e.kind === "payout" ? "pos" : ""}">${e.kind === "deposit" ? "+" : e.kind === "fee" ? "-" : ""}${money(e.amount)}</td><td class="notes">${esc(e.note || "")}</td><td class="act"><button type="button" class="icon" data-act="ledit" title="Editar">✎</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="empty" style="padding:4px 0">Sin movimientos. Apunta aquí lo que pagaste por la evaluación y cada retiro: es la diferencia entre ganar en pantalla y ganar de verdad.</p>`}
+            ${led.length ? `<div class="twrap"><table class="t"><thead><tr><th>Fecha</th><th>Tipo</th><th class="r">Importe</th><th>Nota</th><th></th></tr></thead><tbody>${led.map(e => `<tr data-le="${e.id}"><td>${esc(e.date || "")}</td><td class="ui">${esc(kindOf(e.kind))}</td><td class="r ${e.kind === "fee" ? "neg" : e.kind === "payout" ? "pos" : ""}">${e.kind === "deposit" ? "+" : e.kind === "fee" ? "-" : ""}${money(Math.abs(e.amount))}</td><td class="notes">${esc(e.note || "")}</td><td class="act"><button type="button" class="icon" data-act="ledit" title="Editar">✎</button></td></tr>`).join("")}</tbody></table></div>` : `<p class="empty" style="padding:4px 0">Sin movimientos. Apunta aquí lo que pagaste por la evaluación y cada retiro: es la diferencia entre ganar en pantalla y ganar de verdad.</p>`}
             <div class="srcrow" style="margin-top:8px"><span>neto real <b class="${g.net > 0 ? "ok" : g.net < 0 ? "no" : ""}">${money(g.net)}</b></span><span class="stale">ganancia + depósitos − retiros − costos</span></div>
           </div>
         </div>

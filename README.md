@@ -189,6 +189,59 @@ instrumento, pero encenderlas bajaría el P&L de todo el histórico; hasta que
 `settings.meta.autoFees` sea `true`, manda el campo «Comisiones $» escrito a mano
 y ningún número del pasado cambia de valor.
 
+### Números en negativo
+
+Tres defectos reales de signo, encontrados probando la app con una cuenta en
+pérdida en vez de con una ganadora. Los tres estaban a la vista y ninguno daba
+error: producían cifras plausibles y falsas.
+
+**1. La consistencia inventaba un 100% sobre una cuenta en rojo.**
+
+```js
+const ratio = total > 0 ? best / total : (best > 0 ? 1 : 0);   // antes
+```
+
+Ese `1` era un centinela interno que acababa impreso como
+`Consistencia 100% sobre un límite de 30%` en una cuenta que iba `-$120`. La
+consistencia reparte GANANCIAS: sin ganancia acumulada el cociente no existe.
+Ahora es `null`, el estado se llama `NO APLICA`, y el texto dice el problema de
+verdad — *«el problema no es la consistencia, es el resultado»*. Lo que sí
+sigue siendo medible (cuánta ganancia falta para poder cobrar) se conserva.
+
+**2. Un retiro guardado en negativo hacía la cuenta más rica.**
+
+`balance = size + total + deposits − payouts`, y el importe se leía tal cual. Un
+respaldo con `{kind:"payout", amount:-500}` restaba `−500`, es decir sumaba.
+Medido de extremo a extremo con tres movimientos en negativo:
+
+| | Balance |
+| --- | --- |
+| antes | `$25,300` **(+$300)** |
+| después | `$24,700` **(−$300)** |
+
+$600 de dinero fantasma. El **tipo** del movimiento lleva el signo, así que el
+importe se lee siempre como magnitud (`Math.abs`) en el saneador de importación,
+en la suma y en la tabla.
+
+**3. Doble signo en la tabla de movimientos:** `+-$200`, `--$50`.
+
+Además:
+
+- `size`, `dd` y `target` se rechazan en negativo: un drawdown negativo no
+  significa nada y envenena el suelo, el colchón y toda la simulación.
+- `total` (ganancia previa) **sí** acepta negativo — es un resultado, no un
+  tamaño — y el campo lo dice.
+- La esperanza distingue ahora tres estados y no dos: ventaja confirmada,
+  ventaja sin confirmar, y ventaja *medidamente negativa*. Pintar las dos
+  últimas igual borra la diferencia entre «no lo sabemos» y «estás perdiendo».
+- Los importes del panel llevan signo siempre visible (`+$120` / `-$120`): en
+  una rejilla de cifras un menos fino se pierde de vista.
+
+**Ejemplo en rojo.** El panel trae un botón que carga un sistema sintético
+perdedor (32% de acierto, payoff 1.6:1) para ver la radiografía en rojo sin
+perder dinero de verdad. Va marcado en pantalla y **no entra en ninguna
+colección**: las operaciones reales siguen intactas.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia

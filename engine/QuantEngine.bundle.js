@@ -1046,19 +1046,28 @@ function evaluarConsistencia(diarios, limitePct, opciones) {
 
   if (!L) return Ok({ aplica: false, razon: "no hay limite de consistencia definido", total, mejor });
 
-  const ratio = total > 0 ? mejor / total : (mejor > 0 ? 1 : 0);
+  /* La consistencia reparte GANANCIAS. Sin ganancia acumulada el cociente no
+     existe: devolver 1 como centinela y pintarlo como «100%» es fabricar un
+     numero sobre una cuenta en rojo. Aqui es null y se dice por que. */
+  const sinGanancia = total <= 0;
+  const ratio = sinGanancia ? null : roundTo(mejor / total, 6);
   const requerido = mejor > 0 ? mejor / L : 0;
-  const falta = Math.max(0, roundTo(requerido - total, 2));
-  const tope = total > 0 ? roundTo(L * total / (1 - L), 2) : 0;
+  /* Sin ningun dia verde no hay mejor dia, asi que la consistencia no impone
+     nada y no "falta" nada por su culpa. Restar un total negativo de un
+     requerido de cero producia una exigencia inventada. */
+  const falta = requerido > 0 ? Math.max(0, roundTo(requerido - total, 2)) : 0;
+  const tope = sinGanancia ? 0 : roundTo(L * total / (1 - L), 2);
   const mediaVerde = verdes.length ? verdes.reduce((s, x) => s + x, 0) / verdes.length : 0;
 
   return Ok({
     aplica: true,
     limite: L,
     total, mejor,
-    ratio: roundTo(ratio, 6),
-    cumple: !(ratio > L),
-    cerca: ratio > L * 0.85 && ratio <= L,
+    ratio,
+    sinGanancia,
+    razonSinRatio: sinGanancia ? `No hay ganancia acumulada que repartir (total ${total}). La consistencia se mide sobre ganancias.` : null,
+    cumple: sinGanancia ? null : !(ratio > L),
+    cerca: !sinGanancia && ratio > L * 0.85 && ratio <= L,
     /* total que haria falta para cumplir */
     totalRequerido: roundTo(requerido, 2),
     falta,
@@ -1400,7 +1409,11 @@ function evaluarCumplimiento(entrada) {
     avisos.push({ codigo: "CONTRATOS", texto: `Se opero con ${hoy.contratosMax} contratos y el tope es ${maxC}.` });
   }
 
-  if (cons && cons.aplica && !cons.cumple) {
+  if (cons && cons.aplica && cons.sinGanancia) {
+    /* Estar en rojo NO es incumplir la consistencia: es otro problema, peor y
+       distinto. Marcarlo como violacion de regla esconde el de verdad. */
+    notas.push({ codigo: "SIN_GANANCIA", texto: `Sin ganancia acumulada (${roundTo(cons.total, 2)}). La consistencia todavia no aplica: no hay nada que repartir. El problema no es la regla, es el resultado.` });
+  } else if (cons && cons.aplica && cons.cumple === false) {
     subir(ESTADOS.RESTRINGIDA);
     notas.push({ codigo: "CONSISTENCIA", texto: `Consistencia ${roundTo(cons.ratio * 100, 2)}% sobre un limite de ${roundTo(cons.limite * 100, 0)}%: faltan ${cons.falta} de ganancia acumulada para poder cobrar. Operar sigue permitido.` });
   } else if (cons && cons.aplica && cons.cerca) {

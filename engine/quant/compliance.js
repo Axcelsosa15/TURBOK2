@@ -114,7 +114,11 @@ export function evaluarCumplimiento(entrada) {
     avisos.push({ codigo: "CONTRATOS", texto: `Se opero con ${hoy.contratosMax} contratos y el tope es ${maxC}.` });
   }
 
-  if (cons && cons.aplica && !cons.cumple) {
+  if (cons && cons.aplica && cons.sinGanancia) {
+    /* Estar en rojo NO es incumplir la consistencia: es otro problema, peor y
+       distinto. Marcarlo como violacion de regla esconde el de verdad. */
+    notas.push({ codigo: "SIN_GANANCIA", texto: `Sin ganancia acumulada (${roundTo(cons.total, 2)}). La consistencia todavia no aplica: no hay nada que repartir. El problema no es la regla, es el resultado.` });
+  } else if (cons && cons.aplica && cons.cumple === false) {
     subir(ESTADOS.RESTRINGIDA);
     notas.push({ codigo: "CONSISTENCIA", texto: `Consistencia ${roundTo(cons.ratio * 100, 2)}% sobre un limite de ${roundTo(cons.limite * 100, 0)}%: faltan ${cons.falta} de ganancia acumulada para poder cobrar. Operar sigue permitido.` });
   } else if (cons && cons.aplica && cons.cerca) {
