@@ -488,5 +488,63 @@ grupo("negativos · curva y ventaja");
   eq(s.pQuemar, 1, "y se quema en todos");
   ok(s.colchonMinimo.mediana <= 0, "el colchón mínimo esperado es negativo o cero");
 }
+grupo("modelo paramétrico");
+{
+  const a = Q.simularParametrico({ acierto: 45, gananciaR: 2, colchonUnidades: 10, objetivoUnidades: 30 });
+  const b = Q.simularParametrico({ acierto: 45, gananciaR: 2, colchonUnidades: 10, objetivoUnidades: 30 });
+  eq(a.value.pQuemar, b.value.pQuemar, "misma semilla -> mismo resultado");
+  near(a.value.esperanzaR, 0.45 * 2 - 0.55, 1e-9, "esperanza en R = p*R - q");
+  ok(a.value.pQuemar < 0.1, "con ventaja positiva y 10 unidades de colchón, la ruina es baja");
+}
+{
+  const v = Q.simularParametrico({ acierto: 30, gananciaR: 2, colchonUnidades: 10, objetivoUnidades: 30 }).value;
+  ok(v.esperanzaR < 0, "30% con 2R tiene esperanza negativa");
+  ok(v.pQuemar > 0.9, "y la ruina es casi segura");
+}
+eq(Q.simularParametrico({ acierto: 0.45, gananciaR: 2, colchonUnidades: 10 }).value.esperanzaR,
+   Q.simularParametrico({ acierto: 45, gananciaR: 2, colchonUnidades: 10 }).value.esperanzaR,
+   "0.45 y 45 significan lo mismo");
+{
+  const v = Q.simularParametrico({ acierto: 45, gananciaR: 2, colchonUnidades: 0 }).value;
+  ok(v.yaQuemada && v.pQuemar === 1, "sin colchón la cuenta ya está quemada: no es una probabilidad");
+  ok(/no es una probabilidad/.test(v.nota), "y lo dice");
+}
+{
+  const v = Q.simularParametrico({ acierto: 45, gananciaR: 2, colchonUnidades: -5 }).value;
+  ok(v.yaQuemada, "colchón NEGATIVO también es cuenta quemada");
+}
+ok(!Q.simularParametrico({ acierto: 0, gananciaR: 2, colchonUnidades: 10 }).ok, "acierto 0 se rechaza");
+ok(!Q.simularParametrico({ acierto: 100, gananciaR: 2, colchonUnidades: 10 }).ok, "acierto 100% se rechaza");
+ok(!Q.simularParametrico({ acierto: 45, gananciaR: 0, colchonUnidades: 10 }).ok, "ganancia 0R se rechaza");
+{
+  const v = Q.simularParametrico({ acierto: 45, gananciaR: 2, colchonUnidades: 10, objetivoUnidades: 30 }).value;
+  ok(v.errorEstandar.quemar >= 0 && v.resolucion === 0.00025, "reporta su propio error y su resolución");
+}
+
+grupo("probabilidad de racha (valor exacto, no simulación)");
+eq(Q.probabilidadDeRacha(0.5, 1, 1), 0.5, "una pérdida en una operación");
+eq(Q.probabilidadDeRacha(0.5, 2, 2), 0.25, "dos seguidas en dos operaciones");
+eq(Q.probabilidadDeRacha(0.5, 20, 10), 0, "una racha más larga que la muestra es imposible");
+eq(Q.probabilidadDeRacha(0, 3, 100), 0, "sin pérdidas no hay rachas");
+eq(Q.probabilidadDeRacha(1, 3, 100), 1, "perdiendo siempre la racha es segura");
+ok(Q.probabilidadDeRacha(0.55, 5, 100) > 0.9, "con 55% de pérdidas, 5 seguidas en 100 es casi segura");
+ok(Q.probabilidadDeRacha(0.55, 5, 100) > Q.probabilidadDeRacha(0.55, 8, 100), "rachas más largas son menos probables");
+ok(Q.probabilidadDeRacha(0.55, 5, 200) > Q.probabilidadDeRacha(0.55, 5, 100), "más operaciones, más probable verla");
+
+grupo("una sola definición del suelo");
+{
+  /* El calculador de riesgo tenía su propia riskThreshold(). Dos definiciones
+     de cuándo revientas es exactamente el bug de las dos tablas de multiplicadores. */
+  const casos = [
+    ["estatico", 25000, 26000, 1000, 24000],
+    ["trailing", 25000, 26000, 1000, 25000],
+    ["trailing_lock", 25000, 26000, 1000, 25000],
+    ["trailing_lock", 25000, 25500, 1000, 24500],
+    ["trailing", 50000, 50000, 2000, 48000],
+  ];
+  for (const [tipo, size, peak, dd, esperado] of casos)
+    eq(Q.sueloPara(tipo, size, peak, dd), esperado, `suelo ${tipo} size=${size} pico=${peak} dd=${dd}`);
+}
+
 console.log(`\n${pass} ok · ${fail} fallos (con negativos)`);
 if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("  ✗ " + f)); process.exit(1); }

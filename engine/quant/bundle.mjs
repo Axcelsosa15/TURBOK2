@@ -20,7 +20,7 @@ const PUBLICOS = [
   "ciMedia", "bootstrapCI", "muestraMinima", "significanciaMedia", "veredicto", "UMBRALES",
   "analizarEdge",
   "DD_TIPOS", "sueloPara", "construirCurva", "metricasCurva", "evaluarConsistencia",
-  "RESULTADO", "simularCuenta", "barridoDeRiesgo",
+  "RESULTADO", "simularCuenta", "barridoDeRiesgo", "simularParametrico", "probabilidadDeRacha",
   "ESTADOS", "margenDePerdida", "topeDeGanancia", "margenDeDrawdown", "evaluarCumplimiento",
   "desdeTradeApp", "calcularTradeApp", "rRealApp", "rPlanApp", "radiografiaCuenta",
 ];

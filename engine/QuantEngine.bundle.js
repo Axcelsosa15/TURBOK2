@@ -1294,6 +1294,108 @@ function barridoDeRiesgo(opciones, tamanos) {
   return Ok({ filas, optimo });
 }
 
+/* =========================================================================
+   Modelo PARAMETRICO
+   -------------------------------------------------------------------------
+   simularCuenta() remuestrea las operaciones reales del trader, que es lo
+   correcto cuando existen. Pero una calculadora de planificacion responde otra
+   pregunta: "SI mi acierto fuera del 45% y mi ganancia media 2R, que pasaria".
+   Ahi no hay distribucion empirica que remuestrear —  la hipotesis ES la
+   entrada— y un modelo binomial de ganancia fija R y perdida fija 1 es el
+   modelo adecuado, no una simplificacion perezosa.
+
+   Vive aqui, y no suelto en la interfaz, para que exista UNA sola definicion
+   del suelo, UN solo generador sembrado y pruebas que lo cubran.
+   ========================================================================= */
+
+function simularParametrico(opciones) {
+  const cfg = Object.assign({
+    acierto: null,            // 0..1 (o 0..100)
+    gananciaR: 2,             // cuanto se gana, en unidades de riesgo
+    colchonUnidades: null,    // cuantas perdidas completas caben antes de quemar
+    objetivoUnidades: 0,      // cuantas unidades hay que ganar para pasar
+    maxOperaciones: 400,
+    caminos: 4000,
+    semilla: 776622911,
+  }, opciones || {});
+
+  let p = toNum(cfg.acierto);
+  if (p === null) return Err("SIN_ACIERTO", "Falta la tasa de acierto.");
+  if (p > 1) p = p / 100;
+  if (p <= 0 || p >= 1) return Err("ACIERTO_FUERA_DE_RANGO", "La tasa de acierto debe estar entre 0 y 100%.", { p });
+
+  const R = toNum(cfg.gananciaR);
+  if (R === null || R <= 0) return Err("GANANCIA_INVALIDA", "La ganancia media en R debe ser mayor que cero.");
+
+  const colchon = toNum(cfg.colchonUnidades);
+  const objetivo = Math.max(0, toNum(cfg.objetivoUnidades) ?? 0);
+  const caminos = toPosInt(cfg.caminos) ?? 4000;
+  const maxOps = toPosInt(cfg.maxOperaciones) ?? 400;
+
+  /* Sin colchon la cuenta ya esta quemada: la ruina no es una probabilidad,
+     es un hecho. Devolverlo como 1 es correcto, pero se marca como tal. */
+  if (colchon === null || colchon <= 0) {
+    return Ok({ yaQuemada: true, pQuemar: 1, pPasar: objetivo > 0 ? 0 : null,
+      medianaFinal: 0, esperanzaR: roundTo(p * R - (1 - p), 4), caminos: 0,
+      errorEstandar: { quemar: 0, pasar: 0 }, semilla: cfg.semilla,
+      nota: "El colchon ya es cero o negativo: la cuenta esta quemada, no es una probabilidad." });
+  }
+
+  const next = rng(cfg.semilla);
+  let ruina = 0, pasadas = 0;
+  const finales = new Array(caminos);
+  for (let i = 0; i < caminos; i++) {
+    let x = 0;
+    for (let t = 0; t < maxOps; t++) {
+      x += next() < p ? R : -1;
+      if (x <= -colchon) { ruina++; break; }
+      if (objetivo > 0 && x >= objetivo) { pasadas++; break; }
+    }
+    finales[i] = x;
+  }
+  const pQ = roundTo(ruina / caminos, 5);
+  const pP = objetivo > 0 ? roundTo(pasadas / caminos, 5) : null;
+
+  return Ok({
+    yaQuemada: false,
+    pQuemar: pQ,
+    pPasar: pP,
+    medianaFinal: roundTo(cuantil(finales, 0.5), 3),
+    p05Final: roundTo(cuantil(finales, 0.05), 3),
+    p95Final: roundTo(cuantil(finales, 0.95), 3),
+    esperanzaR: roundTo(p * R - (1 - p), 4),
+    caminos, semilla: cfg.semilla,
+    colchonUnidades: roundTo(colchon, 3),
+    errorEstandar: {
+      quemar: roundTo(Math.sqrt(pQ * (1 - pQ) / caminos), 5),
+      pasar: pP === null ? null : roundTo(Math.sqrt(pP * (1 - pP) / caminos), 5),
+    },
+    resolucion: roundTo(1 / caminos, 6),
+    nota: "Modelo parametrico: asume ganancia fija de R y perdida fija de 1. Tu distribucion real tiene colas; esto es una hipotesis, no una medicion.",
+  });
+}
+
+/* P(al menos una racha de k perdidas en n operaciones). Programacion dinamica
+   exacta sobre la longitud de la racha en curso: no es una simulacion, es el
+   valor cerrado. Sirve para separar "mala suerte" de "sistema roto". */
+function probabilidadDeRacha(probPerdida, k, n) {
+  const q = toNum(probPerdida), K = toPosInt(k), N = toPosInt(n);
+  if (q === null || K === null || N === null) return null;
+  if (K > N || q <= 0) return 0;
+  if (q >= 1) return 1;
+  let dp = new Array(K).fill(0); dp[0] = 1; let golpe = 0;
+  for (let i = 0; i < N; i++) {
+    const nd = new Array(K).fill(0);
+    for (let j = 0; j < K; j++) {
+      const pj = dp[j]; if (!pj) continue;
+      nd[0] += pj * (1 - q);
+      if (j + 1 < K) nd[j + 1] += pj * q; else golpe += pj * q;
+    }
+    dp = nd;
+  }
+  return roundTo(golpe, 6);
+}
+
 /* ─── compliance.js ─────────────────────────────────────────────── */
 /* =========================================================================
    QuantEngine · cumplimiento de reglas de cuenta
@@ -1624,10 +1726,10 @@ const QuantEngine = {
   /* operacion */ valuarOperacion, dirOf,
   /* ventaja   */ analizarEdge,
   /* curva     */ construirCurva, metricasCurva, evaluarConsistencia, DD_TIPOS,
-  /* riesgo    */ simularCuenta, barridoDeRiesgo,
+  /* riesgo    */ simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha,
   /* reglas    */ evaluarCumplimiento,
   /* app       */ calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta, desdeTradeApp,
 };
 
-return { QE_VERSION, Ok, Err, isOk, addWarn, unwrapOr, allOk, isFiniteNum, toNum, toInt, toPosInt, clamp, sym, roundHalfAway, roundTo, toCents, fromCents, sumCents, rng, randInt, randNormal, normalQuantile, zFor, normalCDF, CONTRACTS, rootOf, resolveContract, listContracts, valuarOperacion, dimensionar, dirOf, limpiar, momentos, cuantil, mediana, forma, ciProporcion, ciMedia, bootstrapCI, muestraMinima, significanciaMedia, veredicto, UMBRALES, analizarEdge, DD_TIPOS, sueloPara, construirCurva, metricasCurva, evaluarConsistencia, RESULTADO, simularCuenta, barridoDeRiesgo, ESTADOS, margenDePerdida, topeDeGanancia, margenDeDrawdown, evaluarCumplimiento, desdeTradeApp, calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta };
+return { QE_VERSION, Ok, Err, isOk, addWarn, unwrapOr, allOk, isFiniteNum, toNum, toInt, toPosInt, clamp, sym, roundHalfAway, roundTo, toCents, fromCents, sumCents, rng, randInt, randNormal, normalQuantile, zFor, normalCDF, CONTRACTS, rootOf, resolveContract, listContracts, valuarOperacion, dimensionar, dirOf, limpiar, momentos, cuantil, mediana, forma, ciProporcion, ciMedia, bootstrapCI, muestraMinima, significanciaMedia, veredicto, UMBRALES, analizarEdge, DD_TIPOS, sueloPara, construirCurva, metricasCurva, evaluarConsistencia, RESULTADO, simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha, ESTADOS, margenDePerdida, topeDeGanancia, margenDeDrawdown, evaluarCumplimiento, desdeTradeApp, calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta };
 })();

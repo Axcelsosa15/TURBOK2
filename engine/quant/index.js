@@ -29,7 +29,7 @@ import { CONTRACTS, resolveContract, rootOf } from "./contracts.js";
 import { valuarOperacion, dirOf } from "./trade.js";
 import { analizarEdge } from "./edge.js";
 import { construirCurva, metricasCurva, evaluarConsistencia, DD_TIPOS } from "./curve.js";
-import { simularCuenta, barridoDeRiesgo } from "./survival.js";
+import { simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha } from "./survival.js";
 import { evaluarCumplimiento } from "./compliance.js";
 
 /* =========================================================================
@@ -194,7 +194,7 @@ export const QuantEngine = {
   /* operacion */ valuarOperacion, dirOf,
   /* ventaja   */ analizarEdge,
   /* curva     */ construirCurva, metricasCurva, evaluarConsistencia, DD_TIPOS,
-  /* riesgo    */ simularCuenta, barridoDeRiesgo,
+  /* riesgo    */ simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha,
   /* reglas    */ evaluarCumplimiento,
   /* app       */ calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta, desdeTradeApp,
 };

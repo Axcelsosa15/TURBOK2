@@ -93,7 +93,7 @@ Funciona igual al revés. Un par de detalles que conviene saber:
 ## El motor de cálculo · QuantEngine v2
 
 Todos los números salen de `engine/quant/`. Funciones puras: sin DOM, sin reloj,
-sin `Math.random()` sin semilla, sin dependencias. **193 pruebas**:
+sin `Math.random()` sin semilla, sin dependencias. **253 pruebas**:
 
 ```bash
 node engine/quant/quant.test.js
@@ -241,6 +241,35 @@ Además:
 perdedor (32% de acierto, payoff 1.6:1) para ver la radiografía en rojo sin
 perder dinero de verdad. Va marcado en pantalla y **no entra en ninguna
 colección**: las operaciones reales siguen intactas.
+
+### Un solo sitio para cada cosa
+
+Después de arreglar los tres errores de signo busqué la misma familia de bugs a
+propósito, en vez de esperar a tropezarla. Apareció algo peor que un signo: **un
+motor de riesgo entero duplicado fuera del motor**, en la calculadora de riesgo.
+
+| Duplicado en la interfaz | Ya existía en el motor | Por qué importa |
+| --- | --- | --- |
+| `riskThreshold()` | `sueloPara()` | **Dos definiciones del suelo de la cuenta.** Es el bug de las dos tablas de multiplicadores otra vez: en cuanto una cambia, la calculadora y la tarjeta discrepan sobre si estás vivo. |
+| `riskSim()` | ahora `simularParametrico()` | Un segundo Monte Carlo, con su propio generador, sin una sola prueba. |
+| `rngOf()` | `rng()` | Copia byte a byte del mismo mulberry32. |
+| `streakProb()` | ahora `probabilidadDeRacha()` | Programación dinámica exacta; merecía pruebas. |
+
+El modelo paramétrico —ganancia fija `R`, pérdida fija `1`— **no** se sustituyó
+por el bootstrap. Ahí es el modelo correcto: la calculadora pregunta *«y si mi
+acierto fuera del 45%»*, o sea la hipótesis **es** la entrada y no hay
+distribución real que remuestrear. Lo que no tenía por qué tener era su propio
+generador, su propio suelo y cero pruebas. Ahora vive en `survival.js` junto al
+bootstrap, y cada uno responde la pregunta que le toca.
+
+Salida de la calculadora antes y después de la consolidación: **idéntica al
+carácter**. Un refactor que cambia un número no es un refactor.
+
+**Y se acabó el `∞`.** La app imprimía `∞` como profit factor en cuatro sitios
+cuando no había ninguna operación perdedora. El motor ya se negaba a hacerlo;
+la interfaz no. Ahora `futStats` devuelve `null` con `pfRazon`, y la tarjeta
+dice *«sin operaciones perdedoras: indefinido»* en vez de insinuar un sistema
+perfecto que sólo tuvo pocas operaciones.
 
 ### El motor anterior
 
