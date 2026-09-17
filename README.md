@@ -90,35 +90,112 @@ Funciona igual al revés. Un par de detalles que conviene saber:
 - **Las capturas importadas se ven pero no se editan** en una copia estática: sin
   almacenamiento de imágenes se pueden mirar y quitar, no añadir nuevas.
 
-## El motor de cálculo
+## El motor de cálculo · QuantEngine v2
 
-Todos los números salen de `engine/MathEngine.js`: funciones puras, sin reloj,
-sin DOM, sin dependencias, con 92 pruebas (`node engine/MathEngine.test.js`).
+Todos los números salen de `engine/quant/`. Funciones puras: sin DOM, sin reloj,
+sin `Math.random()` sin semilla, sin dependencias. **193 pruebas**:
 
-| Función | Devuelve |
+```bash
+node engine/quant/quant.test.js
+```
+
+### Capas
+
+| Módulo | Qué resuelve |
 | --- | --- |
-| `getInstrumentConfig(symbol)` | multiplicador, tick, comisión y valor del tick |
-| `calculatePnL(dir, entrada, salida, ctos, symbol, stop?)` | bruto, comisiones, neto, R y riesgo inicial |
-| `calculatePlannedR` / `calculateRealR` | R planeado y R real, como proporción de precio |
-| `calculateDrawdown(balance, pico, maxDD, {tipo, balanceInicial})` | pico, usado, suelo, colchón y estado |
-| `calculateConsistency(dailySessions, {limitePorcentaje})` | mejor día, %, total necesario y lo que falta |
-| `calculatePositionSize(balance, entrada, stop, symbol, %, {topes})` | contratos enteros y qué límite mandó |
+| `kernel.js` | `Result` único, guardas, dinero en **centavos enteros**, PRNG sembrado, normal inversa |
+| `contracts.js` | rejilla de ticks de 18 futuros; el invariante `multiplier == tickValue / tickSize` se verifica al cargar |
+| `trade.js` | P&L exacto en ticks enteros, R como cociente de ticks, dimensionamiento de posición |
+| `stats.js` | Welford, cuantiles tipo 7, Wilson, bootstrap sembrado, muestra mínima, significancia |
+| `edge.js` | esperanza con IC, profit factor, Kelly, SQN, rachas, distribución de R, concentración |
+| `curve.js` | curva de capital y drawdown como **máquina de estados**; consistencia |
+| `survival.js` | Monte Carlo de supervivencia de cuenta y barrido de tamaño de posición |
+| `compliance.js` | veredicto operativo: QUEMADA > BLOQUEADA > RESTRINGIDA > AVISO > LISTA |
+| `index.js` | fachada + adaptador para Cabina (`calcularTradeApp`, `radiografiaCuenta`) |
 
-`index.html` lleva una copia literal del motor dentro de un ámbito propio
-(`const ME = (function(){…})()`), porque la app es un solo archivo sin imports.
-Ese encierro no es decorativo: el motor y la app tienen funciones con el mismo
-nombre y distinto comportamiento — `num("")` da `null` en el motor y `0` en la
-app — y sueltas en el mismo ámbito la del motor ganaría por hoisting sobre todos
-los formularios. Si tocas una copia, toca la otra; el archivo suelto es el que
-tiene las pruebas.
+### Las tres reglas que el motor no rompe
 
-`tradeCalc` ya no calcula: pregunta al motor y devuelve las mismas claves de
-siempre, así que ninguna función de render cambió.
+1. **Ningún estadístico se devuelve desnudo.** Cada número viaja con su `n`, su
+   error estándar y un veredicto de fiabilidad. Un profit factor de 2.4 sobre 6
+   operaciones y uno sobre 600 se imprimen igual y no significan lo mismo; el
+   motor está obligado a decir cuál es cuál.
+2. **Lo que no se puede calcular devuelve `null` y dice por qué.** Sin valor de
+   tick no hay P&L: nunca un multiplicador supuesto. Sin perdedoras el profit
+   factor es *indefinido*, no `Infinity`.
+3. **Puro y determinista.** Misma semilla, mismo resultado. Una simulación que
+   no se puede reproducir no es evidencia.
+
+### Decisiones de diseño que costaron algo
+
+**El dinero vive en centavos enteros.** El float sólo existe en la frontera.
+Mil operaciones de \$1.00 suman exactamente \$1000, no \$999.9999999998.
+
+**El dato primario de un contrato es `(tickSize, tickValue)`; el multiplicador es
+derivado.** Un futuro no se opera en puntos, se opera en ticks: el P&L es siempre
+un múltiplo entero del valor del tick. Escribir el multiplicador a mano permite
+specs incoherentes que producen P&L plausible pero falso durante meses. Aquí el
+invariante revienta al cargar el módulo. Efecto lateral: los precios fuera de
+rejilla (tipeos) se detectan y se avisan en vez de tragarse.
+
+**Monte Carlo en vez de la fórmula clásica de riesgo de ruina.** La fórmula de
+Vince asume ganancia y pérdida de tamaño fijo y ruina en cero. Ninguna de las
+tres es cierta aquí: la distribución de R tiene colas, el suelo es móvil
+(*trailing*) y encima hay límite de pérdida diaria y regla de consistencia que
+interactúan entre sí — un día grande puede **retrasar** el aprobado aunque el
+objetivo ya esté cubierto. Remuestrear las operaciones reales respeta la forma
+real de la distribución sin asumir normalidad.
+
+**Base del trailing: `cierre` vs `intradía`.** El pico se actualiza al cerrar el
+día o operación a operación. Es la diferencia entre pasar y quemar una cuenta, y
+casi ninguna herramienta lo modela.
+
+**La consistencia no impide operar, impide cobrar.** Marcarla como «no puedes
+operar» es factualmente falso y además empuja al trader a dejar de registrar
+justo los días con más información.
+
+### Cómo llega el motor a la app
+
+`index.html` es un solo archivo sin imports, así que `engine/quant/bundle.mjs`
+concatena los módulos en un único ámbito:
+
+```bash
+node engine/quant/bundle.mjs   # escribe engine/QuantEngine.bundle.js
+```
+
+Ese bundle va literal dentro de `index.html` como `const QE = (function(){…})()`.
+El encierro no es decorativo: motor y app tienen funciones con el mismo nombre y
+distinto comportamiento — `toNum("")` da `null` en el motor y `num("")` da `0` en
+la app — y sueltas en el mismo ámbito la del motor ganaría por *hoisting* sobre
+todos los formularios.
+
+El motor se expone además como `window.QuantEngine` **a propósito**: es puro y no
+muta nada, así que desde la consola del navegador puedes interrogar tus propios
+datos sin pasar por la interfaz.
+
+```js
+QuantEngine.analizarEdge(ops)          // ventaja con intervalos de confianza
+QuantEngine.simularCuenta({…})         // probabilidad de pasar vs quemar
+QuantEngine.barridoDeRiesgo({…})       // dónde deja de convenir subir tamaño
+QuantEngine.radiografiaCuenta(tr, ac)  // todo junto para una cuenta
+```
+
+`tradeCalc` no calcula: pregunta. Devuelve las mismas claves de siempre
+(`pnlEff`, `rReal`, `rPlanned`, `riskUsd`, `multUnknown`, `calcError`), así que
+**ninguna función de render cambió una sola línea**. Verificado por diff de
+salidas: 7 archivos de prueba de comportamiento, 0 diferencias.
 
 **Comisiones automáticas apagadas por defecto.** El motor las conoce por
 instrumento, pero encenderlas bajaría el P&L de todo el histórico; hasta que
-`settings.meta.autoFees` sea `true`, manda el campo «Comisiones $» escrito a
-mano y ningún número del pasado cambia de valor.
+`settings.meta.autoFees` sea `true`, manda el campo «Comisiones $» escrito a mano
+y ningún número del pasado cambia de valor.
+
+### El motor anterior
+
+`engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia
+histórica. **No lo usa nadie**: `index.html` ya no lo carga. Su aportación fue
+sacar el cálculo de una operación del render; lo que le faltaba era todo lo
+demás — la curva, el drawdown como estado, y cualquier noción de cuánta de una
+cifra es señal.
 
 ## Cómo fluye un dato
 

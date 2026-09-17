@@ -1,0 +1,420 @@
+/* QuantEngine · suite de pruebas.  Ejecutar: node engine/quant/quant.test.js */
+import * as Q from "./index.js";
+
+let pass = 0, fail = 0; const fallos = [];
+const eq = (a, b, msg) => { const ok = Object.is(a, b) || (typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 1e-9); ok ? pass++ : (fail++, fallos.push(`${msg}\n    esperado ${b}, obtenido ${a}`)); };
+const near = (a, b, tol, msg) => { const ok = a !== null && Math.abs(a - b) <= tol; ok ? pass++ : (fail++, fallos.push(`${msg}\n    esperado ~${b}±${tol}, obtenido ${a}`)); };
+const ok = (c, msg) => { c ? pass++ : (fail++, fallos.push(msg)); };
+const grupo = n => console.log(`\n── ${n}`);
+
+/* ═══ kernel ═══ */
+grupo("kernel · redondeo y dinero");
+eq(Q.roundHalfAway(0.5), 1, "0.5 redondea alejandose de cero");
+eq(Q.roundHalfAway(-0.5), -1, "-0.5 redondea a -1, no a -0 como Math.round");
+eq(Q.roundTo(2.675, 2), 2.68, "2.675 -> 2.68 (el float ingenuo da 2.67)");
+eq(Q.roundTo(-2.675, 2), -2.68, "negativo simetrico");
+eq(Q.toCents(1.005), 101, "1.005 -> 101 centavos");
+eq(Q.toCents(-1.005), -101, "negativo simetrico en centavos");
+eq(Q.fromCents(Q.sumCents([1, 2, 3])), 0.06, "suma exacta en centavos");
+eq(Q.roundTo(0, 2), 0, "cero normalizado, nunca -0");
+eq(Q.roundTo(-0.0001, 2), 0, "-0 se normaliza a 0");
+ok(!Q.isFiniteNum(""), "cadena vacia no es numero");
+ok(!Q.isFiniteNum(null) && !Q.isFiniteNum(NaN) && !Q.isFiniteNum(Infinity), "null, NaN e Infinity rechazados");
+ok(!Q.isFiniteNum(true), "booleano no es numero");
+eq(Q.toNum("12.5"), 12.5, "cadena numerica se acepta");
+eq(Q.clamp(5, 0, 3), 3, "clamp superior");
+eq(Q.clamp(-5, 0, 3), 0, "clamp inferior");
+near(Q.zFor(0.95), 1.959964, 1e-5, "z al 95%");
+near(Q.zFor(0.99), 2.575829, 1e-5, "z al 99%");
+near(Q.normalCDF(0), 0.5, 1e-6, "CDF normal en 0");
+near(Q.normalCDF(1.959964), 0.975, 1e-4, "CDF normal en z95");
+
+grupo("kernel · PRNG determinista");
+{
+  const a = Q.rng(42), b = Q.rng(42), c = Q.rng(43);
+  const sa = [a(), a(), a()], sb = [b(), b(), b()], sc = [c(), c(), c()];
+  ok(sa.every((v, i) => v === sb[i]), "misma semilla -> misma secuencia");
+  ok(sa.some((v, i) => v !== sc[i]), "semilla distinta -> secuencia distinta");
+  ok(sa.every(v => v >= 0 && v < 1), "uniforme en [0,1)");
+}
+
+/* ═══ contratos ═══ */
+grupo("contratos · rejilla de ticks");
+for (const k of Object.keys(Q.CONTRACTS)) {
+  const c = Q.CONTRACTS[k];
+  near(c.multiplier * c.tickSize, c.tickValue, 1e-9, `${k}: multiplier*tickSize == tickValue`);
+}
+eq(Q.CONTRACTS.MNQ.multiplier, 2, "MNQ multiplicador 2");
+eq(Q.CONTRACTS.ES.multiplier, 50, "ES multiplicador 50");
+eq(Q.CONTRACTS.CL.multiplier, 1000, "CL multiplicador 1000");
+eq(Q.CONTRACTS["6E"].multiplier, 125000, "6E multiplicador 125000");
+eq(Q.rootOf("MNQZ5"), "MNQ", "contrato con mes/anio se reduce a la raiz");
+eq(Q.rootOf("/ES"), "ES", "prefijo barra se ignora");
+eq(Q.rootOf("esh6"), "ES", "minusculas y sufijo");
+ok(!Q.resolveContract("FOO").ok, "simbolo desconocido no se adivina");
+eq(Q.resolveContract("FOO").error.code, "CONTRATO_DESCONOCIDO", "codigo de error correcto");
+ok(!Q.resolveContract("").ok, "simbolo vacio rechazado");
+{
+  const r = Q.resolveContract("FOO", { FOO: { tickSize: 0.25, multiplier: 2 } });
+  ok(r.ok && r.value.tickValue === 0.5 && r.value.sintetico, "override por multiplicador se traduce a tickValue");
+}
+
+/* ═══ valuacion ═══ */
+grupo("operacion · P&L exacto en ticks");
+{
+  const v = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, salida: 20042.5, stop: 19990, contratos: 2 }, { incluirComisiones: false }).value;
+  eq(v.pnlNeto, 170, "MNQ 42.5 pts x 2 = $170");
+  eq(v.ticks, 170, "170 ticks");
+  eq(v.riesgoUSD, 40, "riesgo 10 pts x 2 x $2 = $40");
+  eq(v.rBruto, 4.25, "R = 42.5/10");
+  eq(v.resultado, "ganancia", "clasificacion correcta");
+}
+{
+  const v = Q.valuarOperacion({ simbolo: "MNQ", direccion: "short", entrada: 20042.5, salida: 20000, stop: 20052.5, contratos: 2 }, { incluirComisiones: false }).value;
+  eq(v.pnlNeto, 170, "corto simetrico: mismo P&L");
+  eq(v.rBruto, 4.25, "corto: mismo R");
+}
+{
+  const v = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, salida: 19990, stop: 19990, contratos: 1 }, { incluirComisiones: false }).value;
+  eq(v.pnlNeto, -20, "perdida negativa correcta");
+  eq(v.rBruto, -1, "toco el stop = -1R");
+  eq(v.resultado, "perdida", "clasifica perdida");
+}
+{
+  const v = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, salida: 20042.5, stop: 19990, contratos: 2 }, { incluirComisiones: true }).value;
+  eq(v.comisiones, 3, "comision 1.5 x 2 contratos");
+  eq(v.pnlNeto, 167, "neto tras comisiones");
+  eq(v.rBruto, 4.25, "R bruto no cambia con comisiones");
+  near(v.rNeto, 167 / 40, 1e-4, "R neto si las descuenta");
+}
+{
+  const v = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, stop: 19990, contratos: 1 }, {}).value;
+  ok(v.abierta && v.pnlNeto === null, "sin salida: abierta, P&L null, no cero");
+  eq(v.resultado, "abierta", "estado abierta");
+  eq(v.riesgoUSD, 20, "riesgo definido aunque este abierta");
+}
+{
+  const r = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, salida: 20010 }, {});
+  eq(r.value.rBruto, null, "sin stop no hay R: division por cero evitada");
+}
+{
+  const r = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, salida: 20010, stop: 20000 }, {});
+  eq(r.value.rBruto, null, "stop igual a entrada: R indefinido, no Infinity");
+  ok(r.warnings.some(w => w.code === "RIESGO_CERO"), "avisa riesgo cero");
+}
+{
+  const r = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000.13, salida: 20042.5 }, {});
+  ok(r.warnings.some(w => w.code === "PRECIO_FUERA_DE_REJILLA"), "detecta precio fuera de rejilla");
+}
+{
+  const r = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000.13, salida: 20042.5 }, { permitirFueraDeRejilla: false });
+  ok(!r.ok, "modo estricto rechaza precios fuera de rejilla");
+}
+{
+  const r = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, salida: 19990, stop: 20010 }, {});
+  ok(r.warnings.some(w => w.code === "STOP_INCOHERENTE"), "largo con stop arriba: incoherente");
+}
+ok(!Q.valuarOperacion({ simbolo: "MNQ", direccion: "long" }, {}).ok, "sin entrada devuelve Err");
+ok(!Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: -5 }, {}).ok, "entrada negativa rechazada");
+{ /* acumulacion: 1000 operaciones de 0.1 no derivan */
+  let c = 0;
+  for (let i = 0; i < 1000; i++) c += Q.valuarOperacion({ simbolo: "MCL", direccion: "long", entrada: 70.00, salida: 70.01, contratos: 1 }, { incluirComisiones: false }).value.pnlNetoCents;
+  eq(Q.fromCents(c), 1000, "1000 x $1.00 = $1000 exacto, sin deriva de centavos");
+}
+
+grupo("dimensionamiento");
+{
+  const d = Q.dimensionar({ simbolo: "MNQ", balance: 25315, entrada: 20000, stop: 19990, riesgoPct: 1 }).value;
+  eq(d.contratos, 12, "12 contratos enteros");
+  eq(d.riesgoReal, 240, "riesgo real $240");
+  near(d.desaprovechado, 13.15, 0.01, "lo que se pierde por no fraccionar");
+  ok(d.contratos === Math.floor(d.fraccional), "siempre redondea hacia abajo");
+}
+eq(Q.dimensionar({ simbolo: "MNQ", balance: 25315, entrada: 20000, stop: 19990, riesgoPct: 0.01 }).value.contratos, 12, "0.01 y 1 significan lo mismo: 1%");
+ok(!Q.dimensionar({ simbolo: "MNQ", balance: 25315, entrada: 20000, stop: 19990, riesgoPct: 80 }).ok, "80% de riesgo se rechaza");
+ok(!Q.dimensionar({ simbolo: "MNQ", balance: 0, entrada: 20000, stop: 19990 }).ok, "balance cero rechazado");
+ok(!Q.dimensionar({ simbolo: "MNQ", balance: 1000, entrada: 20000, stop: 20000 }).ok, "riesgo cero rechazado");
+{
+  const d = Q.dimensionar({ simbolo: "ES", balance: 1000, entrada: 5000, stop: 4990, riesgoPct: 1 }).value;
+  eq(d.contratos, 0, "cuenta chica no alcanza ni 1 contrato");
+}
+ok(Q.dimensionar({ simbolo: "MNQ", balance: 25000, entrada: 20000, stop: 19990, riesgoPct: 8 }).warnings.some(w => w.code === "RIESGO_ALTO"), "avisa riesgo agresivo");
+
+/* ═══ estadistica ═══ */
+grupo("estadistica");
+eq(Q.momentos([1, 2, 3, 4, 5]).media, 3, "media");
+near(Q.momentos([1, 2, 3, 4, 5]).desv, 1.5811388, 1e-6, "desviacion muestral (n-1)");
+eq(Q.momentos([]).n, 0, "lista vacia no revienta");
+eq(Q.momentos([7]).varianza, 0, "un solo valor: varianza 0");
+eq(Q.cuantil([1, 2, 3, 4], 0.5), 2.5, "mediana par (tipo 7)");
+eq(Q.cuantil([1, 2, 3], 0.5), 2, "mediana impar");
+eq(Q.cuantil([1, 2, 3, 4, 5], 0.25), 2, "primer cuartil tipo 7");
+eq(Q.cuantil([], 0.5), null, "cuantil de vacio es null");
+{
+  const w = Q.ciProporcion(3, 5);
+  ok(w.bajo >= 0 && w.alto <= 1, "Wilson nunca sale de [0,1]");
+  const w0 = Q.ciProporcion(0, 10);
+  ok(w0.bajo === 0 && w0.alto > 0 && w0.alto < 1, "0 exitos: intervalo valido, no degenerado");
+  const w1 = Q.ciProporcion(10, 10);
+  ok(w1.alto === 1 && w1.bajo < 1, "10 de 10: intervalo valido");
+}
+{
+  const xs = Array.from({ length: 200 }, (_, i) => Math.sin(i) * 2 + 1);
+  const a = Q.bootstrapCI(xs, undefined, { semilla: 7 });
+  const b = Q.bootstrapCI(xs, undefined, { semilla: 7 });
+  ok(a.bajo === b.bajo && a.alto === b.alto, "bootstrap con misma semilla es reproducible");
+  ok(a.bajo < a.punto && a.punto < a.alto, "el punto cae dentro del intervalo");
+}
+eq(Q.bootstrapCI([1, 2], undefined, {}), null, "bootstrap con n<5 devuelve null en vez de un numero falso");
+{
+  const m = Q.muestraMinima([1, -1, 1, -1, 1, -1, 1, -1, 1, -1]);
+  ok(m.requerido === Infinity || m.requerido > 0, "muestra minima calculable");
+}
+ok(Q.veredicto(5).fiable === false && Q.veredicto(150).nivel === "solido", "escalera de fiabilidad");
+
+/* ═══ ventaja ═══ */
+grupo("ventaja");
+{
+  const ops = [{ pnl: 200, r: 2 }, { pnl: -100, r: -1 }, { pnl: 200, r: 2 }, { pnl: -100, r: -1 }];
+  const e = Q.analizarEdge(ops).value;
+  eq(e.profitFactor, 2, "profit factor 400/200");
+  eq(e.tasaAcierto.valor, 0.5, "tasa de acierto 50%");
+  eq(e.gananciaMedia, 200, "ganancia media");
+  eq(e.perdidaMedia, 100, "perdida media");
+  eq(e.payoff, 2, "payoff 2:1");
+  near(e.kelly.completo, 0.25, 1e-6, "Kelly clasico 2:1 al 50% = 0.25");
+  ok(e.kelly.recomendado < e.kelly.completo, "el recomendado es una fraccion del Kelly completo");
+  ok(!e.veredicto.fiable, "n=4 no es fiable y lo dice");
+}
+{
+  const e = Q.analizarEdge([{ pnl: 100, r: 1 }, { pnl: 200, r: 2 }]).value;
+  eq(e.profitFactor, null, "sin perdedoras el PF es indefinido, NO Infinity");
+  ok(/no esta definido/.test(e.profitFactorRazon), "y explica por que");
+}
+{
+  const e = Q.analizarEdge([{ pnl: -100, r: -1 }, { pnl: -50, r: -0.5 }]).value;
+  eq(e.profitFactor, 0, "sin ganadoras el PF es 0");
+}
+eq(Q.analizarEdge([]).value.n, 0, "lista vacia no revienta");
+{
+  const e = Q.analizarEdge([{ pnl: 0, r: 0 }, { pnl: 100, r: 1 }, { pnl: -100, r: -1 }]).value;
+  eq(e.planas, 1, "las operaciones planas se cuentan aparte");
+  eq(e.tasaAcierto.n, 2, "y no entran en el denominador de la tasa de acierto");
+}
+{
+  const ops = [{ pnl: 1000, r: 10 }, { pnl: 50, r: 0.5 }, { pnl: -50, r: -0.5 }];
+  const e = Q.analizarEdge(ops).value;
+  ok(e.concentracion.dependeDeUna, "detecta que una sola operacion explica el resultado");
+}
+{
+  const ops = [];
+  for (let i = 0; i < 40; i++) ops.push({ pnl: i % 3 === 0 ? 200 : -100, r: i % 3 === 0 ? 2 : -1 });
+  const e = Q.analizarEdge(ops).value;
+  ok(e.rachas.maxPerdedoras >= 2, "mide la racha perdedora maxima");
+  ok(e.rachas.esperadaPorAzar > 0, "calcula la racha esperada por azar");
+}
+
+/* ═══ curva ═══ */
+grupo("curva y drawdown");
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-15", pnl: 170 }, { fecha: "2026-09-16", pnl: 145 }],
+    { saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000 }).value;
+  eq(c.equity, 25315, "balance 25315");
+  eq(c.pico, 25315, "pico 25315");
+  eq(c.suelo, 24315, "suelo trailing bloqueado 24315");
+  eq(c.colchon, 1000, "colchon 1000");
+}
+eq(Q.sueloPara("estatico", 25000, 26000, 1000), 24000, "suelo estatico no sigue al pico");
+eq(Q.sueloPara("trailing", 25000, 26000, 1000), 25000, "suelo trailing sigue al pico");
+eq(Q.sueloPara("trailing_lock", 25000, 26000, 1000), 25000, "trailing bloqueado se congela en el tamano inicial");
+eq(Q.sueloPara("trailing_lock", 25000, 25500, 1000), 24500, "trailing bloqueado aun no ha llegado al tope");
+eq(Q.sueloPara("trailing", 25000, 25000, 0), null, "drawdown cero devuelve null, no un suelo falso");
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-01", pnl: 800 }, { fecha: "2026-09-02", pnl: -700 }],
+    { saldoInicial: 25000, ddTipo: "trailing", ddMaximo: 1000 }).value;
+  eq(c.pico, 25800, "pico registrado");
+  eq(c.suelo, 24800, "suelo sigue al pico");
+  eq(c.colchon, 300, "colchon tras la caida");
+  eq(c.peorMomento.fecha, "2026-09-02", "identifica el dia de maximo riesgo");
+  eq(c.peorMomento.colchon, 300, "y cuanto colchon quedaba");
+}
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-01", pnl: -1100 }], { saldoInicial: 25000, ddTipo: "estatico", ddMaximo: 1000 }).value;
+  ok(c.quemadaEn && c.quemadaEn.fecha === "2026-09-01", "detecta el dia en que se quemo");
+}
+{ /* intradia vs cierre: la misma sesion puede pasar o quemar segun la base */
+  const ops = [{ fecha: "2026-09-01", orden: 0, pnl: 900 }, { fecha: "2026-09-01", orden: 1, pnl: -900 }];
+  const cierre = Q.construirCurva(ops, { saldoInicial: 25000, ddTipo: "trailing", ddMaximo: 1000, base: "cierre" }).value;
+  const intra = Q.construirCurva(ops, { saldoInicial: 25000, ddTipo: "trailing", ddMaximo: 1000, base: "intradia" }).value;
+  eq(cierre.pico, 25000, "base cierre: el pico intradia no cuenta");
+  eq(intra.pico, 25900, "base intradia: el pico si cuenta");
+  ok(intra.colchon < cierre.colchon, "y el colchon resultante es menor");
+}
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-01", pnl: 100 }], { saldoInicial: 25000, ddMaximo: 1000, movimientos: [{ fecha: "2026-09-01", tipo: "retiro", monto: 500 }] }).value;
+  eq(c.equity, 24600, "los retiros bajan el equity");
+}
+eq(Q.construirCurva([], { saldoInicial: 25000, ddMaximo: 1000 }).value.nDias, 0, "curva vacia no revienta");
+{
+  const c = Q.construirCurva(Array.from({ length: 80 }, (_, i) => ({ fecha: `2026-${String(Math.floor(i / 28) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`, pnl: (i % 4 === 0 ? -150 : 80) })), { saldoInicial: 25000, ddMaximo: 3000 }).value;
+  const m = Q.metricasCurva(c).value;
+  ok(m.fiable, "con 80 dias los ratios se marcan fiables");
+  ok(m.maxDrawdown > 0, "mide el drawdown maximo de la curva");
+  ok(m.sharpe !== null && m.sortino !== null, "Sharpe y Sortino calculados");
+}
+{
+  const m = Q.metricasCurva(Q.construirCurva([{ fecha: "2026-09-01", pnl: 10 }], { saldoInicial: 25000 }).value).value;
+  ok(!m.fiable, "con 1 dia los ratios se marcan NO fiables");
+}
+
+grupo("consistencia");
+{
+  const k = Q.evaluarConsistencia([{ pnl: 170 }, { pnl: 145 }], 50).value;
+  near(k.ratio, 170 / 315, 1e-6, "ratio 53.97%");
+  eq(k.cumple, false, "no cumple con limite 50%");
+  eq(k.totalRequerido, 340, "total requerido = mejor/limite");
+  eq(k.falta, 25, "faltan exactamente $25");
+  eq(k.topeDiaHoy, 315, "el dia mas grande que aun cumpliria");
+}
+eq(Q.evaluarConsistencia([{ pnl: 100 }], 0).value.aplica, false, "sin limite no aplica");
+eq(Q.evaluarConsistencia([], 50).value.hayDatos, false, "sin datos lo dice en vez de inventar");
+{
+  const k = Q.evaluarConsistencia([{ pnl: 100 }, { pnl: 100 }, { pnl: 100 }], 50).value;
+  eq(k.cumple, true, "33% cumple un limite del 50%");
+  eq(k.falta, 0, "no falta nada");
+}
+{
+  const k = Q.evaluarConsistencia([{ pnl: 100 }], 50, { gananciaPrevia: 200, mejorDiaPrevio: 150 }).value;
+  eq(k.total, 300, "suma la ganancia previa escrita a mano");
+  eq(k.mejor, 150, "y respeta el mejor dia previo si es mayor");
+}
+
+/* ═══ supervivencia ═══ */
+grupo("supervivencia");
+{
+  const rs = [2, -1, -1, 2, -1, 3, -1, -1, 1, -1, 2, -1];
+  const a = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 100, saldoInicial: 25000, ddMaximo: 1000, objetivoGanancia: 1500, caminos: 800, semilla: 1 });
+  const b = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 100, saldoInicial: 25000, ddMaximo: 1000, objetivoGanancia: 1500, caminos: 800, semilla: 1 });
+  eq(a.value.pPasar, b.value.pPasar, "misma semilla -> misma probabilidad (reproducible)");
+  near(a.value.pPasar + a.value.pQuemar + a.value.pSinResolver, 1, 1e-6, "las probabilidades suman 1");
+}
+ok(!Q.simularCuenta({ rMultiples: [1, -1], riesgoPorOperacion: 100 }).ok, "con menos de 5 operaciones se niega a simular");
+ok(!Q.simularCuenta({ rMultiples: [1, -1, 1, -1, 1, -1], riesgoPorOperacion: 0 }).ok, "sin valor de 1R se niega a simular");
+{
+  const rs = [2, -1, -1, 2, -1, 3, -1, -1, 1, -1, 2, -1];
+  const chico = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 50, saldoInicial: 25000, ddMaximo: 1000, objetivoGanancia: 1500, caminos: 1200, semilla: 5 }).value;
+  const grande = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 400, saldoInicial: 25000, ddMaximo: 1000, objetivoGanancia: 1500, caminos: 1200, semilla: 5 }).value;
+  ok(grande.pQuemar > chico.pQuemar, "mas riesgo por operacion -> mas probabilidad de quemar");
+}
+{
+  const rs = [2, -1, -1, 2, -1, 3, -1, -1, 1, -1, 2, -1];
+  const sin = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 150, saldoInicial: 25000, ddMaximo: 2000, objetivoGanancia: 1500, caminos: 1200, semilla: 3 }).value;
+  const con = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 150, saldoInicial: 25000, ddMaximo: 2000, objetivoGanancia: 1500, limiteConsistencia: 30, caminos: 1200, semilla: 3 }).value;
+  ok(con.pPasar <= sin.pPasar, "la regla de consistencia nunca facilita pasar la cuenta");
+}
+{
+  const b = Q.barridoDeRiesgo({ rMultiples: [2, -1, -1, 2, -1, 3, -1, -1, 1, -1, 2, -1], riesgoPorOperacion: 100, saldoInicial: 25000, ddMaximo: 1000, objetivoGanancia: 1500, caminos: 400, semilla: 9 }, [0.5, 1, 2]);
+  ok(b.ok && b.value.filas.length === 3 && b.value.optimo, "el barrido devuelve la curva y su optimo");
+}
+
+/* ═══ cumplimiento ═══ */
+grupo("cumplimiento");
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-16", pnl: -450 }], { saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000 }).value;
+  const v = Q.evaluarCumplimiento({ curva: c, hoy: { pnl: -450 }, reglas: { perdidaDiariaMax: 500 }, riesgoPorOperacion: 100 }).value;
+  eq(v.estado, "aviso", "al 90% del limite diario avisa");
+  ok(v.puedeOperar, "pero todavia puede operar");
+}
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-16", pnl: -500 }], { saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000 }).value;
+  const v = Q.evaluarCumplimiento({ curva: c, hoy: { pnl: -500 }, reglas: { perdidaDiariaMax: 500 } }).value;
+  eq(v.estado, "bloqueada", "al tocar el limite diario bloquea");
+  ok(!v.puedeOperar, "y no puede operar");
+}
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-16", pnl: -1000 }], { saldoInicial: 25000, ddTipo: "estatico", ddMaximo: 1000 }).value;
+  const v = Q.evaluarCumplimiento({ curva: c, hoy: { pnl: -1000 }, reglas: {} }).value;
+  eq(v.estado, "quemada", "al tocar el suelo la cuenta esta quemada");
+}
+{
+  const k = Q.evaluarConsistencia([{ pnl: 170 }, { pnl: 145 }], 50).value;
+  const c = Q.construirCurva([{ fecha: "2026-09-15", pnl: 170 }, { fecha: "2026-09-16", pnl: 145 }], { saldoInicial: 25000, ddTipo: "trailing_lock", ddMaximo: 1000 }).value;
+  const v = Q.evaluarCumplimiento({ curva: c, consistencia: k, hoy: { pnl: 145 }, reglas: { perdidaDiariaMax: 500 } }).value;
+  eq(v.estado, "restringida", "incumplir consistencia deja la cuenta restringida");
+  eq(v.puedeOperar, true, "pero NO impide operar: la consistencia limita el cobro, no la operativa");
+}
+{
+  const v = Q.evaluarCumplimiento({ hoy: { pnl: 0, perdidasSeguidas: 3 }, reglas: { maxPerdidasSeguidas: 3 } }).value;
+  eq(v.estado, "bloqueada", "la racha perdedora bloquea");
+}
+{
+  const c = Q.construirCurva([{ fecha: "2026-09-16", pnl: -800 }], { saldoInicial: 25000, ddTipo: "estatico", ddMaximo: 1000 }).value;
+  const m = Q.margenDeDrawdown(c, 100);
+  eq(m.stopsRestantes, 2, "traduce el colchon a numero de stops");
+}
+{
+  const k = Q.evaluarConsistencia([{ pnl: 100 }, { pnl: 100 }], 50).value;
+  const t = Q.topeDeGanancia(k, 1000);
+  ok(t.valor === 200 && /consistencia/.test(t.porque), "manda el menor entre regla dura y consistencia");
+}
+
+/* ═══ adaptador de la app ═══ */
+grupo("adaptador Cabina");
+{
+  const r = Q.calcularTradeApp({ instrument: "MNQ", direction: "long", entry: 20000, exit: 20042.5, stop: 19990, qty: 2 });
+  eq(r.pnlEff, 170, "drop-in de tradeCalc: mismo P&L");
+  eq(r.rReal, 4.25, "mismo R");
+  eq(r.riskUsd, 40, "mismo riesgo");
+  eq(r.multUnknown, false, "instrumento conocido");
+}
+{
+  const r = Q.calcularTradeApp({ instrument: "FOO", direction: "long", entry: 100, exit: 120, stop: 90, target: 130, qty: 1 });
+  eq(r.pnlEff, null, "simbolo desconocido: P&L null, nunca un numero inventado");
+  eq(r.rReal, 2, "pero R SI sobrevive: es un cociente de precios");
+  eq(r.rPlanned, 3, "y el R planeado tambien");
+  eq(r.multUnknown, true, "marcado como desconocido");
+}
+{
+  const r = Q.calcularTradeApp({ instrument: "MNQ", direction: "long", entry: 20000, exit: 20042.5, qty: 2, pnl: 999 });
+  eq(r.pnlEff, 999, "un P&L escrito a mano gana sobre el calculado");
+}
+{
+  const trades = [{ date: "2026-09-15", pnlEff: 170, rReal: 4.25, riskUsd: 40 }, { date: "2026-09-16", pnlEff: 145, rReal: 3.6, riskUsd: 40 }];
+  const rx = Q.radiografiaCuenta(trades, { size: 25000, dd: 1000, ddKind: "trailing_lock", limit: 50 });
+  eq(rx.balance, 25315, "radiografia: balance 25315");
+  eq(rx.pico, 25315, "radiografia: pico 25315");
+  eq(rx.suelo, 24315, "radiografia: suelo 24315");
+  near(rx.consistencia.ratio * 100, 53.97, 0.01, "radiografia: consistencia 53.97%");
+  eq(rx.consistencia.falta, 25, "radiografia: faltan $25");
+  eq(rx.cumplimiento.estado, "restringida", "radiografia: estado restringida");
+  eq(rx.cumplimiento.puedeOperar, true, "radiografia: puede operar");
+}
+
+/* ═══ pureza ═══ */
+grupo("pureza");
+{
+  const t = { instrument: "MNQ", direction: "long", entry: 20000, exit: 20042.5, stop: 19990, qty: 2 };
+  const antes = JSON.stringify(t);
+  Q.calcularTradeApp(t);
+  eq(JSON.stringify(t), antes, "el motor no muta su entrada");
+}
+{
+  const a = Q.valuarOperacion({ simbolo: "MNQ", direccion: "long", entrada: 20000, salida: 20042.5, stop: 19990, contratos: 2 }, {}).value;
+  let lanzo = false;
+  try { a.pnlNeto = 0; if (a.pnlNeto === 0) lanzo = false; else lanzo = true; } catch (e) { lanzo = true; }
+  ok(lanzo, "el resultado es inmutable");
+}
+
+console.log(`\n${"─".repeat(56)}\n${pass} ok · ${fail} fallos`);
+if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("  ✗ " + f)); process.exit(1); }
+
+/* ═══ resolución de Monte Carlo ═══ */
+{
+  const rs = [2, -1, -1, 2, -1, 3, -1, -1, 1, -1, 2, -1];
+  const v = Q.simularCuenta({ rMultiples: rs, riesgoPorOperacion: 100, saldoInicial: 25000, ddMaximo: 1000, objetivoGanancia: 1500, caminos: 2000, semilla: 11 }).value;
+  ok(v.errorEstandar && v.errorEstandar.pasar !== undefined, "la simulacion reporta su propio error estandar");
+  eq(v.resolucion, 0.0005, "y su resolucion: 1/caminos");
+  near(v.pPasar + v.pQuemar + v.pSinResolver, 1, 1e-9, "las tres probabilidades suman exactamente 1");
+}
+console.log(`\n${pass} ok · ${fail} fallos (con resolucion MC)`);
+if (fallos.length) process.exit(1);
