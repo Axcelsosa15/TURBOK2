@@ -271,6 +271,71 @@ la interfaz no. Ahora `futStats` devuelve `null` con `pfRazon`, y la tarjeta
 dice *«sin operaciones perdedoras: indefinido»* en vez de insinuar un sistema
 perfecto que sólo tuvo pocas operaciones.
 
+### Tiempo real, y lo que encontré al medirlo
+
+«Que todos los números se ajusten solos al entrar una operación» sonaba a que
+ya funcionaba: el store abanica a doce renders. Así que en vez de suponerlo, lo
+medí. La verdad de referencia es **lo que muestra la app tras recargar**:
+cualquier valor que difiera entre *actualizado en vivo* y *tras recargar* está
+rancio.
+
+**549 valores numéricos**, seis pestañas, todas las sub-vistas: **cero rancios**.
+La propagación estaba bien. Lo que no estaba bien era otra cosa.
+
+**1. El pico podía BAJAR, y eso congelaba el colchón en «lleno».**
+
+El pico se calculaba sobre los cierres diarios *recalculados*. Con dos
+operaciones el mismo día, el «cierre» de hoy cambia con cada una:
+
+| | balance | pico | suelo | colchón |
+| --- | --- | --- | --- | --- |
+| tras +$120 | 25,120 | 25,120 | 24,120 | $1,000 |
+| tras −$40 | 25,080 | **25,080** ↓ | 24,080 | **$1,000** |
+| tras −$40 | 25,040 | **25,040** ↓ | 24,040 | **$1,000** |
+
+El suelo perseguía al balance hacia abajo, así que **el colchón salía siempre
+lleno: perdieras lo que perdieras, la app decía que te quedaban $1.000**. El
+único número que avisa de que vas a quemar la cuenta estaba clavado en «todo
+bien» por construcción.
+
+El pico es un **trinquete** sobre el recorrido del capital, no un máximo de
+agregados que se recalculan. `QE.construirCurva` ya lo hacía bien, así que
+`acctAgg` ahora se lo pregunta — y de paso desaparece la **tercera** copia de la
+fórmula del suelo. Corregido: pico `25,120` fijo, colchón `$1,000 → $960 → $920`.
+
+Con esto llega un campo nuevo por cuenta, **«El pico se marca…»**: *intradía*
+(operación a operación) o *al cierre del día*. Decide si un máximo que tocaste a
+media sesión cuenta, y es la diferencia entre pasar y quemar una cuenta. El
+valor por defecto es **intradía** porque es lo conservador: nunca te infla el
+colchón.
+
+**2. La calculadora de riesgo dimensionaba sobre un balance viejo.**
+
+`loadAcctIntoRisk` **copiaba** balance y pico a sus campos. Una vez copiados se
+congelaban: la tarjeta decía `$25,080` y la calculadora seguía en `$25,120`, con
+umbral, colchón, ruina y número de contratos calculados sobre el balance
+equivocado. Justo el panel con el que decides el tamaño.
+
+Ahora queda **vinculada**: los cinco campos que derivan de la cuenta se releen
+solos al entrar una operación, y el panel lo dice (`● en vivo desde LucidFlex
+25K`). Si escribes tú uno de esos campos, mandas tú: se desvincula y lo avisa,
+en vez de que el siguiente trade te pise el número.
+
+**3. Un `catch {}` vacío escondía un fallo permanente.**
+
+El abanico era `try { renderHistory(); renderAccounts(); renderRules(); } catch {}`.
+Si el primero lanzaba, los otros dos **no corrían** y nadie se enteraba: números
+clavados, cero errores en consola. Ahora cada render está aislado, un fallo se
+nombra en pantalla, y el primer arranque con el cambio destapó esto:
+
+```
+render «respaldo» falló: ReferenceError: Cannot access 'BK_PARTS' before initialization
+```
+
+`BK_PARTS` se declaraba **después** de la suscripción, y `subscribe()` ejecuta su
+callback de inmediato: el panel de respaldo llevaba fallando en silencio en cada
+arranque. Arreglado moviendo la declaración delante de quien la usa.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia
