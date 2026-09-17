@@ -378,6 +378,71 @@ Memorizar es exactamente como se introducen datos rancios, así que la
 verificación fue el mismo detector de antes: **549 valores, cero rancios**, más
 las rutas de editar, borrar y el vínculo de la calculadora.
 
+### Sacar a la superficie lo que ya estaba construido
+
+Auditoría: qué capacidades del motor **no tienen superficie en la interfaz**.
+Resultó que varias estaban construidas y probadas, y sin usar.
+
+**1. Los avisos del motor no llegaban a la pantalla.** `valuarOperacion` detecta
+precios que el contrato **no puede producir** —un `21000.13` en MNQ, que cotiza
+de 0,25 en 0,25— y stops del lado equivocado. `tradeCalc` los descartaba. Un
+dedazo en el precio de entrada corrompía P&L, R, riesgo y todo lo derivado sin
+un solo aviso.
+
+Ahora el editor los muestra **mientras escribes**, con un botón que corrige al
+valor de la rejilla:
+
+```
+! La entrada 21000.13 no cae en la rejilla de MNQ (tick 0.25).   [usar 21000.25]
+```
+
+No bloquea el guardado: un contrato sintético no tiene rejilla y hay rellenos
+raros de verdad. Pero el dedazo se caza cuando todavía se puede corregir, y no
+dentro de un P&L que ya alimentó el balance, el drawdown y la consistencia.
+
+Dos detalles que costaron su rato: los listeners se enganchan **una sola vez**
+(`#edFields` persiste entre aperturas y re-suscribirse acumulaba uno por
+apertura), y el botón de corrección usa **delegación** — al pulsarlo el input
+pierde el foco, dispara `change`, la zona se repinta y el nodo del botón moría
+entre el `mousedown` y el `click`.
+
+**2. El peor momento de la cuenta se calculaba y se tiraba.** `peorMomento`
+recorría la curva en cada render y se descartaba. Para una cuenta de fondeo es el
+dato con más información que existe: no cuánto ganaste, sino **a cuánto llegaste
+del suelo**. Ahora vive en el módulo de Drawdown y persiste:
+
+```
+LO MÁS CERCA QUE HAS ESTADO   $160   el 10 sep 26 · quedaba 16% del colchón
+```
+
+**3. `metricasCurva` nunca se llamaba.** Caída máxima y su fecha, días bajo el
+agua, factor de recuperación, índice de úlcera, Sharpe y Sortino anualizados:
+todo construido, probado y sin superficie. Ahora es una sección de la
+Radiografía — y el veredicto del motor manda: con 11 días, Sharpe 6,72 y Sortino
+24,02 salen **apagados** y marcados «sin fiabilidad todavía», con la explicación
+de por qué las tres primeras tarjetas sí se leen y esas dos no.
+
+**4. La tabla del diario pintaba todas las filas.** Con 3.000 operaciones,
+~42.000 nodos en el DOM y el segundo coste más grande al guardar un trade.
+Nadie lee la fila 1.800 desplazándose: se pinta un tramo de 250 y se amplía a
+petición. El click ya estaba delegado, así que las filas nuevas funcionan solas.
+
+| operaciones | guardar 1 op (v43) | (ahora) |
+| --- | --- | --- |
+| 250 | 148 ms | **95 ms** |
+| 1.000 | 455 ms | **170 ms** |
+| 3.000 | 1.284 ms | **286 ms** |
+
+**Una mejora que descarté.** Tenía apuntado enrutar la calculadora de riesgo por
+`QE.dimensionar` porque «ignora la rejilla de ticks». Al mirarlo de cerca, su
+parametrización —puntos × $/punto— es **equivalente**: no había bug, y cambiarlo
+habría sido cambio por cambio.
+
+Verificación: 560 valores comparados en vivo contra tras recargar, cero rancios.
+18 archivos de prueba, 0 errores de página. Diff contra la versión anterior:
+**10 archivos, todos idénticos** — las cuatro mejoras son puramente aditivas y
+ningún número existente cambió.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia

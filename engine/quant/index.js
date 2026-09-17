@@ -86,7 +86,9 @@ export function calcularTradeApp(t, opciones) {
     eficiencia: v.eficiencia,
     multUnknown: false,
     calcError: null,
-    avisos: r.warnings.map(w => w.codigo || w.code),
+    /* Los avisos viajan enteros, no solo su codigo: la interfaz necesita poder
+       decir QUE precio esta mal y a que valor cae en la rejilla del contrato. */
+    avisos: r.warnings.map(w => ({ code: w.code, mensaje: w.message, detalle: w.detail })),
   };
 }
 

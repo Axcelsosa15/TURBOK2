@@ -548,3 +548,24 @@ grupo("una sola definición del suelo");
 
 console.log(`\n${pass} ok · ${fail} fallos (con negativos)`);
 if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("  ✗ " + f)); process.exit(1); }
+
+grupo("avisos que la interfaz puede mostrar");
+{
+  const r = Q.calcularTradeApp({ instrument: "MNQ", direction: "long", entry: 21000.13, exit: 21030, stop: 20990, qty: 2 });
+  ok(r.avisos.length > 0, "un precio fuera de rejilla genera aviso");
+  const a = r.avisos.find(x => x.code === "PRECIO_FUERA_DE_REJILLA");
+  ok(!!a, "con su código");
+  ok(/21000\.13/.test(a.mensaje), "el mensaje nombra el precio exacto");
+  eq(a.detalle.campo, "entrada", "y el campo afectado");
+  eq(a.detalle.ajustado, 21000.25, "y a qué valor de la rejilla cae");
+}
+{
+  const r = Q.calcularTradeApp({ instrument: "MNQ", direction: "long", entry: 21000, exit: 21030, stop: 21010, qty: 1 });
+  ok(r.avisos.some(x => x.code === "STOP_INCOHERENTE"), "un stop al otro lado también avisa");
+}
+{
+  const r = Q.calcularTradeApp({ instrument: "MNQ", direction: "long", entry: 21000, exit: 21030, stop: 20990, qty: 2 });
+  eq(r.avisos.length, 0, "una operación limpia no genera ruido");
+}
+console.log(`\n${pass} ok · ${fail} fallos (avisos)`);
+if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("  ✗ " + f)); process.exit(1); }

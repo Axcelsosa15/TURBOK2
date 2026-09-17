@@ -178,6 +178,21 @@
   .rlink button { background: none; border: 0; padding: 0; font: inherit; color: var(--muted);
                   text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
   .rlink button:hover { color: var(--text); }
+  .peorm { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px;
+           border-top: 1px dashed var(--line); font-size: 12px; color: var(--dim); }
+  .peorm .pk { text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
+  .peorm b { font: 600 16px/1 "IBM Plex Mono", monospace; color: var(--muted); }
+  .peorm.warn b { color: var(--warn); } .peorm.bad b { color: var(--bad); }
+  .peorm .pd { margin-left: auto; }
+  /* avisos del motor dentro del editor: informan, no bloquean */
+  #edAvisos { margin: 0 0 4px; display: grid; gap: 6px; }
+  .eav { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--warn); border-radius: 4px;
+         padding: 8px 11px; font-size: 13px; line-height: 1.45; color: var(--text); background: rgba(0,0,0,.16); }
+  .eav i { color: var(--warn); font-style: normal; font-weight: 700; flex: none; }
+  .eav b { color: var(--warn); font-weight: 600; }
+  .eav button { margin-left: auto; flex: none; background: none; border: 1px solid var(--line-strong);
+                border-radius: 3px; padding: 2px 8px; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .eav button:hover { color: var(--text); border-color: var(--accent); }
   .qhead h3 { font: 700 13px/1 "Archivo", sans-serif; letter-spacing: .07em; text-transform: uppercase; color: var(--text); margin: 0; }
   .qhead .qsub { font-size: 12px; color: var(--dim); }
   @media (max-width: 560px) { .qeg { grid-template-columns: 1fr 1fr; } .qec .qv { font-size: 18px; } }
@@ -1471,6 +1486,7 @@
   <div class="ed">
     <header><h3 id="edTitle">Editar</h3><button type="button" class="icon" id="edClose" aria-label="Cerrar">×</button></header>
     <div class="fields" id="edFields"></div>
+    <div id="edAvisos" hidden></div>
     <footer>
       <button type="button" class="btn danger" id="edDelete" hidden>Borrar</button>
       <span class="sp"></span>
@@ -1831,10 +1847,61 @@
       return `<div class="fld${w}"><label class="lab" for="ef_${f.key}">${esc(f.label)}</label>${ctl}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`;
     }).join("");
     $("edDelete").hidden = !cfg.onDelete;
+    const za = $("edAvisos"); if (za) { za.hidden = true; za.innerHTML = ""; }
     if (cfg.after) { try { cfg.after($("edFields"), cfg.values); } catch (e) { } }
+    try { edRevisarPrecios(); } catch (e) { }
     ov.classList.add("open");
     const first = $("edFields").querySelector("input,select,textarea"); if (first) first.focus();
   }
+  /* Revisión en vivo del precio mientras escribes. No bloquea el guardado —un
+     contrato sintético no tiene rejilla y hay rellenos raros de verdad— pero un
+     dedazo se caza aquí, que es cuando todavía se puede corregir, y no dentro de
+     un P&L que ya alimentó el balance, el drawdown y la consistencia. */
+  function edRevisarPrecios() {
+    const zona = $("edAvisos"); if (!zona) return;
+    const g = k => { const el = $("ef_" + k); return el ? el.value : null; };
+    if (!$("ef_instrument") || !$("ef_entry")) { zona.hidden = true; zona.innerHTML = ""; return; }
+    const r = QE.calcularTradeApp({
+      instrument: g("instrument"), direction: g("direction") || "long",
+      entry: g("entry"), exit: g("exit") || null, stop: g("stop") || null,
+      target: g("target") || null, qty: g("qty") || 1,
+    });
+    const av = (r.avisos || []).filter(a => a.code === "PRECIO_FUERA_DE_REJILLA" || a.code === "STOP_INCOHERENTE" || a.code === "OBJETIVO_INCOHERENTE");
+    if (!av.length) { zona.hidden = true; zona.innerHTML = ""; return; }
+    zona.hidden = false;
+    const html = av.map(a => {
+      const d = a.detalle || {};
+      const arregla = a.code === "PRECIO_FUERA_DE_REJILLA" && d.campo && d.ajustado != null;
+      return `<div class="eav"><i>!</i><span>${esc(a.mensaje)}</span>${arregla
+        ? `<button type="button" data-fix="${esc(d.campo)}" data-val="${d.ajustado}">usar ${d.ajustado}</button>` : ""}</div>`;
+    }).join("");
+    /* Repintar sólo si el contenido cambió. Al pulsar el botón, el input pierde
+       el foco y dispara `change`, que vuelve a entrar aquí: si eso reemplaza el
+       HTML, el nodo del botón muere entre el mousedown y el click y el arreglo
+       nunca se aplica. Con esto el nodo sobrevive; la delegación de abajo lo
+       cubre igual si aun así se reemplaza. */
+    if (zona.innerHTML !== html) zona.innerHTML = html;
+  }
+
+  /* Se engancha una sola vez: #edFields persiste entre aperturas del editor y
+     re-suscribirse en cada openEditor iba acumulando un listener por apertura. */
+  (function () {
+    const fe = $("edFields"); if (!fe) return;
+    fe.addEventListener("input", () => { try { edRevisarPrecios(); } catch (e) { } });
+    fe.addEventListener("change", () => { try { edRevisarPrecios(); } catch (e) { } });
+    /* Delegado en el contenedor, no en cada botón: el contenido se repinta y un
+       listener por nodo se pierde con él. */
+    const za = $("edAvisos");
+    if (za) za.addEventListener("click", e => {
+      const b = e.target.closest("button[data-fix]"); if (!b) return;
+      const campo = b.dataset.fix === "entrada" ? "entry" : b.dataset.fix === "salida" ? "exit" : "stop";
+      const el = $("ef_" + campo); if (!el) return;
+      el.value = b.dataset.val;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      try { edRevisarPrecios(); } catch (x) { }
+    });
+  })();
+
   function readEditor() {
     const out = {};
     for (const f of edCfg.fields) {
@@ -2281,6 +2348,28 @@
     if (c.over && out.value != null) out.why = "la cuenta ya incumple la consistencia";
     return out;
   }
+  /* El momento en que estuviste MÁS CERCA de quemar la cuenta. El motor lo
+     calcula recorriendo la curva y lo devolvía desde hace días; hasta ahora se
+     tiraba en cada render. Para una cuenta de fondeo es el dato con más
+     información de todos: no cuánto ganaste, sino a cuánto llegaste del suelo. */
+  function peorMomentoHtml(g, d) {
+    const pm = g && g.peorMomento;
+    if (!pm || !d || !d.ok || pm.colchon == null) return "";
+    const hoy = Math.abs((pm.colchon || 0) - (d.buffer || 0)) < 0.005;
+    const frac = d.max > 0 ? Math.max(0, Math.min(1, pm.colchon / d.max)) : 0;
+    const cls = pm.colchon <= 0 ? "bad" : frac < 0.25 ? "warn" : "dim";
+    return `<div class="peorm ${cls}">
+      <span class="pk">Lo más cerca que has estado</span>
+      <b>${money(pm.colchon)}</b>
+      <span class="pd">${hoy ? "es ahora mismo" : `el ${esc(fmtFecha(pm.fecha))} · quedaba ${pct(frac)} del colchón`}</span>
+    </div>`;
+  }
+  function fmtFecha(iso) {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(iso || "");
+    const MES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+    return `${Number(m[3])} ${MES[Number(m[2]) - 1] || ""} ${m[1].slice(2)}`;
+  }
   function kpi(k, v, cls, n) { return `<div><div class="k">${esc(k)}</div><div class="v ${cls || ""}">${v}</div>${n ? `<div class="n">${n}</div>` : ""}</div>`; }
   function acctAggHtml(c) {
     const g = c.agg;
@@ -2527,6 +2616,7 @@
         <div><span>Suelo de la cuenta</span><b>${d.ok ? money(d.floor) : "—"}</b></div>
         <div class="hi"><span>Colchón que queda</span><b class="${!d.ok ? "" : d.buffer <= 0 ? "bad" : "good"}">${d.ok ? money(d.buffer) : "—"}</b></div>
       </div>
+      ${peorMomentoHtml(g, d)}
       <p class="note">${esc(d.ok ? ddNote(a) : "Pon tamaño y drawdown máximo en los ajustes de la cuenta.")}</p>
     </div>`;
 
@@ -2929,6 +3019,12 @@
      Fuente modular y 190 pruebas: repo TURBOK2, engine/quant/.
      Este bloque está GENERADO por engine/quant/bundle.mjs — no editarlo a mano. */
 
+  /* =========================================================================
+     QuantEngine 2.0.0 — bundle de un solo ambito
+     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
+     en engine/quant/ y volver a ejecutar el empaquetador.
+     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
+     ========================================================================= */
   /* =========================================================================
      QuantEngine 2.0.0 — bundle de un solo ambito
      GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
@@ -4591,7 +4687,9 @@
       eficiencia: v.eficiencia,
       multUnknown: false,
       calcError: null,
-      avisos: r.warnings.map(w => w.codigo || w.code),
+      /* Los avisos viajan enteros, no solo su codigo: la interfaz necesita poder
+         decir QUE precio esta mal y a que valor cae en la rejilla del contrato. */
+      avisos: r.warnings.map(w => ({ code: w.code, mensaje: w.message, detalle: w.detail })),
     };
   }
 
@@ -4940,6 +5038,11 @@
     t.multUnknown = r.multUnknown;
     t.calcError = r.calcError;
     t.ticks = r.ticks;
+    /* El motor detecta precios que el contrato no puede producir (un 21000.13 en
+       MNQ, que cotiza de 0,25 en 0,25) y stops del lado equivocado. Antes se
+       tiraban aquí: un dedazo en el precio de entrada corrompía P&L, R, riesgo y
+       todo lo derivado, sin un solo aviso. */
+    t.avisos = r.avisos && r.avisos.length ? r.avisos : null;
     return t;
   }
   /* =============================== CAPTURAS =============================== */
@@ -5234,6 +5337,7 @@
      pierde de vista; "+$120" frente a "-$120" no se confunde nunca. */
   function qeM(x) { return x == null ? "—" : (x > 0 ? "+" : "") + money(x); }
   function qeCls(x) { return x == null ? "" : x > 0 ? "good" : x < 0 ? "bad" : "dim"; }
+  function roundMD(x) { return x == null ? null : Math.round(x * 100) / 100; }
   function qeP(x) { return x == null ? "—" : (x * 100).toFixed(1) + "%"; }
   /* Una probabilidad de Monte Carlo no se imprime como un hecho. Con 2.000
      caminos la resolución es 0,05%: escribir "100,0%" afirma una certeza que
@@ -5348,6 +5452,41 @@
     }
     if (e.significancia && !e.significancia.significativo && e.n >= QE.UMBRALES.tendencia) {
       out.push(`<div class="qnote">Prueba de que la media sea distinta de cero: p = <b>${e.significancia.p.toFixed(3)}</b>. Por encima de 0.05 este resultado es compatible con no tener ninguna ventaja.</div>`);
+    }
+
+    /* ---------- riesgo de la curva ----------
+       metricasCurva llevaba construido y probado sin que nadie lo llamara.
+       Ninguna de estas cifras existía en la app. Van con su veredicto: el propio
+       motor se niega a que se interpreten por debajo de 60 días, porque un
+       Sharpe anualizado sobre ocho sesiones no significa nada. */
+    const curvaOps = cerradas.slice().reverse()
+      .map((t, i) => ({ fecha: t.date, orden: i, pnl: t.pnlEff }));
+    const cv = curvaOps.length ? QE.construirCurva(curvaOps, { saldoInicial: 25000, ddMaximo: null }).value : null;
+    const mt = cv ? QE.metricasCurva(cv).value : null;
+    if (mt && mt.n) {
+      out.push(`<div class="qhead"><h3>Riesgo de la curva</h3><span class="qsub">${plu(mt.n, "día operado", "días operados")} · ${mt.diasVerdes} verdes / ${mt.diasRojos} rojos</span></div>`);
+      out.push(`<div class="qeg">`);
+      out.push(qeCard("Caída máxima", qeM(-mt.maxDrawdown),
+        mt.maxDrawdown > 0 ? "bad" : "dim",
+        mt.maxDrawdownFecha ? `tocó fondo el ${esc(fmtFecha(mt.maxDrawdownFecha))} · ${(mt.maxDrawdownPct * 100).toFixed(1)}% de la curva` : "sin caídas"));
+      out.push(qeCard("Días bajo el agua", mt.diasEnDrawdown,
+        mt.diasEnDrawdown > mt.n * 0.5 ? "warn" : "",
+        "la racha más larga sin superar un máximo anterior"));
+      out.push(qeCard("Factor de recuperación", mt.factorRecuperacion == null ? "—" : mt.factorRecuperacion.toFixed(2),
+        mt.factorRecuperacion == null ? "" : mt.factorRecuperacion >= 2 ? "good" : mt.factorRecuperacion >= 1 ? "warn" : "bad",
+        "ganancia neta ÷ peor caída. Por debajo de 1 ganas menos de lo que llegaste a perder"));
+      out.push(qeCard("Índice de úlcera", mt.ulcer == null ? "—" : (mt.ulcer * 100).toFixed(2) + "%",
+        mt.ulcer == null ? "" : mt.ulcer < 0.02 ? "good" : mt.ulcer < 0.05 ? "warn" : "bad",
+        "profundidad y duración del sufrimiento, no sólo el peor punto"));
+      out.push(qeCard("Sharpe (anualizado)", mt.sharpe == null ? "—" : mt.sharpe.toFixed(2),
+        !mt.fiable ? "dim" : mt.sharpe == null ? "" : mt.sharpe >= 1.5 ? "good" : mt.sharpe >= 0.5 ? "warn" : "bad",
+        mt.fiable ? "retorno por unidad de volatilidad diaria" : "sin fiabilidad todavía"));
+      out.push(qeCard("Sortino (anualizado)", mt.sortino == null ? "—" : mt.sortino.toFixed(2),
+        !mt.fiable ? "dim" : mt.sortino == null ? "" : mt.sortino >= 2 ? "good" : mt.sortino >= 1 ? "warn" : "bad",
+        mt.fiable ? "como Sharpe, pero sólo castiga la volatilidad a la baja" : "sin fiabilidad todavía"));
+      out.push(`</div>`);
+      if (!mt.fiable) out.push(`<div class="qnote warn">${esc(mt.razon)} Las tres primeras tarjetas sí se leen con pocos días: describen lo que ya pasó. Sharpe, Sortino y Calmar extrapolan a un año, y con esta muestra esa extrapolación es una invención.</div>`);
+      out.push(`<div class="qnote">Mejor día <b>${qeM(mt.mejorDia)}</b> · peor día <b>${qeM(mt.peorDia)}</b> · media diaria <b>${qeM(mt.mediaDiaria)}</b> con una desviación de <b>${money(mt.desvDiaria)}</b>. Un día normal cae, dos de cada tres veces, entre ${qeM(roundMD(mt.mediaDiaria - mt.desvDiaria))} y ${qeM(roundMD(mt.mediaDiaria + mt.desvDiaria))}.</div>`);
     }
 
     /* ---------- supervivencia ---------- */
@@ -5690,15 +5829,29 @@
     const x = sesById(id);
     return `<span class="sestag ${x.cls}" title="${esc(x.label)}">${esc(x.short)}</span>`;
   }
+  /* La tabla pintaba TODAS las filas. Con 3.000 operaciones son ~42.000 nodos en
+     el DOM, y era el segundo coste más grande al guardar un trade (313 ms). Nadie
+     lee la fila 1.800 desplazándose: se pinta un tramo y se amplía a petición.
+     El click está delegado en #jrTable, así que las filas nuevas funcionan solas. */
+  const JR_TRAMO = 250;
+  let jrTope = JR_TRAMO;
   function renderJournalTable(list) {
-    $("jrMeta").textContent = list.length ? `${plu(list.length, "registro", "registros")}` : "";
+    const total = list.length;
+    if (jrTope > JR_TRAMO && jrTope > total) jrTope = Math.max(JR_TRAMO, total);
+    const visibles = total > jrTope ? list.slice(0, jrTope) : list;
+    $("jrMeta").textContent = total
+      ? (total > visibles.length ? `${plu(visibles.length, "registro", "registros")} de ${total}` : `${plu(total, "registro", "registros")}`)
+      : "";
     const wrap = $("jrTable");
+    list = visibles;
     if (!list.length) { wrap.innerHTML = `<p class="empty">Sin operaciones de futuros en este rango. La primera fila es una entrada real con entrada, stop y salida — no una idea.</p>`; return; }
     const pbName = id => { const p = coll("playbooks").get(id); return p ? p.name : ""; };
     wrap.innerHTML = `<table class="t"><thead><tr><th>Fecha</th><th>Hora</th><th>Sesión</th><th>Cuenta</th><th>Instr.</th><th>Setup</th><th>Dir</th><th class="r">Ctos</th><th class="r">Entrada</th><th class="r">Stop</th><th class="r">Salida</th><th class="r">R plan</th><th class="r">R</th><th class="r">P&amp;L</th><th>Cal.</th><th>Prot.</th><th>Img</th><th>Etiquetas</th><th>Lección</th><th></th></tr></thead><tbody>${list.map(t => {
       const proto = [t.cStruct, t.cPull, t.cWindow, t.cSize].filter(Boolean).length;
       return `<tr data-id="${t.id}"><td><span class="dim">${dowOf(t.date)}</span> ${(t.date || "").slice(5)}</td><td>${esc(t.time ? h12(t.time) : "—")}</td><td>${sesTag(t)}</td><td class="ui">${esc(acctLabel(t.accountId)) || '<span class="dim">—</span>'}</td><td>${esc(t.instrument)}</td><td class="ui">${esc(pbName(t.setupId)) || '<span class="dim">—</span>'}</td><td class="${t.direction === "short" ? "neg" : "pos"}">${t.direction === "short" ? "S" : "L"}</td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.entry ?? "—"}</td><td class="r">${t.stop ?? "—"}</td><td class="r">${t.exit ?? `<button type="button" class="hitstop" data-act="hitstop" title="Marcar que tocó el stop"${t.stop == null ? " disabled" : ""}>abierta${t.stop != null ? " · tocó el stop" : ""}</button>`}</td><td class="r dim">${t.rPlanned == null ? "—" : t.rPlanned.toFixed(1)}</td><td class="r ${t.rReal > 0 ? "pos" : t.rReal < 0 ? "neg" : ""}">${t.rReal == null ? "—" : (t.rReal >= 0 ? "+" : "") + t.rReal.toFixed(2)}</td><td class="r ${t.pnlEff > 0 ? "pos" : t.pnlEff < 0 ? "neg" : ""}">${t.pnlEff == null ? (t.multUnknown ? `<span class="chip warn" title="No hay valor de punto para ${esc(String(t.instrument || ""))}. Escribe el resultado a mano en «Resultado $» o usa un instrumento conocido.">falta $/punto</span>` : "—") : money(t.pnlEff)}</td><td>${esc(t.quality || "")}</td><td class="${proto === 4 ? "pos" : proto <= 2 ? "neg" : ""}">${proto}/4</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.tags || "")}</td><td class="notes">${esc(t.lesson || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`;
-    }).join("")}</tbody></table>`;
+    }).join("")}</tbody></table>${total > visibles.length
+      ? `<div style="padding:12px 0;text-align:center"><button type="button" class="btn ghost" id="jrMas">Mostrar ${Math.min(JR_TRAMO, total - visibles.length)} más · quedan ${total - visibles.length}</button></div>`
+      : ""}`;
   }
   /* Una operación con stop pero sin salida sigue ABIERTA: el stop es un plan, no
      un hecho. Cuando de verdad lo toca, esto rellena la salida con el stop y el
@@ -5714,6 +5867,7 @@
     flash(c.pnlEff == null ? "cerrada en el stop" : `cerrada en el stop: ${money(c.pnlEff)}`);
   }
   $("jrTable").addEventListener("click", e => {
+    if (e.target.closest("#jrMas")) { jrTope += JR_TRAMO; renderFutures(); return; }
     if (e.target.classList.contains("thumb")) { openLightbox(e.target.src, e.target.alt); return; }
     const hs = e.target.closest("button[data-act='hitstop']");
     if (hs) { hitStop(hs.closest("tr").dataset.id); return; }
