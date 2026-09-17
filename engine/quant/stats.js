@@ -87,19 +87,32 @@ export function bootstrapCI(xs, estadistico, opciones) {
   const v = limpiar(xs), n = v.length;
   const cfg = Object.assign({ repeticiones: 2000, confianza: 0.95, semilla: 20260917 }, opciones || {});
   if (n < 5) return null;
-  const f = typeof estadistico === "function" ? estadistico : (a => momentos(a).media);
+  const f = typeof estadistico === "function" ? estadistico : null;
   const next = rng(cfg.semilla);
   const reps = toPosInt(cfg.repeticiones) ?? 2000;
   const muestras = new Array(reps);
-  const buf = new Array(n);
+  /* El coste del bootstrap es reps x n. La version anterior llamaba a
+     momentos(buf) en cada repeticion, y momentos hace limpiar(), que ASIGNA UN
+     ARRAY NUEVO: 2.000 arrays de n elementos por llamada. Con n=1500 eso son
+     3 millones de elementos copiados para calcular 2.000 medias.
+     Cuando el estadistico es la media (el caso por defecto) se acumula en linea,
+     sin buffer y sin asignar nada. Misma secuencia del PRNG, mismo resultado
+     bit a bit: esto no cambia ni un decimal, solo deja de tirar memoria. */
+  const buf = f ? new Array(n) : null;
   for (let b = 0; b < reps; b++) {
-    for (let i = 0; i < n; i++) buf[i] = v[randInt(next, n)];
-    muestras[b] = f(buf);
+    if (f) {
+      for (let i = 0; i < n; i++) buf[i] = v[randInt(next, n)];
+      muestras[b] = f(buf);
+    } else {
+      let s = 0;
+      for (let i = 0; i < n; i++) s += v[randInt(next, n)];
+      muestras[b] = s / n;
+    }
   }
   const alfa = (1 - cfg.confianza) / 2;
   return {
     n, repeticiones: reps,
-    punto: roundTo(f(v), 6),
+    punto: roundTo(f ? f(v) : momentos(v).media, 6),
     bajo: roundTo(cuantil(muestras, alfa), 6),
     alto: roundTo(cuantil(muestras, 1 - alfa), 6),
     metodo: "bootstrap percentil",

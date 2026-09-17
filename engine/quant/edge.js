@@ -50,8 +50,13 @@ export function analizarEdge(operaciones, opciones) {
   /* --- esperanza --- */
   const espUSD = ciMedia(pnls, cfg.confianza);
   const espR = rs.length >= 2 ? ciMedia(rs, cfg.confianza) : null;
-  const bootR = rs.length >= 5 ? bootstrapCI(rs, a => momentos(a).media, { confianza: cfg.confianza, semilla: cfg.semilla }) : null;
-  const bootUSD = bootstrapCI(pnls, a => momentos(a).media, { confianza: cfg.confianza, semilla: cfg.semilla });
+  /* Sin pasar funcion: bootstrapCI usa su camino de media sin asignaciones.
+     Ademas las repeticiones se escalan con n para que el trabajo total quede
+     acotado: con n grande el intervalo ya es estrecho y 2.000 repeticiones solo
+     compran decimales que nadie mira, a cambio de bloquear la interfaz. */
+  const repsPara = k => k <= 400 ? 2000 : Math.max(500, Math.round(800000 / k));
+  const bootR = rs.length >= 5 ? bootstrapCI(rs, null, { confianza: cfg.confianza, semilla: cfg.semilla, repeticiones: repsPara(rs.length) }) : null;
+  const bootUSD = bootstrapCI(pnls, null, { confianza: cfg.confianza, semilla: cfg.semilla, repeticiones: repsPara(pnls.length) });
 
   const avgG = gan.length ? sumG / gan.length : null;
   const avgP = per.length ? Math.abs(sumP) / per.length : null;

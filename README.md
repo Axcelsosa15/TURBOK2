@@ -336,6 +336,48 @@ render «respaldo» falló: ReferenceError: Cannot access 'BK_PARTS' before init
 callback de inmediato: el panel de respaldo llevaba fallando en silencio en cada
 arranque. Arreglado moviendo la declaración delante de quien la usa.
 
+### Lo que costaba el tiempo real
+
+Después de arreglar el pico y el vínculo medí lo que nunca había medido: **qué
+cuesta guardar una operación cuando el journal ya pesa.** Un intradiario de 3 a
+5 operaciones al día llega a 2.500 en dos años, así que no es hipotético.
+
+| operaciones | guardar 1 op (antes) | (después) |
+| --- | --- | --- |
+| 250 | 127 ms | **70 ms** |
+| 1.000 | 360 ms | **159 ms** |
+| 3.000 | 982 ms | **354 ms** |
+
+Casi un segundo de retraso al registrar un trade con 3.000 en el histórico. Lo
+primero fue descartar que lo hubiera roto yo con el trinquete del pico: medido
+antes y después, **la diferencia está dentro del ruido** (978 → 967 ms). Era
+previo. El perfil por render lo señaló sin ambigüedad: **93% en `renderFutures`**,
+y dentro de él, `renderQE` — mi propio panel.
+
+**El bootstrap asignaba un array por repetición.** `bootstrapCI` llamaba a
+`momentos(buf)` en cada una de las 2.000 repeticiones, y `momentos` hace
+`limpiar()`, que **asigna un array nuevo**. Con n=1500: 3 millones de elementos
+copiados para calcular 2.000 medias, en cada render. Cuando el estadístico es la
+media —el caso por defecto— ahora se acumula en línea, sin buffer. Misma
+secuencia del PRNG, **mismo resultado bit a bit**: no cambia ni un decimal.
+`analizarEdge` con 1.500 operaciones pasó de dominar el render a **36 ms**.
+
+Además las repeticiones se escalan con `n` (`n ≤ 400` mantiene 2.000; por encima
+se acota el trabajo total). Con muestras grandes el intervalo ya es estrecho y
+2.000 repeticiones sólo compran decimales que nadie mira, a cambio de bloquear
+la interfaz.
+
+**`tradesOf` recalculaba lo mismo varias veces por render.** Filtra, valora y
+**ordena** todas las operaciones; un solo render lo llamaba desde los tiles, los
+filtros, las cuentas, el panel y los gráficos, repitiendo el mismo `O(n log n)`
+sobre datos idénticos. Ahora se memoriza contra un contador de revisión
+(`coll.rev`, que sube en cada `emit()`), así que si nada cambió no se recalcula
+nada.
+
+Memorizar es exactamente como se introducen datos rancios, así que la
+verificación fue el mismo detector de antes: **549 valores, cero rancios**, más
+las rutas de editar, borrar y el vínculo de la calculadora.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia
