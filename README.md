@@ -580,6 +580,43 @@ rancios, y **los 13 diffs idénticos** — el arreglo sólo toca la ruta de
 posiciones duplicadas, que ninguna prueba anterior ejercitaba. Por eso existe
 ahora `dup.mjs`.
 
+### El diagrama, hecho ejecutable
+
+Un diagrama de arquitectura es una afirmación, y una afirmación se comprueba.
+`test/capa.mjs` mete tres operaciones y lee **las mismas siete magnitudes desde
+CABINA y desde FUTUROS**, que las llaman distinto («Ganancia total» vs «P&L
+NETO», «Suelo de la cuenta» vs «umbral»):
+
+```
+  magnitud            CABINA      FUTUROS
+  ✅ ganancia total         140         140
+  ✅ balance              25140       25140
+  ✅ colchón               1000        1000
+  ✅ suelo / umbral       24140       24140
+  ✅ mejor día              120         120
+  ✅ consistencia            86          86
+  ✅ P&L (tiles)            140         140
+
+  7/7 idénticas: las dos pestañas leen del mismo cálculo.
+```
+
+Y el escaneo estático lo respalda: **una sola definición** de `tradeCalc`,
+`acctAgg`, `consistency`, `futStats`, `tradesOf`, `evaluateAccountRules`,
+`posCalc`, `investStats` y `dayRuleCheck`, y **cero** sitios recalculando P&L a
+mano. No siempre fue así — esta misma sesión eliminó la tabla `MULT` duplicada,
+`riskThreshold`, `rngOf` y un segundo Monte Carlo.
+
+**Las pruebas de la app vivían en un directorio efímero.** Si el contenedor
+moría, se perdían — y con ellas la única forma de re-verificar que la
+arquitectura sigue siendo cierta. Ahora están en `test/` (36 archivos), con
+`test/build-preview.mjs` para reconstruir el preview desde `index.html`.
+
+Las dos más valiosas no comparan contra un valor escrito a mano: comparan **la
+app contra sí misma**. `vivo.mjs` compara *en vivo* contra *tras recargar*;
+`capa.mjs` compara *una pestaña* contra *otra*. Eso encuentra cosas que un valor
+esperado no encuentra, porque no depende de que a quien escribe la prueba se le
+ocurra el caso.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia
