@@ -193,6 +193,14 @@
   .eav button { margin-left: auto; flex: none; background: none; border: 1px solid var(--line-strong);
                 border-radius: 3px; padding: 2px 8px; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; }
   .eav button:hover { color: var(--text); border-color: var(--accent); }
+  .eav.venta { border-color: var(--accent); align-items: flex-start; }
+  .eav.venta i { color: var(--accent); font-size: 18px; line-height: 1; }
+  .eav.venta b { color: var(--accent); }
+  .tocar { margin-top: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; }
+  .tocar .th { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .tocar .th h4 { margin: 0; font: 700 12px/1 "Archivo", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .tocar .big { font: 600 24px/1.1 "IBM Plex Mono", monospace; margin: 6px 0 2px; }
+  .tocar p { margin: 6px 0 0; font-size: 12.5px; color: var(--dim); line-height: 1.5; }
   .qhead h3 { font: 700 13px/1 "Archivo", sans-serif; letter-spacing: .07em; text-transform: uppercase; color: var(--text); margin: 0; }
   .qhead .qsub { font-size: 12px; color: var(--dim); }
   @media (max-width: 560px) { .qeg { grid-template-columns: 1fr 1fr; } .qec .qv { font-size: 18px; } }
@@ -1345,6 +1353,7 @@
   <section class="panel" style="margin-bottom:24px">
     <header><h2>Cartera · todos los mercados</h2><span class="meta">separada de futuros · precios los escribes tú</span></header>
     <div class="tiles five" id="ivTiles"></div>
+    <div id="ivTocar" hidden></div>
   </section>
   <div class="grid eq" style="margin-bottom:24px">
     <section class="panel">
@@ -1857,8 +1866,31 @@
      contrato sintético no tiene rejilla y hay rellenos raros de verdad— pero un
      dedazo se caza aquí, que es cuando todavía se puede corregir, y no dentro de
      un P&L que ya alimentó el balance, el drawdown y la consistencia. */
+  /* ═════════════ FRICCIÓN AL VENDER ═════════════
+     En futuros el gate frena las ENTRADAS fuera de protocolo. Aquí el error caro
+     es vender por miedo, así que la fricción va en el otro lado: al elegir
+     «venta», el plan de salida que TÚ escribiste aparece en la cara. No bloquea
+     —a veces vender es correcto— pero obliga a leerlo antes. */
+  function edRevisarVenta() {
+    const zona = $("edAvisos"); if (!zona) return false;
+    const op = $("ef_op"); if (!op || op.value !== "venta") return false;
+    const activo = String(($("ef_asset") || {}).value || "").trim().toUpperCase();
+    if (!activo) return false;
+    const pos = coll("positions").items.find(x => String(x.asset || "").trim().toUpperCase() === activo);
+    const plan = pos && String(pos.exitPlan || "").trim();
+    const tesis = pos && String(pos.thesis || "").trim();
+    if (!plan && !tesis) return false;
+    zona.hidden = false;
+    const html = `<div class="eav venta"><i>❝</i><span>${plan
+      ? `Tu plan de salida para <b>${esc(activo)}</b>: «${esc(plan)}»`
+      : `Tu tesis para <b>${esc(activo)}</b>: «${esc(tesis)}»`}<br><span class="dim">Lo escribiste cuando no sabías el resultado. Si sigue siendo válido, esta venta no toca.</span></span></div>`;
+    if (zona.innerHTML !== html) zona.innerHTML = html;
+    return true;
+  }
+
   function edRevisarPrecios() {
     const zona = $("edAvisos"); if (!zona) return;
+    if (edRevisarVenta()) return;
     const g = k => { const el = $("ef_" + k); return el ? el.value : null; };
     if (!$("ef_instrument") || !$("ef_entry")) { zona.hidden = true; zona.innerHTML = ""; return; }
     const r = QE.calcularTradeApp({
@@ -3019,6 +3051,12 @@
      Fuente modular y 190 pruebas: repo TURBOK2, engine/quant/.
      Este bloque está GENERADO por engine/quant/bundle.mjs — no editarlo a mano. */
 
+  /* =========================================================================
+     QuantEngine 2.0.0 — bundle de un solo ambito
+     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
+     en engine/quant/ y volver a ejecutar el empaquetador.
+     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
+     ========================================================================= */
   /* =========================================================================
      QuantEngine 2.0.0 — bundle de un solo ambito
      GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
@@ -4786,6 +4824,192 @@
     });
   }
 
+  /* ─── portfolio.js ─────────────────────────────────────────────── */
+  /* =========================================================================
+     QuantEngine · cartera (retorno con aportes en el tiempo)
+     -------------------------------------------------------------------------
+     El problema: con dinero entrando en fechas distintas, (valor - coste)/coste
+     NO es tu rentabilidad. El dolar de enero trabajo doce meses; el de diciembre,
+     cero. Dividir por el coste total ignora eso y subestima el resultado.
+
+     Ejemplo medido: DCA de 200/mes durante 12 meses en un activo que sube 10%.
+       (valor - coste)/coste  ->   5.34%
+       IRR anualizado         ->  10.00%
+     Casi la mitad. Y el error empuja a abandonar una estrategia que funciona.
+
+     QUE SE PUEDE CALCULAR Y QUE NO
+     - MWR / IRR: EXACTO. Solo necesita flujos fechados y el valor final.
+     - TWR verdadero: NO. Necesita el valor de la cartera en CADA fecha de flujo,
+       y eso no se registra. Aqui no se aproxima ni se disfraza: se dice que falta.
+     ========================================================================= */
+
+  const DIA = 86400000;
+
+  /* Fecha ISO -> milisegundos UTC. Sin reloj: la fecha "hoy" siempre se pasa. */
+  function fechaMs(iso) {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isFinite(t) ? t : null;
+  }
+  function aniosEntre(desdeISO, hastaISO) {
+    const a = fechaMs(desdeISO), b = fechaMs(hastaISO);
+    if (a === null || b === null) return null;
+    return (b - a) / DIA / 365;
+  }
+
+  /* -------------------------------------------------------------------------
+     Valor de una serie de flujos CAPITALIZADOS hasta la fecha de corte.
+     Convencion: flujo NEGATIVO = dinero que sale de tu bolsillo (compra, aporte),
+     POSITIVO = dinero que vuelve (venta, dividendo). El valor final de la cartera
+     entra como un flujo positivo en la fecha de corte.
+
+     El IRR es la tasa que hace esta suma cero: cada aporte crece a r hasta el
+     final y, entre todos, tienen que dar exactamente el valor que tienes hoy.
+
+       valor_final = SUMA( aporte_i * (1+r)^(anios desde aporte_i hasta hoy) )
+
+     Ojo con el exponente: es MULTIPLICAR, no dividir. Dividir mide lo contrario
+     —hace encoger los aportes en vez de crecerlos— y devuelve una tasa negativa
+     para una cartera que va ganando. Es exactamente el error que tuve aqui.
+     ------------------------------------------------------------------------- */
+  function valorCapitalizado(flujos, tasa, hastaISO) {
+    const r = toNum(tasa);
+    if (r === null || r <= -1) return null;
+    let v = 0;
+    for (const f of flujos) {
+      const t = aniosEntre(f.fecha, hastaISO);
+      if (t === null) return null;
+      v += f.monto * Math.pow(1 + r, t);
+    }
+    return v;
+  }
+  /* alias historico */
+  const vpn = valorCapitalizado;
+
+  /* -------------------------------------------------------------------------
+     IRR por biseccion. Newton converge mas rapido pero puede divergir con flujos
+     irregulares, y aqui importa mas no mentir que terminar rapido: la biseccion
+     converge SIEMPRE si hay un cambio de signo en el intervalo.
+     ------------------------------------------------------------------------- */
+  function irr(flujos, hastaISO, opciones) {
+    const cfg = Object.assign({ min: -0.9999, max: 10, iteraciones: 200, tolerancia: 1e-7 }, opciones || {});
+    const fs = (flujos || []).filter(f => f && toNum(f.monto) !== null && fechaMs(f.fecha) !== null);
+    if (fs.length < 2) return Err("FLUJOS_INSUFICIENTES", "Hacen falta al menos dos flujos fechados.", { n: fs.length });
+
+    const hayNeg = fs.some(f => f.monto < 0), hayPos = fs.some(f => f.monto > 0);
+    if (!hayNeg || !hayPos) {
+      return Err("SIN_CAMBIO_DE_SIGNO",
+        "Todos los flujos van en la misma direccion: no existe una tasa de retorno que resolver.",
+        { hayNeg, hayPos });
+    }
+
+    let a = cfg.min, b = cfg.max;
+    const va = valorCapitalizado(fs, a, hastaISO), vb = valorCapitalizado(fs, b, hastaISO);
+    if (va === null || vb === null) return Err("FECHAS_INVALIDAS", "Alguna fecha no se pudo interpretar.");
+    if (va * vb > 0) {
+      return Err("SIN_RAIZ_EN_RANGO",
+        `El IRR queda fuera del rango [${roundTo(cfg.min * 100, 0)}%, ${roundTo(cfg.max * 100, 0)}%]. Suele significar que el valor final o alguna fecha estan mal.`,
+        { valorMin: roundTo(va, 4), valorMax: roundTo(vb, 4) });
+    }
+
+    let mid = a;
+    for (let i = 0; i < cfg.iteraciones; i++) {
+      mid = (a + b) / 2;
+      const v = valorCapitalizado(fs, mid, hastaISO);
+      if (v === null) break;
+      if (Math.abs(v) < cfg.tolerancia || (b - a) / 2 < cfg.tolerancia) break;
+      if (v * va > 0) a = mid; else b = mid;
+    }
+    return Ok(roundTo(mid, 6));
+  }
+
+  /* -------------------------------------------------------------------------
+     analizarCartera(): las dos cifras, y la distancia entre ellas.
+
+     ops: [{ fecha, tipo: "compra"|"aporte"|"venta"|"dividendo"|"costo", monto }]
+          monto SIEMPRE en positivo; el tipo decide el signo (igual que el ledger
+          de las cuentas, por la misma razon: un retiro en negativo sumaba).
+     valorActual: valor de mercado de lo que aun tienes.
+     hasta: fecha de corte (ISO). Se pasa: el motor no mira el reloj.
+     ------------------------------------------------------------------------- */
+  const SALE = { compra: -1, aporte: -1, costo: -1 };
+  const ENTRA = { venta: 1, dividendo: 1, ingreso: 1 };
+
+  function analizarCartera(entrada) {
+    const e = entrada || {};
+    const hasta = e.hasta;
+    if (fechaMs(hasta) === null) return Err("SIN_FECHA_DE_CORTE", "Falta la fecha hasta la que medir.");
+    const valor = toNum(e.valorActual);
+    if (valor === null || valor < 0) return Err("SIN_VALOR", "Falta el valor actual de la cartera.");
+
+    const flujos = [];
+    let invertido = 0, recuperado = 0, primeraFecha = null;
+    for (const o of (e.ops || [])) {
+      const m = Math.abs(toNum(o && o.monto) ?? 0);
+      const f = o && o.fecha;
+      if (!m || fechaMs(f) === null) continue;
+      const signo = SALE[o.tipo] !== undefined ? SALE[o.tipo] : (ENTRA[o.tipo] !== undefined ? ENTRA[o.tipo] : -1);
+      flujos.push({ fecha: f, monto: signo * m, tipo: o.tipo });
+      if (signo < 0) invertido += m; else recuperado += m;
+      if (primeraFecha === null || fechaMs(f) < fechaMs(primeraFecha)) primeraFecha = f;
+    }
+    if (!flujos.length) return Err("SIN_OPERACIONES", "No hay aportes ni compras registrados.");
+
+    /* El valor que aun tienes entra como flujo positivo en la fecha de corte. */
+    const conFinal = flujos.concat([{ fecha: hasta, monto: valor, tipo: "valor_final" }]);
+    const rIrr = irr(conFinal, hasta);
+
+    const neto = recuperado + valor - invertido;
+    /* La formula que usa la app hoy, para poder ensenar la diferencia. */
+    const simple = invertido > 0 ? neto / invertido : null;
+    const anios = aniosEntre(primeraFecha, hasta);
+
+    const res = Ok({
+      invertido: roundTo(invertido, 2),
+      recuperado: roundTo(recuperado, 2),
+      valorActual: roundTo(valor, 2),
+      ganancia: roundTo(neto, 2),
+      nFlujos: flujos.length,
+      desde: primeraFecha, hasta,
+      anios: anios === null ? null : roundTo(anios, 3),
+
+      /* lo que hoy ensena la app */
+      retornoSimple: simple === null ? null : roundTo(simple, 6),
+
+      /* lo que de verdad le paso a tu dinero */
+      irrAnual: rIrr.ok ? rIrr.value : null,
+      irrError: rIrr.ok ? null : rIrr.error,
+
+      /* TWR: se nombra y se explica por que no esta, en vez de aproximarlo */
+      twr: null,
+      twrRazon: "El TWR necesita el valor de la cartera en cada fecha de aporte, y eso no se registra. Aproximarlo aqui seria inventarlo.",
+    });
+
+    if (rIrr.ok && simple !== null && anios && anios > 0.08) {
+      const brecha = rIrr.value - simple;
+      res.value = Object.assign({}, res.value, {
+        brecha: roundTo(brecha, 6),
+        /* Con aportes repartidos, el retorno simple SIEMPRE queda por debajo del
+           IRR (el dinero reciente no tuvo tiempo de trabajar). Cuanto mayor la
+           brecha, mas te esta enganando la cifra simple. */
+        brechaTexto: brecha > 0.005
+          ? `El retorno simple te resta ${roundTo(brecha * 100, 2)} puntos porque divide por todo el dinero aportado, incluido el de la semana pasada.`
+          : null,
+      });
+    }
+    return res;
+  }
+
+  /* Retorno anualizado de UNA posicion con una sola compra. Exacto; para una
+     posicion con varias compras hay que usar su propio IRR. */
+  function cagr(valorInicial, valorFinal, anios) {
+    const a = toNum(valorInicial), b = toNum(valorFinal), t = toNum(anios);
+    if (a === null || b === null || t === null || a <= 0 || t <= 0) return null;
+    if (b <= 0) return -1;
+    return roundTo(Math.pow(b / a, 1 / t) - 1, 6);
+  }
+
   /* ─── index.js ─────────────────────────────────────────────── */
   /* =========================================================================
      QuantEngine · fachada publica
@@ -4803,6 +5027,7 @@
 
      Nada de esto toca el DOM, ni el reloj, ni el azar sin semilla.
      ========================================================================= */
+
 
 
 
@@ -4979,10 +5204,11 @@
     /* riesgo    */ simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha,
     /* reglas    */ evaluarCumplimiento,
     /* excursion */ analizarExcursion, excursionDeOperacion,
+    /* cartera   */ analizarCartera, irr, cagr,
     /* app       */ calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta, desdeTradeApp,
   };
 
-  return { QE_VERSION, Ok, Err, isOk, addWarn, unwrapOr, allOk, isFiniteNum, toNum, toInt, toPosInt, clamp, sym, roundHalfAway, roundTo, toCents, fromCents, sumCents, rng, randInt, randNormal, normalQuantile, zFor, normalCDF, CONTRACTS, rootOf, resolveContract, listContracts, valuarOperacion, dimensionar, dirOf, limpiar, momentos, cuantil, mediana, forma, ciProporcion, ciMedia, bootstrapCI, muestraMinima, significanciaMedia, veredicto, UMBRALES, analizarEdge, DD_TIPOS, sueloPara, construirCurva, metricasCurva, evaluarConsistencia, RESULTADO, simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha, ESTADOS, margenDePerdida, topeDeGanancia, margenDeDrawdown, evaluarCumplimiento, desdeTradeApp, calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta, excursionDeOperacion, analizarExcursion };
+  return { QE_VERSION, Ok, Err, isOk, addWarn, unwrapOr, allOk, isFiniteNum, toNum, toInt, toPosInt, clamp, sym, roundHalfAway, roundTo, toCents, fromCents, sumCents, rng, randInt, randNormal, normalQuantile, zFor, normalCDF, CONTRACTS, rootOf, resolveContract, listContracts, valuarOperacion, dimensionar, dirOf, limpiar, momentos, cuantil, mediana, forma, ciProporcion, ciMedia, bootstrapCI, muestraMinima, significanciaMedia, veredicto, UMBRALES, analizarEdge, DD_TIPOS, sueloPara, construirCurva, metricasCurva, evaluarConsistencia, RESULTADO, simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha, ESTADOS, margenDePerdida, topeDeGanancia, margenDeDrawdown, evaluarCumplimiento, desdeTradeApp, calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta, excursionDeOperacion, analizarExcursion, analizarCartera, irr, vpn, valorCapitalizado, cagr, fechaMs, aniosEntre };
   })();
 
 
@@ -5344,6 +5570,12 @@
       { key: "fees", label: "Comisiones $", type: "number", step: "0.01" },
       { key: "pnl", label: "Resultado $ (si cierra)", type: "number", step: "0.01", help: "solo en ventas o cobros" },
       { key: "horizon", label: "Horizonte", type: "select", options: [["corto", "corto (< 3 meses)"], ["medio", "medio (3–18 meses)"], ["largo", "largo (> 18 meses)"]] },
+      /* En futuros el gate bloquea ENTRAR fuera de protocolo. En inversión el
+         error caro es el contrario —vender por miedo— así que aquí no se bloquea
+         nada: se marca, y se calcula lo que costó. */
+      { key: "offPlan", label: "¿Fue según tu plan?", type: "select",
+        options: [["", "sí, seguí el plan"], ["1", "no · me desvié del plan"]],
+        help: "marcar una desviación no es castigo: es lo único que permite medir después cuánto te cuesta tocar" },
       { key: "note", label: "Tesis · por qué esta operación", type: "textarea", w: 6, rows: 2 },
       { key: "lesson", label: "Lección / seguimiento", type: "text", w: 6 },
     ];
@@ -6789,7 +7021,124 @@
   /* =============================== INVERSIONES =============================== */
   const iv = { market: "etfs", editGuide: false };
   const GUIDE_FIELDS = [["desc", "Qué es", 2], ["vehicles", "Vehículos · dónde operarlo", 1], ["capital", "Capital mínimo real", 1], ["hours", "Horario", 1], ["risk", "Riesgos principales", 1], ["notes", "Mis notas", 2]];
-  function posCalc(p) { const cost = (p.qty || 0) * (p.entry || 0) + (p.fees || 0); const cur = p.current != null ? (p.qty || 0) * p.current : null; return { cost, cur, pnl: cur != null ? cur - cost : null, pct: cur != null && cost ? (cur - cost) / cost : null }; }
+  /* ══════════════ POSICIÓN DERIVADA DE SUS OPERACIONES (DCA) ══════════════
+     Una posición tenía UNA fecha, UNA cantidad y UN precio de entrada. El
+     playbook de esta misma app recomienda «DCA mensual en índice»: doce compras
+     del mismo ETF no caben en ese molde. Había dos salidas, las dos malas —
+     crear doce posiciones, o promediar a mano y perder el registro.
+
+     Y los datos ya existían: el flujo de operaciones (compra/aporte/venta) los
+     tenía. Sólo faltaba que la posición se DERIVARA de ellos, igual que en
+     futuros la tarjeta de cuenta se deriva de las operaciones.
+
+     Se emparejan por activo + mercado. Si no hay operaciones, mandan los campos
+     escritos a mano: nada de lo que ya tienes deja de funcionar. */
+  /* Cuánto hace que se miró ese precio. Sin esto, un número de hace tres meses
+     se lee igual que uno de hace tres minutos. */
+  /* ═════════════ ¿CUÁNTO TE HA COSTADO TOCAR? ═════════════
+     El equivalente de «el protocolo, ¿paga?» en inversión. Para cada VENTA que
+     marcaste como desviación del plan, y de la que todavía conservas un precio
+     de referencia: qué valdrían hoy esas unidades frente a lo que te dieron.
+
+     Es exacto y no requiere contrafactual: las unidades existieron, el precio de
+     hoy lo tienes escrito. Positivo = venderte costó dinero. */
+  function pintaCosteDeTocar() {
+    const el = $("ivTocar"); if (!el) return;
+    const c = costeDeTocar();
+    el.hidden = false;
+    if (!c) {
+      el.innerHTML = `<div class="tocar"><div class="th"><h4>¿Cuánto te ha costado tocar?</h4></div>
+        <p>Cuando registres una venta, marca si fue <b>según tu plan</b> o una desviación. Aquí aparecerá lo que esas desviaciones han costado: qué valdrían hoy las unidades que vendiste frente a lo que te dieron. Sin desviaciones marcadas no hay nada que medir — y eso es la mejor noticia posible.</p></div>`;
+      return;
+    }
+    const cls = c.coste > 0 ? "bad" : c.coste < 0 ? "good" : "dim";
+    el.innerHTML = `<div class="tocar"><div class="th">
+      <h4>¿Cuánto te ha costado tocar?</h4>
+      <span class="dim" style="font-size:12px">${plu(c.n, "venta fuera de plan", "ventas fuera de plan")}${c.sinPrecio ? ` · ${c.sinPrecio} sin precio de referencia` : ""}</span></div>
+      <div class="big ${cls}">${c.medibles ? pctSignoDinero(c.coste) : "—"}</div>
+      <p>${c.medibles
+        ? (c.coste > 0
+            ? `Esas unidades valdrían hoy <b>${money(c.coste)}</b> más de lo que te dieron. Vender antes de tiempo te ha costado eso.`
+            : c.coste < 0
+              ? `Vender te ahorró <b>${money(-c.coste)}</b>: esas unidades valdrían hoy menos. Una vez no hace un sistema, pero queda registrado.`
+              : `Las ventas fuera de plan salieron a la par.`)
+        : `Ninguna de esas ventas tiene un precio de referencia con el que compararla. Escribe el precio actual del activo en su posición.`}</p>
+      ${c.medibles ? `<div class="twrap" style="margin-top:10px"><table class="t"><thead><tr><th>Activo</th><th class="r">Unidades</th><th class="r">Te dieron</th><th class="r">Valdrían hoy</th><th class="r">Diferencia</th></tr></thead><tbody>${
+        c.filas.filter(f => f.dif != null).slice(0, 6).map(f => `<tr><td class="ui">${esc(f.activo)}</td><td class="r">${redondeaQty(f.q)}</td><td class="r">${money(f.ingreso)}</td><td class="r">${money(f.hoy)}</td><td class="r ${f.dif > 0 ? "neg" : f.dif < 0 ? "pos" : ""}">${pctSignoDinero(f.dif)}</td></tr>`).join("")
+      }</tbody></table></div>` : ""}
+    </div>`;
+  }
+  function pctSignoDinero(x) { return x == null ? "—" : (x > 0 ? "+" : "") + money(x); }
+
+  function costeDeTocar() {
+    const ventas = tradesOf("inversion").filter(t => t.op === "venta" && t.offPlan);
+    if (!ventas.length) return null;
+    const pos = coll("positions").items;
+    let coste = 0, medibles = 0, sinPrecio = 0;
+    const filas = [];
+    ventas.forEach(t => {
+      const activo = String(t.asset || "").trim().toUpperCase();
+      const ref = pos.find(x => String(x.asset || "").trim().toUpperCase() === activo && x.current != null);
+      const q = Number(t.qty) || 0, px = Number(t.price) || 0;
+      if (!q || !px) return;
+      const ingreso = q * px - (Number(t.fees) || 0);
+      if (!ref) { sinPrecio++; filas.push({ t, activo, q, ingreso, hoy: null, dif: null }); return; }
+      const hoy = q * Number(ref.current);
+      const dif = hoy - ingreso;
+      coste += dif; medibles++;
+      filas.push({ t, activo, q, ingreso, hoy, dif });
+    });
+    if (!filas.length) return null;
+    return { n: ventas.length, medibles, sinPrecio, coste, filas: filas.sort((a, b) => (b.dif ?? -Infinity) - (a.dif ?? -Infinity)) };
+  }
+
+  function precioEdad(p) {
+    if (p.current == null) return "";
+    if (!p.priceAt) return `<div class="stale">sin fechar</div>`;
+    const dias = Math.floor((Date.now() - p.priceAt) / 86400000);
+    if (dias <= 0) return `<div class="stale">hoy</div>`;
+    const cls = dias > 30 ? ' style="color:var(--bad)"' : dias > 7 ? ' style="color:var(--warn)"' : "";
+    return `<div class="stale"${cls}>hace ${plu(dias, "día", "días")}</div>`;
+  }
+  function redondeaQty(q) { const n = Number(q) || 0; return n >= 100 ? n.toFixed(2) : n >= 1 ? n.toFixed(4) : n.toFixed(6); }
+
+  function posLotes(p) {
+    const activo = String(p.asset || "").trim().toUpperCase();
+    if (!activo) return null;
+    const ops = tradesOf("inversion").filter(t =>
+      String(t.asset || "").trim().toUpperCase() === activo &&
+      (!p.market || !t.market || t.market === p.market) &&
+      (t.op === "compra" || t.op === "aporte" || t.op === "venta"));
+    if (!ops.length) return null;
+    let qty = 0, coste = 0, vendidoQty = 0, realizado = 0, primera = null, ultima = null, nCompras = 0;
+    ops.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).forEach(t => {
+      const q = Number(t.qty) || 0, px = Number(t.price) || 0, fe = Number(t.fees) || 0;
+      if (!q) return;
+      if (t.op === "venta") {
+        /* Coste medio: se retira la parte proporcional del coste acumulado. */
+        const medio = qty > 0 ? coste / qty : 0;
+        const sale = Math.min(q, qty);
+        realizado += sale * px - sale * medio - fe;
+        coste -= sale * medio; qty -= sale; vendidoQty += sale;
+      } else {
+        qty += q; coste += q * px + fe; nCompras++;
+        if (!primera) primera = t.date;
+        ultima = t.date;
+      }
+    });
+    if (!nCompras) return null;
+    return { qty, coste, medio: qty > 0 ? coste / qty : null, realizado, vendidoQty, nCompras, primera, ultima, ops };
+  }
+
+  function posCalc(p) {
+    const l = posLotes(p);
+    if (l && l.qty > 0) {
+      const cost = l.coste;
+      const cur = p.current != null ? l.qty * p.current : null;
+      return { cost, cur, pnl: cur == null ? null : cur - cost, pct: cur == null || !cost ? null : (cur - cost) / cost,
+               qty: l.qty, medio: l.medio, lotes: l, derivada: true };
+    }
+    const cost = (p.qty || 0) * (p.entry || 0) + (p.fees || 0); const cur = p.current != null ? (p.qty || 0) * p.current : null; return { cost, cur, qty: p.qty || 0, medio: p.entry || null, derivada: false, pnl: cur != null ? cur - cost : null, pct: cur != null && cost ? (cur - cost) / cost : null }; }
   /* ---------- métricas de la cartera ---------- */
   function monthsBack(n) { const out = []; const d = new Date(state.today + "T12:00:00Z"); d.setUTCDate(1); for (let i = 0; i < n; i++) { out.unshift(d.toISOString().slice(0, 7)); d.setUTCMonth(d.getUTCMonth() - 1); } return out; }
   function investStats() {
@@ -6807,16 +7156,51 @@
     const income = ops.filter(t => t.op === "dividendo").reduce((s, t) => s + (t.pnl || 0), 0);
     const contributed = ops.filter(t => t.op === "compra" || t.op === "aporte").reduce((s, t) => s + (t.qty || 0) * (t.price || 0) + (t.fees || 0), 0);
     const totalRet = cost ? (unreal + realized) / cost : null;
+    /* (valor − coste) / coste es retorno simple sobre coste total, y con aportes
+       repartidos en el tiempo NO es tu rentabilidad: el dólar de enero trabajó
+       doce meses y el de diciembre cero. Medido con un DCA de $200/mes sobre un
+       activo que sube 10%, esta fórmula dice 5,34% cuando el IRR real es 10%.
+       Casi la mitad — y el error empuja a abandonar una estrategia que funciona.
+       El IRR sí es exacto: sólo necesita flujos fechados y el valor de hoy. */
+    const flujosCartera = ops.map(t => ({
+      fecha: t.date,
+      tipo: t.op === "venta" ? "venta" : t.op === "dividendo" ? "dividendo" : t.op === "costo" ? "costo" : "compra",
+      monto: (Number(t.qty) || 0) * (Number(t.price) || 0) + (Number(t.fees) || 0),
+    })).filter(f => f.monto && f.fecha);
+    const carteraR = flujosCartera.length && cur >= 0
+      ? QE.analizarCartera({ ops: flujosCartera, valorActual: cur, hasta: state.today })
+      : null;
+    const cartera = carteraR && carteraR.ok ? carteraR.value : null;
     const sorted = rows.slice().sort((a, b) => b.val - a.val);
     const concentration = cur > 0 && sorted.length ? sorted[0].val / cur : null;
     const noPlan = ps.filter(p => !String(p.exitPlan || "").trim()).length;
+    /* Un precio de hace más de un mes no es «valor actual»: es un recuerdo. */
+    const viejos = ps.filter(p => p.current != null && (!p.priceAt || Date.now() - p.priceAt > 30 * 86400000)).length;
     const mk = Object.keys(byMarket);
     const last6 = monthsBack(6);
     const byMonth = {}; ops.forEach(t => { const k = String(t.date || "").slice(0, 7); if (!k) return; const o = byMonth[k] || (byMonth[k] = { in: 0, inc: 0 }); if (t.op === "compra" || t.op === "aporte") o.in += (t.qty || 0) * (t.price || 0) + (t.fees || 0); if (t.op === "dividendo") o.inc += (t.pnl || 0); });
     const monthsWithIn = last6.filter(m => byMonth[m] && byMonth[m].in > 0).length;
     const defensive = ["bonos"].reduce((s, id) => s + (byMarket[id] ? byMarket[id].val : 0), 0);
-    return { ps, ops, rows, sorted, cost, cur, priced, unreal, realized, income, contributed, totalRet, concentration, noPlan, noPrice: ps.length - priced, byMarket, markets: mk, byMonth, last6, monthsWithIn, defensive, defensiveShare: cur ? defensive / cur : null, yieldPct: cost ? income / cost : null, top: sorted[0] || null };
+    return { ps, ops, rows, sorted, cost, cur, priced, unreal, realized, income, contributed, totalRet, cartera, concentration, noPlan, viejos, noPrice: ps.length - priced, byMarket, markets: mk, byMonth, last6, monthsWithIn, defensive, defensiveShare: cur ? defensive / cur : null, yieldPct: cost ? income / cost : null, top: sorted[0] || null };
   }
+  function pctSigno(x, dec) { return x == null ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(dec == null ? 1 : dec) + "%"; }
+  /* El titular pasa a ser el IRR, que es la cifra correcta; el retorno simple
+     baja a subtítulo con su nombre propio, para que se vea que son dos cosas
+     distintas y no una corrección misteriosa. */
+  function ivRetornoTile(s) {
+    const c = s.cartera;
+    const irr = c && c.irrAnual != null ? c.irrAnual : null;
+    if (irr == null) {
+      return `<div class="tile"><span class="lab">Rentabilidad total</span>
+        <div class="v ${s.totalRet == null ? "" : s.totalRet > 0 ? "good" : s.totalRet < 0 ? "bad" : ""}">${pctSigno(s.totalRet)}</div>
+        <div class="s">${c && c.irrError ? esc(c.irrError.message) : "sobre el coste · sin fechas suficientes para anualizar"}</div></div>`;
+    }
+    const brecha = c.brecha != null && Math.abs(c.brecha) > 0.005;
+    return `<div class="tile"><span class="lab">Rentabilidad anual (IRR)</span>
+      <div class="v ${irr > 0 ? "good" : irr < 0 ? "bad" : ""}">${pctSigno(irr)}</div>
+      <div class="s">simple sobre coste ${pctSigno(s.totalRet)}${brecha ? ` · <span class="dim">difieren ${Math.abs(c.brecha * 100).toFixed(1)} pts</span>` : ""}</div></div>`;
+  }
+
   function renderInvestTiles() {
     const s = investStats(); const ps = s.ps;
     $("ivTiles").innerHTML = `
@@ -6824,7 +7208,7 @@
       <div class="tile"><span class="lab">Invertido</span><div class="v">${ps.length ? money(s.cost) : "—"}</div><div class="s">coste + comisiones</div></div>
       <div class="tile"><span class="lab">Valor actual</span><div class="v ${ps.length && s.priced ? (s.cur > s.cost ? "good" : s.cur < s.cost ? "bad" : "") : ""}">${ps.length ? money(s.cur) : "—"}</div><div class="s">${s.noPrice ? `${s.noPrice} sin precio actual` : "según tus precios"}</div></div>
       <div class="tile"><span class="lab">P&amp;L no realizado</span><div class="v ${s.unreal > 0 ? "good" : s.unreal < 0 ? "bad" : ""}">${ps.length && s.priced ? money(s.unreal) : "—"}</div><div class="s">${ps.length && s.cost && s.priced ? (s.unreal >= 0 ? "+" : "") + (s.unreal / s.cost * 100).toFixed(1) + "%" : "faltan precios"}</div></div>
-      <div class="tile"><span class="lab">Rentabilidad total</span><div class="v ${s.totalRet == null ? "" : s.totalRet > 0 ? "good" : s.totalRet < 0 ? "bad" : ""}">${s.totalRet == null ? "—" : (s.totalRet >= 0 ? "+" : "") + (s.totalRet * 100).toFixed(1) + "%"}</div><div class="s">no realizado + cerrado</div></div>
+      ${ivRetornoTile(s)}
       
       <div class="tile"><span class="lab">Realizado</span><div class="v ${s.realized > 0 ? "good" : s.realized < 0 ? "bad" : ""}">${s.ops.length ? money(s.realized) : "—"}</div><div class="s">ventas y cobros cerrados</div></div>
       <div class="tile"><span class="lab">Ingresos cobrados</span><div class="v ${s.income > 0 ? "good" : ""}">${s.income ? money(s.income) : "—"}</div><div class="s">${s.yieldPct ? (s.yieldPct * 100).toFixed(2) + "% sobre lo invertido" : "dividendos, cupones, primas"}</div></div>
@@ -6863,15 +7247,21 @@
   function renderIvHealth(s) {
     const el = $("ivScore"), vd = $("ivVerdict"); if (!el) return;
     const rows = [
-      scoreRow(!s.ps.length ? "na" : s.noPrice === 0 ? "ok" : s.noPrice <= s.ps.length / 3 ? "wa" : "no", "Precios al día", "Una cartera sin precios actualizados no se puede medir.", s.ps.length ? `${s.priced}/${s.ps.length}` : "—"),
+      scoreRow(!s.ps.length ? "na" : (s.noPrice === 0 && !s.viejos) ? "ok" : (s.noPrice <= s.ps.length / 3 && s.viejos <= 1) ? "wa" : "no", "Precios al día", "Una cartera sin precios actualizados no se puede medir.", s.ps.length ? `${s.priced}/${s.ps.length}` : "—"),
       scoreRow(!s.ps.length ? "na" : s.noPlan === 0 ? "ok" : s.noPlan <= 1 ? "wa" : "no", "Todas con plan de salida", "Sin saber cuándo vendes, la decisión la toma el miedo.", s.ps.length ? `${s.ps.length - s.noPlan}/${s.ps.length}` : "—"),
       scoreRow(s.concentration == null ? "na" : s.concentration <= .35 ? "ok" : s.concentration <= .5 ? "wa" : "no", "Concentración bajo control", "Si una sola posición pesa más de la mitad, la cartera es esa posición.", s.concentration == null ? "—" : pct(s.concentration)),
       scoreRow(!s.ps.length ? "na" : s.markets.length >= 3 ? "ok" : s.markets.length === 2 ? "wa" : "no", "Repartida entre mercados", "Tres mercados distintos es el mínimo para que un golpe no se lleve todo.", `${s.markets.length}`),
       scoreRow(s.defensiveShare == null || !s.ps.length ? "na" : s.defensiveShare > .6 ? "wa" : s.defensiveShare >= .1 ? "ok" : s.defensiveShare > 0 ? "wa" : "no", "Reserva en renta fija", "Entre el 10% y el 60%: por debajo no hay colchón, por encima la cartera es un depósito.", s.defensiveShare == null ? "—" : pct(s.defensiveShare)),
       scoreRow(!s.ops.length ? "na" : s.income > 0 ? "ok" : "wa", "Cartera que paga algo", "Dividendos, cupones, primas o alquiler: flujo que no depende de vender.", s.income ? money(s.income) : "—"),
       scoreRow(!s.ops.length ? "na" : s.monthsWithIn >= 5 ? "ok" : s.monthsWithIn >= 3 ? "wa" : "no", "Aporte constante", "Meses con aporte en los últimos seis. El interés compuesto castiga los saltos.", `${s.monthsWithIn}/6`),
-      scoreRow(s.totalRet == null ? "na" : s.totalRet > 0 ? "ok" : "no", "Rentabilidad positiva", "Lo no realizado más lo ya cerrado, sobre el coste.", s.totalRet == null ? "—" : (s.totalRet >= 0 ? "+" : "") + (s.totalRet * 100).toFixed(1) + "%"),
+      (() => { const irr = s.cartera && s.cartera.irrAnual; const usa = irr != null;
+        return scoreRow(usa ? (irr > 0 ? "ok" : "no") : (s.totalRet == null ? "na" : s.totalRet > 0 ? "ok" : "no"),
+          "Rentabilidad positiva",
+          usa ? "IRR anualizado: cuánto rindió tu dinero teniendo en cuenta cuándo lo metiste."
+              : "Lo no realizado más lo ya cerrado, sobre el coste.",
+          usa ? pctSigno(irr) : (s.totalRet == null ? "—" : pctSigno(s.totalRet))); })(),
     ];
+    pintaCosteDeTocar();
     const MARK = { ok: "✓", wa: "!", no: "×", na: "–" };
     el.innerHTML = rows.map(r => `<div class="r ${r.st}"><span class="m">${MARK[r.st]}</span><span class="t">${esc(r.title)}<small>${esc(r.sub)}</small></span><span class="v">${esc(r.val)}</span></div>`).join("");
     const graded = rows.filter(r => r.st !== "na");
@@ -6919,7 +7309,7 @@
         <header><h2>Posiciones</h2><span class="meta">${ps.length ? `${money(tot)} invertido · ${priced ? money(cur) + " actual" : "sin precios"}` : ""}</span></header>
         <div class="body">
           ${isFut ? `<p class="note-p">Los futuros no se registran aquí. Van al Journal de futuros y a la Cabina: son trading, no inversión.</p>` : ""}
-          ${ps.length ? `<div class="twrap"><table class="t"><thead><tr><th>Activo</th><th>Desde</th><th class="r">Cant.</th><th class="r">Entrada</th><th class="r">Actual</th><th class="r">Coste</th><th class="r">P&amp;L</th><th>Tesis</th><th>Salida planeada</th><th></th></tr></thead><tbody>${ps.map(p => { const c = posCalc(p); return `<tr data-id="${p.id}"><td><strong>${esc(p.asset)}</strong></td><td>${esc(dmy(p.date))}</td><td class="r">${p.qty ?? "—"}</td><td class="r">${p.entry != null ? money(p.entry, 2) : "—"}</td><td class="r">${p.current != null ? money(p.current, 2) + (p.priceAuto && p.priceAt ? `<div class="stale">${new Date(p.priceAt).toLocaleDateString("es-US", { month: "2-digit", day: "2-digit" })} auto</div>` : "") : '<span class="dim">—</span>'}</td><td class="r">${money(c.cost, 2)}</td><td class="r ${c.pnl > 0 ? "pos" : c.pnl < 0 ? "neg" : ""}">${c.pnl == null ? "—" : money(c.pnl, 2) + " · " + (c.pct >= 0 ? "+" : "") + (c.pct * 100).toFixed(1) + "%"}</td><td class="notes">${esc(p.thesis || "")}</td><td class="notes">${esc(p.exitPlan || "")}</td><td class="act"><button type="button" class="icon" data-act="pos" title="Editar">✎</button></td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Sin posiciones en ${esc(m.name)}.</p>`}
+          ${ps.length ? `<div class="twrap"><table class="t"><thead><tr><th>Activo</th><th>Desde</th><th class="r">Cant.</th><th class="r">Entrada</th><th class="r">Actual</th><th class="r">Coste</th><th class="r">P&amp;L</th><th>Tesis</th><th>Salida planeada</th><th></th></tr></thead><tbody>${ps.map(p => { const c = posCalc(p); return `<tr data-id="${p.id}"><td><strong>${esc(p.asset)}</strong>${c.derivada ? `<div class="stale">${plu(c.lotes.nCompras, "compra", "compras")}${c.lotes.vendidoQty ? " · vendido en parte" : ""}</div>` : ""}</td><td>${esc(dmy(c.derivada && c.lotes.primera ? c.lotes.primera : p.date))}</td><td class="r">${c.qty ? redondeaQty(c.qty) : "—"}</td><td class="r">${c.medio != null ? money(c.medio, 2) + (c.derivada ? `<div class="stale">medio</div>` : "") : "—"}</td><td class="r">${p.current != null ? money(p.current, 2) + precioEdad(p) : '<span class="dim">—</span>'}</td><td class="r">${money(c.cost, 2)}</td><td class="r ${c.pnl > 0 ? "pos" : c.pnl < 0 ? "neg" : ""}">${c.pnl == null ? "—" : money(c.pnl, 2) + " · " + (c.pct >= 0 ? "+" : "") + (c.pct * 100).toFixed(1) + "%"}</td><td class="notes">${esc(p.thesis || "")}</td><td class="notes">${esc(p.exitPlan || "")}</td><td class="act"><button type="button" class="icon" data-act="pos" title="Editar">✎</button></td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Sin posiciones en ${esc(m.name)}.</p>`}
           ${isFut ? "" : `<button type="button" class="add" id="posAdd">+ Añadir posición</button>`}
         </div>
       </section>
@@ -6946,7 +7336,17 @@
       fields: [{ key: "asset", label: "Activo", w: 2 }, { key: "date", label: "Fecha de entrada", type: "date" }, { key: "qty", label: "Cantidad", type: "number", step: "0.0001" }, { key: "entry", label: "Precio de entrada", type: "number", step: "0.01" }, { key: "fees", label: "Comisiones $", type: "number", step: "0.01" }, { key: "current", label: "Precio actual (lo actualizas tú)", type: "number", step: "0.01" }, { key: "thesis", label: "Tesis", type: "textarea", w: 6, rows: 2 }, { key: "exitPlan", label: "Salida planeada · cuándo vendo", type: "textarea", w: 6, rows: 2, ph: "Objetivo, stop mental o fecha. Sin plan de salida no hay posición." }],
       values: p || { date: todayISO(), qty: 1 },
       validate: v => !v.asset ? "Falta el activo" : v.qty == null || v.entry == null ? "Falta cantidad o precio" : null,
-      onSave: v => { const rec = Object.assign({}, p || {}, v, { id: isNew ? uid("pos") : p.id, market: marketId }); coll("positions").set(rec.id, rec); },
+      onSave: v => {
+        const rec = Object.assign({}, p || {}, v, { id: isNew ? uid("pos") : p.id, market: marketId });
+        /* El precio actual es manual y no tenía fecha, así que una cartera
+           valorada hace tres meses se mostraba como «valor actual» sin más.
+           Sellarlo permite decir cuándo se miró, en vez de fingir que es hoy. */
+        const antes = p && p.current != null ? Number(p.current) : null;
+        const ahora = rec.current != null ? Number(rec.current) : null;
+        if (ahora != null && (antes == null || antes !== ahora)) rec.priceAt = Date.now();
+        else if (ahora == null) delete rec.priceAt;
+        coll("positions").set(rec.id, rec);
+      },
       onDelete: isNew ? null : () => coll("positions").remove(p.id) });
   }
   function openWatch(w, marketId) {

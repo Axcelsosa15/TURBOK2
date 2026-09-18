@@ -667,5 +667,83 @@ eq(Q.analizarExcursion([]).value.n, 0, "lista vacía no revienta");
   ok(a.faltanParaMedir > 0, "y dice cuántas faltan");
 }
 
+grupo("cartera · fechas y capitalización");
+eq(Q.aniosEntre("2025-01-01", "2026-01-01"), 365 / 365, "un año son 365 días");
+near(Q.aniosEntre("2025-01-01", "2025-07-02"), 182 / 365, 1e-9, "182 días son 0,4986 años");
+eq(Q.aniosEntre("mal", "2026-01-01"), null, "fecha inválida devuelve null");
+{
+  /* 1000 capitalizado al 10% durante un año vale 1100 */
+  const v = Q.valorCapitalizado([{ fecha: "2025-01-01", monto: 1000 }], 0.10, "2026-01-01");
+  near(v, 1100, 0.5, "capitaliza hacia adelante, no descuenta");
+}
+{
+  /* el signo del exponente fue un bug real: dividir devuelve una tasa negativa
+     para una cartera que gana */
+  const ops = [{ fecha: "2025-01-01", tipo: "compra", monto: 1000 }];
+  const v = Q.analizarCartera({ ops, valorActual: 1100, hasta: "2026-01-01" }).value;
+  near(v.irrAnual, 0.10, 1e-4, "una compra con +10% en un año da IRR 10%, no negativo");
+  near(v.retornoSimple, 0.10, 1e-6, "y con un solo flujo el simple coincide");
+}
+
+grupo("cartera · el defecto que corrige");
+{
+  const ops = [];
+  for (let m = 0; m < 12; m++) ops.push({ fecha: `2025-${String(m + 1).padStart(2, "0")}-01`, tipo: "aporte", monto: 200 });
+  const v = Q.analizarCartera({ ops, valorActual: 2528.11, hasta: "2026-01-01" }).value;
+  eq(v.invertido, 2400, "aportado");
+  near(v.retornoSimple, 0.0534, 1e-3, "el retorno simple dice 5.3%");
+  near(v.irrAnual, 0.10, 0.01, "el IRR dice 10%");
+  ok(v.irrAnual > v.retornoSimple, "con aportes repartidos el simple SIEMPRE queda por debajo");
+  ok(/resta/.test(v.brechaTexto || ""), "y la brecha se explica en texto");
+}
+{
+  const v = Q.analizarCartera({ ops: [{ fecha: "2025-01-01", tipo: "compra", monto: 1000 }], valorActual: 1100, hasta: "2026-01-01" }).value;
+  eq(v.twr, null, "el TWR no se inventa");
+  ok(/no se registra/.test(v.twrRazon), "se dice por qué falta");
+}
+
+grupo("cartera · signos y tipos de operación");
+{
+  const v = Q.analizarCartera({ ops: [
+    { fecha: "2025-01-01", tipo: "compra", monto: 1000 },
+    { fecha: "2025-06-01", tipo: "dividendo", monto: 30 },
+    { fecha: "2025-09-01", tipo: "venta", monto: 400 },
+  ], valorActual: 700, hasta: "2026-01-01" }).value;
+  eq(v.invertido, 1000, "solo la compra sale del bolsillo");
+  eq(v.recuperado, 430, "dividendo y venta vuelven");
+  eq(v.ganancia, 130, "ganancia = recuperado + valor − invertido");
+  ok(v.irrAnual > 0, "IRR positivo");
+}
+{
+  /* el tipo lleva el signo: un monto negativo NO debe invertir la dirección */
+  const a = Q.analizarCartera({ ops: [{ fecha: "2025-01-01", tipo: "compra", monto: 1000 }], valorActual: 1100, hasta: "2026-01-01" }).value;
+  const b = Q.analizarCartera({ ops: [{ fecha: "2025-01-01", tipo: "compra", monto: -1000 }], valorActual: 1100, hasta: "2026-01-01" }).value;
+  eq(a.invertido, b.invertido, "un monto en negativo se lee como magnitud, igual que en el ledger");
+  eq(a.irrAnual, b.irrAnual, "y no cambia el resultado");
+}
+
+grupo("cartera · lo que se niega a calcular");
+ok(!Q.analizarCartera({ ops: [], valorActual: 100, hasta: "2026-01-01" }).ok, "sin operaciones no hay retorno");
+ok(!Q.analizarCartera({ ops: [{ fecha: "2025-01-01", tipo: "compra", monto: 100 }], hasta: "2026-01-01" }).ok, "sin valor actual tampoco");
+ok(!Q.analizarCartera({ ops: [{ fecha: "2025-01-01", tipo: "compra", monto: 100 }], valorActual: 100 }).ok, "sin fecha de corte tampoco");
+{
+  /* todo el dinero saliendo y nada volviendo: el IRR no existe */
+  const r = Q.irr([{ fecha: "2025-01-01", monto: -100 }, { fecha: "2025-06-01", monto: -100 }], "2026-01-01");
+  ok(!r.ok && r.error.code === "SIN_CAMBIO_DE_SIGNO", "sin cambio de signo se niega, en vez de devolver un número");
+}
+{
+  const v = Q.analizarCartera({ ops: [{ fecha: "2025-01-01", tipo: "compra", monto: 1000 }], valorActual: 0, hasta: "2026-01-01" }).value;
+  eq(v.irrAnual, null, "pérdida total: el IRR no converge en el rango y se dice");
+  ok(v.irrError !== null, "con su motivo");
+}
+ok(!Q.irr([{ fecha: "2025-01-01", monto: -100 }], "2026-01-01").ok, "un solo flujo no define un IRR");
+
+grupo("cartera · CAGR de una posición");
+near(Q.cagr(1000, 1100, 1), 0.10, 1e-6, "+10% en un año");
+near(Q.cagr(1000, 1210, 2), 0.10, 1e-6, "+21% en dos años son 10% anual");
+eq(Q.cagr(1000, 0, 1), -1, "a cero es −100%");
+eq(Q.cagr(0, 100, 1), null, "sin inversión inicial no hay CAGR");
+eq(Q.cagr(1000, 1100, 0), null, "sin tiempo transcurrido tampoco");
+
 console.log(`\n${pass} ok · ${fail} fallos (avisos)`);
 if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("  ✗ " + f)); process.exit(1); }

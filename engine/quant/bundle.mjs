@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const dir = dirname(fileURLToPath(import.meta.url));
-const ORDEN = ["kernel.js", "contracts.js", "trade.js", "stats.js", "edge.js", "curve.js", "survival.js", "compliance.js", "excursion.js", "index.js"];
+const ORDEN = ["kernel.js", "contracts.js", "trade.js", "stats.js", "edge.js", "curve.js", "survival.js", "compliance.js", "excursion.js", "portfolio.js", "index.js"];
 
 const PUBLICOS = [
   "QE_VERSION", "Ok", "Err", "isOk", "addWarn", "unwrapOr", "allOk",
@@ -24,6 +24,7 @@ const PUBLICOS = [
   "ESTADOS", "margenDePerdida", "topeDeGanancia", "margenDeDrawdown", "evaluarCumplimiento",
   "desdeTradeApp", "calcularTradeApp", "rRealApp", "rPlanApp", "radiografiaCuenta",
   "excursionDeOperacion", "analizarExcursion",
+  "analizarCartera", "irr", "vpn", "valorCapitalizado", "cagr", "fechaMs", "aniosEntre",
 ];
 
 function limpiarModulo(src) {

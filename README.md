@@ -483,6 +483,70 @@ hay con qué sostenerlas. Sin datos suficientes sale un contador — *«llevas 3
 5 empiezan a salir números y con 30 se pueden creer»*— que hace más por el
 registro que cualquier gráfico.
 
+### Inversión: cinco arreglos, uno de ellos matemático
+
+El criterio de diseño aquí es **el contrario** al de futuros. En futuros, más
+atención y más medición ayudan. En una cartera de largo plazo la atención es el
+enemigo: mirar más lleva a tocar más. Todo lo de abajo está construido para que
+abras este tab **menos**, no más.
+
+**1. La rentabilidad estaba mal calculada.** `(valor − coste) / coste` es retorno
+simple sobre coste total, y con aportes repartidos en el tiempo no es tu
+rentabilidad: el dólar de enero trabajó doce meses y el de diciembre, cero.
+Medido con un DCA de $200/mes sobre un activo que sube 10%:
+
+```
+  retorno simple    5.34%    ← lo que mostraba
+  IRR anualizado   10.00%    ← lo que de verdad pasó
+```
+
+Casi la mitad — y el error va en la dirección peligrosa: **te hace parecer peor
+de lo que eres**, lo que empuja a abandonar una estrategia que funciona. El tile
+ahora titula con el IRR y relega el simple a subtítulo, con la brecha nombrada.
+
+`portfolio.js` calcula el IRR por **bisección** sobre el valor capitalizado.
+Newton converge más rápido pero puede divergir con flujos irregulares, y aquí
+importa más no mentir que terminar rápido.
+
+**Y lo que NO calcula:** el TWR verdadero necesita el valor de la cartera *en
+cada fecha de aporte*, y eso no se registra. Se devuelve `null` con su motivo en
+vez de aproximarlo y hacerlo pasar por exacto.
+
+*Un bug propio, encontrado por el control:* la primera versión **dividía** por
+`(1+r)^t` en vez de multiplicar — descontaba los aportes hacia adelante en lugar
+de capitalizarlos. Daba **−9,06%** para una cartera que ganaba. Lo cazó el caso
+de control: una compra única con +10% en un año tiene que dar 10,00% por ambos
+métodos.
+
+**2. La posición no soportaba DCA.** Una posición era *una* fecha, *una* cantidad,
+*un* precio. El playbook de esta misma app recomienda «DCA mensual en índice»:
+doce compras del mismo ETF no caben en ese molde. Y los datos ya existían — el
+flujo de operaciones los tenía. Ahora la posición **se deriva de sus
+operaciones** (emparejadas por activo + mercado), con coste medio, ventas
+parciales y conteo de compras. Si no hay operaciones, mandan los campos escritos
+a mano: nada de lo que ya tenías deja de funcionar.
+
+**3. El precio actual no tenía fecha.** Una cartera valorada hace tres meses se
+mostraba como «valor actual» sin más. Ahora cada precio se sella al guardarlo y
+la fila dice *«hace 34 días»*, en ámbar pasada una semana y en rojo pasado un
+mes. El scorecard mira la fecha, no sólo la existencia.
+
+**4. ¿Cuánto te ha costado tocar?** El equivalente de «el protocolo, ¿paga?» en
+inversión. Cada venta se puede marcar como desviación del plan, y para las que
+tienen precio de referencia se calcula exactamente qué valdrían hoy esas unidades
+frente a lo que te dieron. Sin contrafactual: las unidades existieron y el precio
+de hoy lo tienes escrito.
+
+**5. Fricción al VENDER, no al comprar.** En futuros el *gate* frena las entradas
+fuera de protocolo. Aquí el error caro es el contrario, así que al elegir «venta»
+aparece **el plan de salida que tú mismo escribiste**, con la línea que importa:
+*«lo escribiste cuando no sabías el resultado»*. No bloquea —a veces vender es
+correcto— pero obliga a leerlo antes.
+
+329 pruebas del motor (36 nuevas de cartera). 23 archivos de prueba de la app.
+Diff contra la versión anterior: 10 archivos, una sola diferencia — el texto del
+tile de rentabilidad, que es el cambio buscado.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia
