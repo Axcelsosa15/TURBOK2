@@ -547,6 +547,39 @@ correcto— pero obliga a leerlo antes.
 Diff contra la versión anterior: 10 archivos, una sola diferencia — el texto del
 tile de rentabilidad, que es el cambio buscado.
 
+### El bug que introduje al arreglar el DCA
+
+Veinte minutos después de derivar la posición de sus operaciones, fui a buscar
+lo que acababa de romper. Lo encontré.
+
+`posLotes` emparejaba por **activo + mercado**. Con **dos** posiciones del mismo
+activo en el mismo mercado, cada una reclamaba el conjunto **completo** de
+operaciones:
+
+| posiciones de VOO | invertido | valor |
+| --- | --- | --- |
+| 1 | $2,400 | $2,528 |
+| 2 | **$4,800** | **$5,056** |
+| 3 | **$7,200** | **$7,584** |
+
+La cartera mostraba el triple del dinero que hay. Y el escenario no es raro: es
+exactamente el apaño que el modelo **viejo** obligaba a hacer —una posición por
+compra— así que quien lo hubiera usado vería su patrimonio multiplicado el día
+que actualizara.
+
+**Cuando hay ambigüedad no se reparte a ojo.** Se cae a los campos escritos a
+mano y la fila lo dice: *«3 posiciones de VOO aquí · únelas para derivar de las
+operaciones»*.
+
+**Y una segunda corrección, más pequeña:** el precio sólo se re-fechaba si el
+número cambiaba. Si lo revisabas y seguía igual, contaba como viejo — pero lo
+miraste hoy. Ahora se re-fecha siempre que haya precio.
+
+Verificación: 24 archivos de prueba, 562 valores en vivo contra tras recargar sin
+rancios, y **los 13 diffs idénticos** — el arreglo sólo toca la ruta de
+posiciones duplicadas, que ninguna prueba anterior ejercitaba. Por eso existe
+ahora `dup.mjs`.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia

@@ -7105,6 +7105,15 @@
   function posLotes(p) {
     const activo = String(p.asset || "").trim().toUpperCase();
     if (!activo) return null;
+    /* Las operaciones pertenecen a «la posición de este activo en este mercado».
+       Con DOS posiciones del mismo activo y mercado, cada una reclamaba el
+       conjunto completo: la cartera mostraba el doble de dinero del que hay.
+       Y ese escenario no es raro, es el apaño que el modelo VIEJO obligaba a
+       hacer (una posición por compra). Cuando hay ambigüedad no se reparte a
+       ojo: se cae a los campos escritos a mano y se dice por qué. */
+    const gemelas = coll("positions").items.filter(x =>
+      String(x.asset || "").trim().toUpperCase() === activo && x.market === p.market);
+    if (gemelas.length > 1) return { ambigua: true, gemelas: gemelas.length };
     const ops = tradesOf("inversion").filter(t =>
       String(t.asset || "").trim().toUpperCase() === activo &&
       (!p.market || !t.market || t.market === p.market) &&
@@ -7132,6 +7141,12 @@
 
   function posCalc(p) {
     const l = posLotes(p);
+    if (l && l.ambigua) {
+      const cost = (p.qty || 0) * (p.entry || 0) + (p.fees || 0);
+      const cur = p.current != null ? (p.qty || 0) * p.current : null;
+      return { cost, cur, qty: p.qty || 0, medio: p.entry || null, derivada: false, ambigua: true, gemelas: l.gemelas,
+               pnl: cur == null ? null : cur - cost, pct: cur == null || !cost ? null : (cur - cost) / cost };
+    }
     if (l && l.qty > 0) {
       const cost = l.coste;
       const cur = p.current != null ? l.qty * p.current : null;
@@ -7309,7 +7324,7 @@
         <header><h2>Posiciones</h2><span class="meta">${ps.length ? `${money(tot)} invertido · ${priced ? money(cur) + " actual" : "sin precios"}` : ""}</span></header>
         <div class="body">
           ${isFut ? `<p class="note-p">Los futuros no se registran aquí. Van al Journal de futuros y a la Cabina: son trading, no inversión.</p>` : ""}
-          ${ps.length ? `<div class="twrap"><table class="t"><thead><tr><th>Activo</th><th>Desde</th><th class="r">Cant.</th><th class="r">Entrada</th><th class="r">Actual</th><th class="r">Coste</th><th class="r">P&amp;L</th><th>Tesis</th><th>Salida planeada</th><th></th></tr></thead><tbody>${ps.map(p => { const c = posCalc(p); return `<tr data-id="${p.id}"><td><strong>${esc(p.asset)}</strong>${c.derivada ? `<div class="stale">${plu(c.lotes.nCompras, "compra", "compras")}${c.lotes.vendidoQty ? " · vendido en parte" : ""}</div>` : ""}</td><td>${esc(dmy(c.derivada && c.lotes.primera ? c.lotes.primera : p.date))}</td><td class="r">${c.qty ? redondeaQty(c.qty) : "—"}</td><td class="r">${c.medio != null ? money(c.medio, 2) + (c.derivada ? `<div class="stale">medio</div>` : "") : "—"}</td><td class="r">${p.current != null ? money(p.current, 2) + precioEdad(p) : '<span class="dim">—</span>'}</td><td class="r">${money(c.cost, 2)}</td><td class="r ${c.pnl > 0 ? "pos" : c.pnl < 0 ? "neg" : ""}">${c.pnl == null ? "—" : money(c.pnl, 2) + " · " + (c.pct >= 0 ? "+" : "") + (c.pct * 100).toFixed(1) + "%"}</td><td class="notes">${esc(p.thesis || "")}</td><td class="notes">${esc(p.exitPlan || "")}</td><td class="act"><button type="button" class="icon" data-act="pos" title="Editar">✎</button></td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Sin posiciones en ${esc(m.name)}.</p>`}
+          ${ps.length ? `<div class="twrap"><table class="t"><thead><tr><th>Activo</th><th>Desde</th><th class="r">Cant.</th><th class="r">Entrada</th><th class="r">Actual</th><th class="r">Coste</th><th class="r">P&amp;L</th><th>Tesis</th><th>Salida planeada</th><th></th></tr></thead><tbody>${ps.map(p => { const c = posCalc(p); return `<tr data-id="${p.id}"><td><strong>${esc(p.asset)}</strong>${c.derivada ? `<div class="stale">${plu(c.lotes.nCompras, "compra", "compras")}${c.lotes.vendidoQty ? " · vendido en parte" : ""}</div>` : c.ambigua ? `<div class="stale" style="color:var(--warn)">${c.gemelas} posiciones de ${esc(p.asset)} aquí · únelas para derivar de las operaciones</div>` : ""}</td><td>${esc(dmy(c.derivada && c.lotes.primera ? c.lotes.primera : p.date))}</td><td class="r">${c.qty ? redondeaQty(c.qty) : "—"}</td><td class="r">${c.medio != null ? money(c.medio, 2) + (c.derivada ? `<div class="stale">medio</div>` : "") : "—"}</td><td class="r">${p.current != null ? money(p.current, 2) + precioEdad(p) : '<span class="dim">—</span>'}</td><td class="r">${money(c.cost, 2)}</td><td class="r ${c.pnl > 0 ? "pos" : c.pnl < 0 ? "neg" : ""}">${c.pnl == null ? "—" : money(c.pnl, 2) + " · " + (c.pct >= 0 ? "+" : "") + (c.pct * 100).toFixed(1) + "%"}</td><td class="notes">${esc(p.thesis || "")}</td><td class="notes">${esc(p.exitPlan || "")}</td><td class="act"><button type="button" class="icon" data-act="pos" title="Editar">✎</button></td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Sin posiciones en ${esc(m.name)}.</p>`}
           ${isFut ? "" : `<button type="button" class="add" id="posAdd">+ Añadir posición</button>`}
         </div>
       </section>
@@ -7341,10 +7356,12 @@
         /* El precio actual es manual y no tenía fecha, así que una cartera
            valorada hace tres meses se mostraba como «valor actual» sin más.
            Sellarlo permite decir cuándo se miró, en vez de fingir que es hoy. */
-        const antes = p && p.current != null ? Number(p.current) : null;
         const ahora = rec.current != null ? Number(rec.current) : null;
-        if (ahora != null && (antes == null || antes !== ahora)) rec.priceAt = Date.now();
-        else if (ahora == null) delete rec.priceAt;
+        /* Se re-fecha SIEMPRE que haya precio, aunque el número no cambie: si lo
+           vuelves a mirar y sigue igual, lo miraste hoy. Comparar valores hacía
+           que un precio revisado y sin cambios siguiera contando como viejo. */
+        if (ahora != null) rec.priceAt = Date.now();
+        else delete rec.priceAt;
         coll("positions").set(rec.id, rec);
       },
       onDelete: isNew ? null : () => coll("positions").remove(p.id) });
