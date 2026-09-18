@@ -38,12 +38,15 @@ console.log('══════ A · CALCULADORA DE RIESGO ABIERTA cuando entra 
   console.log('  antes de la 2ª operación : ' + await riesgo(p));
   console.log('  tarjeta                  : ' + await tarjeta(p));
   await op(p, id, 20990);                                  // -$40  -> balance 25080
-  await p.click('.tabbtn[data-tab="cabina"]').catch(()=>{}); await p.waitForTimeout(700);
+  /* Se vuelve a la MISMA pestaña de la calculadora para leerla. Medirla desde
+     Cabina daba «(cerrada)» —está en otra pestaña— y se comparaba oculto contra
+     visible: ❌ garantizado sin que la app tuviera nada mal. */
+  await p.click('.tabbtn[data-tab="calc"]').catch(()=>{}); await p.waitForTimeout(700);
   const rDespues = await riesgo(p);
   console.log('  después (en vivo)        : ' + rDespues);
+  await p.click('.tabbtn[data-tab="cabina"]').catch(()=>{}); await p.waitForTimeout(300);
   console.log('  tarjeta                  : ' + await tarjeta(p));
-  // verdad: cerrar y reabrir la calculadora
-  await p.click('.acct [data-act="risk"]').catch(()=>{}); await p.waitForTimeout(400);
+  // verdad: forzar el recálculo reabriendo la calculadora desde la tarjeta
   await p.click('.acct [data-act="risk"]').catch(()=>{}); await p.waitForTimeout(800);
   const rReal = await riesgo(p);
   console.log('  después (reabriendo)     : ' + rReal);
@@ -56,11 +59,18 @@ console.log('\n══════ B · EDITAR una operación existente ═══
   const p = await abrir();
   const id = await p.evaluate(()=>document.querySelector('.acct').dataset.id);
   await op(p, id, 21030);
-  await p.click('.tabbtn[data-tab="futuros"]'); await p.waitForTimeout(600);
+  await p.click('.tabbtn[data-tab="futuros"]'); await p.waitForTimeout(400);
+  /* La tabla de operaciones vive en #jrTable, dentro de la vista «Diario»; el
+     selector apuntaba a un #ftList que no existe, así que la prueba se saltaba
+     sola desde el primer día y nadie la vio fallar. */
+  await p.click('#ftSeg button[data-v="diario"]'); await p.waitForTimeout(500);
   console.log('  antes  : ' + await tiles(p) + '  |  ' + await tarjeta(p));
-  await p.click('#ftList tr[data-id] .icon, .ftrow [data-act="edit"], #ftList tr[data-id]').catch(()=>{});
+  await p.click('#jrTable tr[data-id] [data-act="edit"]').catch(()=>{});
   await p.waitForTimeout(500);
-  const abierto = await p.evaluate(()=>!!document.getElementById('ef_exit'));
+  /* El editor vive en un overlay que se queda en el DOM al cerrarse: preguntar
+     por #ef_exit devolvía true con el editor CERRADO, y el fill siguiente moría
+     por timeout llevándose el resto del archivo por delante. */
+  const abierto = await p.evaluate(()=>!!document.querySelector('.ov.open #ef_exit'));
   if (abierto) {
     await p.fill('#ef_exit', '21100');                      // +100 pts -> +$400
     await p.click('#edSave'); await p.waitForTimeout(800);
@@ -75,17 +85,19 @@ console.log('\n══════ C · BORRAR una operación ══════'
   const p = await abrir();
   const id = await p.evaluate(()=>document.querySelector('.acct').dataset.id);
   await op(p, id, 21030); await op(p, id, 20990, '2026-09-16');
-  await p.click('.tabbtn[data-tab="futuros"]'); await p.waitForTimeout(600);
+  await p.click('.tabbtn[data-tab="futuros"]'); await p.waitForTimeout(400);
+  await p.click('#ftSeg button[data-v="diario"]'); await p.waitForTimeout(500);
   console.log('  antes  : ' + await tiles(p) + '  |  ' + await tarjeta(p));
-  const borrado = await p.evaluate(() => {
-    const btn = document.querySelector('#ftList [data-act="del"], #ftList .icon[title*="orrar"], table tr[data-id] [data-act="del"]');
-    if (!btn) return false; btn.click(); return true;
-  });
-  if (borrado) { await p.waitForTimeout(300);
-    await p.evaluate(()=>{ const b=document.querySelector('#ftList [data-act="del"].armed, #ftList [data-act="del"]'); if(b) b.click(); });
-    await p.waitForTimeout(800);
+  /* No hay botón de borrar en la fila: se borra desde el editor, y el botón se
+     arma en dos clics a propósito (el primero pregunta, el segundo borra). */
+  await p.click('#jrTable tr[data-id] [data-act="edit"]').catch(()=>{});
+  await p.waitForTimeout(500);
+  const borrado = await p.evaluate(() => !!document.querySelector('.ov.open #edDelete'));
+  if (borrado) {
+    await p.click('#edDelete'); await p.waitForTimeout(250);
+    await p.click('#edDelete'); await p.waitForTimeout(800);
     console.log('  después: ' + await tiles(p) + '  |  ' + await tarjeta(p));
-  } else console.log('  (botón de borrar no localizado — se revisa aparte)');
+  } else console.log('  (no se pudo abrir el editor para borrar)');
   await p.context().close();
 }
 console.log('\nerrores JS: ' + (errs.length ? errs.join('\n') : '0'));

@@ -608,7 +608,7 @@ mano. No siempre fue así — esta misma sesión eliminó la tabla `MULT` duplic
 
 **Las pruebas de la app vivían en un directorio efímero.** Si el contenedor
 moría, se perdían — y con ellas la única forma de re-verificar que la
-arquitectura sigue siendo cierta. Ahora están en `test/` (36 archivos), con
+arquitectura sigue siendo cierta. Ahora están en `test/` (38 archivos), con
 `test/build-preview.mjs` para reconstruir el preview desde `index.html`.
 
 Las dos más valiosas no comparan contra un valor escrito a mano: comparan **la
@@ -616,6 +616,92 @@ app contra sí misma**. `vivo.mjs` compara *en vivo* contra *tras recargar*;
 `capa.mjs` compara *una pestaña* contra *otra*. Eso encuentra cosas que un valor
 esperado no encuentra, porque no depende de que a quien escribe la prueba se le
 ocurra el caso.
+
+### La puerta única (`FUT`)
+
+El diagrama ya era cierto para los **números**: CABINA y FUTUROS leían de
+`coll("trades")` y de `acctAgg`. Lo que no estaba unificado era la **selección
+de cuenta**: `ft.acct` vivía solo en FUTUROS, CABINA no tenía selector, y la
+única conexión era un botón que saltaba de una pestaña a la otra. Dos pantallas
+de la misma cuenta podían estar mirando cosas distintas.
+
+`FUT` es la capa de datos hecha explícita: lecturas, escrituras, selección,
+cálculo y reglas en un solo objeto. **No calcula nada nuevo.** Cada función
+delega en la implementación que ya existía, así que añadirla no puede crear una
+segunda verdad; su valor es el contrario: convierte *«¿de dónde sale este
+número?»* en una lista cerrada de sitios a los que se puede llamar.
+
+```
+                      FUT  ← window.FUT (depuración y pruebas)
+   ┌───────────────────┼────────────────────┐
+   lecturas        escrituras            cálculo
+   accounts()      createTrade()         calculateAccountStats()
+   trades()        updateTrade()         calculateConsistency()
+   rules()         deleteTrade()         calculateDrawdown()
+   selectedAccount() createAccount()     calculateEquityCurve()
+                   updateAccount()       calculateStreaks()  …15 en total
+                   deleteAccount()
+                   updateRule()          reglas
+                   setSelectedAccount()  evaluateRules(cuenta, fecha)
+                   setFilters()
+        │                    │                     │
+        └──────── coll("trades") · state.settings · QE ────────┘
+```
+
+**La selección de cuenta es un solo estado**, guardado en los ajustes y por
+tanto superviviente a un refresh. El selector de CABINA y el filtro de FUTUROS
+escriben en el mismo sitio; ninguno avisa al otro porque los dos repintan desde
+él. La tarjeta de la cuenta elegida se marca y sube arriba en CABINA — no se
+ocultan las demás: la selección dice *«esta es la que estoy operando»*, no
+*«olvídate del resto»*.
+
+Dos cosas cambiaron de comportamiento al hacerlo:
+
+- **FUTUROS → Cuentas ahora enseña el estado operativo** (LISTA / AVISO /
+  RESTRINGIDA / BLOQUEADA / QUEMADA) que salía del mismo motor y solo se veía en
+  CABINA. Enseñaba el dinero de la cuenta pero no si el día estaba cerrado.
+- **El panel de reglas se mide sobre la cuenta seleccionada.** Antes sumaba el
+  día de todas las cuentas, y entonces el panel y la tarjeta —que sí se mide por
+  cuenta— podían discrepar del mismo día. Sin selección, sigue mirando el día
+  completo.
+
+Lo que **no** cambió, a propósito: los filtros de FUTUROS siguen sin tocar las
+métricas de cuenta. `acctAgg` filtra por `accountId`, nunca por `ft`, así que
+filtrar el análisis por instrumento no mueve el balance. `test/sync.mjs` lo
+comprueba explícitamente, porque es el error clásico de esta separación.
+
+`evaluateRules(cuenta, fecha)` es la firma completa: acepta una fecha, así que
+se puede preguntar por un día que no es hoy, y devuelve además las listas de
+`violations` y `warnings` y un `lockedUntil`. Los cierres por pérdida del día o
+por racha duran hasta el cierre de **ese** día; una cuenta quemada no tiene
+fecha de desbloqueo.
+
+Tres pruebas del directorio estaban rotas **desde antes de esta sesión**, y las
+tres por defectos de la propia prueba, no de la app:
+
+- `vivo2` y `vivo3` medían un panel *desde otra pestaña* y lo comparaban contra
+  el mismo panel visible: «oculto ≠ visible», ❌ garantizado sin que la app
+  tuviera nada mal. Peor: `vivo2` preguntaba si el editor estaba abierto con
+  `getElementById('ef_exit')`, y el overlay se queda en el DOM al cerrarse, así
+  que el `fill` siguiente moría por *timeout* y se llevaba el resto del archivo.
+  Sus partes B y C —editar y borrar desde el journal— apuntaban a un `#ftList`
+  que no existe: llevaban imprimiendo «se revisa aparte» desde el primer día.
+  Ahora miden en la misma pestaña, usan `.ov.open` y `#jrTable`, y **pasan**:
+  editar de +$120 a +$400 y borrar una de dos se propagan solos.
+- `perfil` y `ledger` morían por un archivo ausente (`preview_perf.html`,
+  `prev_v1.html`): builds de usar y tirar que no están versionadas. Ahora se
+  degradan — `perfil` mide reloj de pared sin el desglose, `ledger` se salta la
+  mitad arqueológica.
+
+El foco pasó a probarse sin navegar: se escribe en un campo, entra una operación
+por la capa de datos, y se comprueba que el cursor y lo escrito siguen ahí. Eso
+sí es el invariante que importa.
+
+`test/sync.mjs` recorre los diez escenarios completos —crear desde cada
+pestaña, editar, borrar, tope diario, racha, contratos, varias cuentas,
+selección compartida, persistencia— más los casos límite que rompen esto de
+verdad: cuenta con cero operaciones, y la operación que cambia de día y de
+cuenta.
 
 ### El motor anterior
 

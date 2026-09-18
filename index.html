@@ -399,6 +399,9 @@
      módulos de riesgo y la tabla. El resto se separa con aire y con peso. */
   .accts { display: grid; gap: 18px; }
   .acct { border: 1px solid var(--line); border-radius: 6px; padding: 0; background: var(--surface-2); display: block; overflow: hidden; }
+  /* La cuenta seleccionada: la misma que filtra Futuros. Se marca, no se aísla. */
+  .acct.sel { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  #cabAcct { font-family: var(--font-mono); font-size: 11px; }
   .acct > * { padding-left: 16px; padding-right: 16px; }
   .acc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 14px; padding-bottom: 12px; }
   .acc-id { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
@@ -1067,7 +1070,7 @@
   </div>
   <div class="col">
     <section class="panel" id="panelAccts">
-      <header><h2>Cuentas prop</h2><div class="hgroup"><span class="meta" id="acctsMeta"></span><button type="button" class="btn sm ghost" id="addAcct">+ Añadir cuenta</button></div></header>
+      <header><h2>Cuentas prop</h2><div class="hgroup"><select id="cabAcct" aria-label="Cuenta de trabajo"><option value="">todas las cuentas</option></select><span class="meta" id="acctsMeta"></span><button type="button" class="btn sm ghost" id="addAcct">+ Añadir cuenta</button></div></header>
       <div class="body">
         <div class="accts" id="accts"></div>
       </div>
@@ -2134,14 +2137,21 @@
   const rulesEl = $("rules");
   function renderRules() {
     const rules = state.settings.rules;
-    const k = dayRuleCheck(todayFutures());
+    /* Las reglas se miden sobre el día de LA CUENTA SELECCIONADA. Antes miraban
+       el día entero del trader sumando todas las cuentas, y entonces el panel de
+       reglas y la tarjeta de la cuenta —que sí se mide por cuenta— podían decir
+       cosas distintas del mismo día. Sin selección no hay nada que estrechar y
+       se mira el día completo, como antes. */
+    const selReglas = FUT.selectedAccountId();
+    const k = dayRuleCheck(todayFutures(selReglas));
     const worst = rules.reduce((w, r) => { const st = ruleStatus(r, k); const rank = { bad: 3, warn: 2, good: 1, dim: 0 }[st.cls]; return rank > w.rank ? { rank, st } : w; }, { rank: -1, st: null });
     const rotas = rules.filter(r => ruleStatus(r, k).cls === "bad").length;
     const avisos = rules.filter(r => ruleStatus(r, k).cls === "warn").length;
     const m = $("rulesState");
     if (m) {
       m.className = "rulesstate " + (rotas ? "bad" : avisos ? "warn" : "good");
-      m.innerHTML = `<i></i>${rotas ? plu(rotas, "regla rota hoy", "reglas rotas hoy") : avisos ? plu(avisos, "regla en aviso", "reglas en aviso") : plu(rules.length, "regla activa", "reglas activas")}`;
+      const cuentaSel = selReglas ? acctById(selReglas) : null;
+      m.innerHTML = `<i></i>${rotas ? plu(rotas, "regla rota hoy", "reglas rotas hoy") : avisos ? plu(avisos, "regla en aviso", "reglas en aviso") : plu(rules.length, "regla activa", "reglas activas")}${cuentaSel ? ` · <span class="dim">${esc(cuentaSel.name || "cuenta")}</span>` : ""}`;
     }
     rulesEl.innerHTML = rules.map((r, i) => {
       const st = ruleStatus(r, k);
@@ -2729,11 +2739,21 @@
       const vivas = accts.filter(a => a.status === "activa");
       const peor = vivas.map(a => evaluateAccountRules(a).status).reduce((w, st) => RULE_RANK[st] > RULE_RANK[w] ? st : w, "READY");
       meta.innerHTML = accts.length
-        ? `${plu(accts.length, "cuenta", "cuentas")} · ${vivas.length} ${vivas.length === 1 ? "activa" : "activas"}${vivas.length ? ` · <span class="${ST_CLS[peor]}">${ST_LABEL[peor]}</span>` : ""}`
+        ? `${plu(accts.length, "cuenta", "cuentas")} · ${vivas.length} ${vivas.length === 1 ? "activa" : "activas"}${vivas.length ? ` · <span class="${ST_CLS[peor]}">${ST_LABEL[peor]}</span>` : ""}${FUT.selectedAccount() ? ` · trabajando en <b id="acctsSelName">${esc(FUT.selectedAccount().name || "sin nombre")}</b>` : ""}`
         : "ninguna todavía";
     }
+    const sel = $("cabAcct");
+    if (sel && document.activeElement !== sel) {
+      sel.innerHTML = `<option value="">todas las cuentas</option>` +
+        acctOptions().map(([v, l]) => `<option value="${esc(v)}"${FUT.selectedAccountId() === v ? " selected" : ""}>${esc(l)}</option>`).join("");
+    }
     if (!accts.length) { acctsEl.innerHTML = `<p class="empty">Sin cuentas registradas. Pulsa <code>+ Añadir cuenta</code> y pon firma, tamaño y drawdown: con eso ya salen el colchón, la consistencia y el riesgo de hoy.</p>`; return; }
-    acctsEl.innerHTML = accts.map((a, i) => acctCard(a, i, accts.length)).join("");
+    /* La cuenta seleccionada se marca y sube arriba. No se ocultan las demás: la
+       selección dice «esta es la que estoy operando», no «olvídate del resto». */
+    const selId = FUT.selectedAccountId();
+    const orden = selId ? accts.slice().sort((x, y) => (y.id === selId ? 1 : 0) - (x.id === selId ? 1 : 0)) : accts;
+    acctsEl.innerHTML = orden.map((a, i) => acctCard(a, i, orden.length)).join("");
+    if (selId) { const card = acctsEl.querySelector(`.acct[data-id="${CSS.escape(selId)}"]`); if (card) card.classList.add("sel"); }
   }
 
   /* Los números de la cuenta ya no se editan dentro de la tarjeta (van en ⚙ Ajustes),
@@ -2772,7 +2792,7 @@
     if (act === "arch") { a.status = a.status === "pausada" ? "activa" : "pausada"; persistSettings(); renderAccounts(); return; }
     if (act === "newtrade") { openTrade(null, "futuros", { accountId: a.id }); return; }
     if (act === "cfg") { openAccountEditor(a); return; }
-    if (act === "journal") { ft.acct = a.id; showTab("futuros"); setFtView("diario"); return; }
+    if (act === "journal") { FUT.setSelectedAccount(a.id); showTab("futuros"); setFtView("diario"); return; }
     if (act === "playbook") { showTab("playbook"); return; }
     if (act === "risk") { loadAcctIntoRisk(a); return; }
     if (act === "del") { if (!armed(btn)) return; arr.splice(i, 1); }
@@ -5249,6 +5269,158 @@
 
   /* =============================== FUTUROS (journal estilo TradeZella) =============================== */
   const ft = { view: "resumen", range: "all", setup: "", instr: "", acct: "", ses: "", month: state.today.slice(0, 7), day: null };
+
+  /* ══════════════════ CAPA DE DATOS — PUERTA ÚNICA ══════════════════
+     Cabina y Futuros no son dos sistemas: son dos VISTAS sobre esto.
+
+     Aquí NO se calcula nada nuevo. Cada función delega en la implementación que
+     ya existe — coll("trades"), acctAgg, consistency, futStats, QE… — así que
+     añadir esta capa no puede crear una segunda verdad. Su valor es el
+     contrario: convierte «¿de dónde salió este número?» en una lista cerrada de
+     sitios a los que se puede llamar. Si dos pantallas discrepan alguna vez,
+     discrepan porque una de ellas se saltó esta puerta.
+
+     Regla para el futuro: una pantalla nueva llama a FUT. No a acctAgg. */
+  const FUT = {
+    // ── lecturas ──
+    accounts() { return state.settings.accounts || []; },
+    account(id) { return acctById(id); },
+    rules() { return state.settings.rules || []; },
+    trades(accountId) { const l = tradesOf("futuros"); return accountId ? l.filter(t => t.accountId === accountId) : l; },
+    tradesOn(accountId, date) { return FUT.trades(accountId).filter(t => t.date === date); },
+
+    /* ── selección de cuenta ──
+       UN solo estado. ft.acct lo guarda porque ya existía y ya lo leen los
+       filtros de Futuros; lo que cambia es que ahora también lo lee Cabina, se
+       persiste con los ajustes y sobrevive a un refresh. Dos estados
+       independientes (Cabina.selectedAccount y Futures.selectedAccount) es
+       justo lo que esto impide. */
+    selectedAccountId() { return ft.acct && ft.acct !== "__none" && acctById(ft.acct) ? ft.acct : ""; },
+    selectedAccount() { const id = FUT.selectedAccountId(); return id ? acctById(id) : null; },
+    setSelectedAccount(id) {
+      const v = id == null ? "" : String(id);
+      if (ft.acct === v) return false;
+      ft.acct = v;
+      state.settings.meta = state.settings.meta || {};
+      state.settings.meta.acct = v;
+      persistSettings(true);
+      fanout(FANOUT_SEL);
+      return true;
+    },
+    setFilters(patch) { Object.assign(ft, patch || {}); renderFutures(); },
+
+    // ── escrituras: TODAS pasan por coll("trades") / state.settings ──
+    createTrade(t) {
+      const id = t && t.id ? t.id : uid("t");
+      coll("trades").set(id, Object.assign({ type: "futuros", createdAt: Date.now() }, t, { id }));
+      return id;
+    },
+    updateTrade(id, patch) {
+      const prev = coll("trades").get(id); if (!prev) return false;
+      coll("trades").set(id, Object.assign({}, prev, patch, { id })); return true;
+    },
+    deleteTrade(id) { if (!coll("trades").get(id)) return false; coll("trades").remove(id); return true; },
+
+    createAccount(a) {
+      const id = a && a.id ? a.id : uid("a");
+      state.settings.accounts.push(Object.assign({ status: "activa", total: 0, best: 0, ledger: [] }, a, { id }));
+      persistSettings(); fanout(FANOUT_SEL); return id;
+    },
+    updateAccount(id, patch) {
+      const a = acctById(id); if (!a) return false;
+      Object.assign(a, patch); persistSettings(); fanout(FANOUT_SEL); return true;
+    },
+    deleteAccount(id) {
+      const arr = state.settings.accounts, i = arr.findIndex(x => x.id === id);
+      if (i < 0) return false;
+      arr.splice(i, 1);
+      if (ft.acct === id) { ft.acct = ""; if (state.settings.meta) state.settings.meta.acct = ""; }
+      persistSettings(); fanout(FANOUT_SEL); return true;
+    },
+    updateRule(id, patch) {
+      const r = (state.settings.rules || []).find(x => x.id === id); if (!r) return false;
+      Object.assign(r, patch); persistSettings(); fanout(FANOUT_SEL); return true;
+    },
+
+    /* ── motor de cálculo ──
+       Una función por pregunta, todas sobre los datos canónicos. Ninguna
+       reimplementa una fórmula: son la traducción entre el nombre de la
+       pregunta y el sitio donde ya se responde. */
+    calculateAccountStats(accountId) { const a = acctById(accountId); return a ? acctAgg(a) : null; },
+    calculateTradeStats(accountId) { return futStats(FUT.trades(accountId)); },
+    calculateDailyStats(accountId, date) {
+      const d = date || state.today;
+      const list = FUT.trades(accountId).filter(t => t.date === d);
+      const s = futStats(list);
+      return { date: d, list, n: s.n, closed: s.closed, pnl: s.pnl, wins: s.wins, losses: s.losses, be: s.be, totalR: s.totalR };
+    },
+    calculateDrawdown(accountId) { const g = FUT.calculateAccountStats(accountId); return g ? ddEngine(g) : null; },
+    calculateConsistency(accountId) { const a = acctById(accountId); return a ? consEngine(consistency(a)) : null; },
+    calculateExpectancy(accountId) { const s = FUT.calculateTradeStats(accountId); return { usd: s.expect, r: s.avgR, n: s.closed }; },
+    calculateProfitFactor(accountId) { const s = FUT.calculateTradeStats(accountId); return { valor: s.pf, razon: s.pfRazon }; },
+    calculateWinRate(accountId) { const s = FUT.calculateTradeStats(accountId); return { valor: s.wr, wins: s.wins, closed: s.closed }; },
+    calculateStreaks(accountId) {
+      const s = FUT.calculateTradeStats(accountId);
+      return { currentWinStreak: Math.max(0, s.curStreak), currentLossStreak: Math.max(0, -s.curStreak),
+               worstWinStreak: s.maxWinStreak, worstLossStreak: s.maxLossStreak };
+    },
+    calculateEquityCurve(accountId) { const g = FUT.calculateAccountStats(accountId); return g ? g.curva : null; },
+    calculateRiskState(accountId, date) { return FUT.evaluateRules(accountId, date); },
+    calculateConcentration(accountId) {
+      const a = acctById(accountId);
+      if (a) { const c = consistency(a); return { ratio: c.ratio, best: c.best, total: c.total, limite: c.L }; }
+      const s = FUT.calculateTradeStats(accountId);
+      return { ratio: s.bestShare, best: s.bestDay, total: s.pnl, limite: null };
+    },
+    calculateProtocolCompliance(accountId) {
+      const s = FUT.calculateTradeStats(accountId);
+      return { ratio: s.proto, conProtocolo: s.protoA, sinProtocolo: s.protoB };
+    },
+    calculateEdge(accountId) {
+      const ops = FUT.trades(accountId).filter(t => t.pnlEff != null).map(t => ({ pnl: t.pnlEff, r: t.rReal, fecha: t.date }));
+      return QE.analizarEdge(ops).value;
+    },
+    calculateSQN(accountId) { const e = FUT.calculateEdge(accountId); return { valor: e.sqn, escala: e.sqnEscala, n: e.n }; },
+    calculateRMultipleStats(accountId) {
+      const s = FUT.calculateTradeStats(accountId);
+      return { media: s.avgR, total: s.totalR, n: s.closed };
+    },
+
+    /* ── motor de reglas ──
+       Una sola evaluación para las dos páginas. evaluateAccountRules ya decide
+       el estado y la escalera de prioridad; esto añade la fecha (para poder
+       preguntar por un día que no es hoy) y desglosa las listas de violaciones
+       y avisos a partir de ruleStatus, que es lo que ya pinta la tarjeta de
+       reglas. Ni una condición nueva inventada aquí. */
+    evaluateRules(accountId, date) {
+      const a = acctById(accountId) || (accountId ? null : FUT.selectedAccount());
+      if (!a) {
+        return { canTrade: true, status: "READY", violations: [], warnings: [], lockedUntil: null,
+                 reason: "Sin cuenta seleccionada: las reglas duras se evalúan por cuenta.", cuenta: null };
+      }
+      const d = date || state.today;
+      const ev = evaluateAccountRules(a, acctToday(a, d));
+      const k = ev.day, violations = [], warnings = [];
+      for (const r of (state.settings.rules || [])) {
+        const st = ruleStatus(r, k);
+        const fila = { id: r.id, name: r.name, role: r.role || null, code: st.code, note: st.note };
+        if (st.code === "ROTA") violations.push(fila);
+        else if (st.code === "AVISO") warnings.push(fila);
+      }
+      // Lo de la cuenta no es una regla escrita, pero rompe igual.
+      if (ev.dd.ok && ev.dd.breached) violations.push({ id: "__dd", name: "Suelo de la cuenta", role: "drawdown", code: "ROTA", note: `balance por debajo de ${money(ev.dd.floor)}` });
+      else if (ev.dd.ok && ev.dd.util >= 0.75) warnings.push({ id: "__dd", name: "Suelo de la cuenta", role: "drawdown", code: "AVISO", note: `quedan ${money(ev.dd.buffer)}` });
+      if (ev.cons.hasData && !ev.cons.compliant) violations.push({ id: "__cons", name: "Consistencia", role: "consistency", code: "ROTA", note: `${pct(ev.cons.ratio)} sobre ${pct(ev.cons.limit)}` });
+      else if (ev.cons.hasData && ev.cons.near) warnings.push({ id: "__cons", name: "Consistencia", role: "consistency", code: "AVISO", note: `${pct(ev.cons.ratio)} de ${pct(ev.cons.limit)}` });
+      /* lockedUntil: los cierres por pérdida del día o por rachas duran hasta el
+         cierre de ESE día, así que el valor es la fecha evaluada. FAILED no
+         tiene fecha: una cuenta quemada no se desbloquea mañana. */
+      const lockedUntil = ev.status === "LOCKED" && (ev.risk.locked || k.streakHit) ? d : null;
+      return Object.assign({}, ev, { violations, warnings, lockedUntil, reason: ev.why, cuenta: a.id, fecha: d });
+    },
+  };
+  // Superficie de depuración y de pruebas. Leer está permitido; escribir, solo por aquí.
+  window.FUT = FUT;
   const ivj = { setup: "" };
   function acctOptions() { return (state.settings.accounts || []).map(a => [a.id, `${a.firm ? a.firm + " · " : ""}${a.name || "sin nombre"}`]); }
   function acctById(id) { return (state.settings.accounts || []).find(a => a.id === id) || null; }
@@ -5417,7 +5589,11 @@
   $("ftSetup").addEventListener("change", e => { ft.setup = e.target.value; renderFutures(); });
   $("ftInstr").addEventListener("change", e => { ft.instr = e.target.value; renderFutures(); });
   $("ftSes").addEventListener("change", e => { ft.ses = e.target.value; renderFutures(); });
-  $("ftAcct").addEventListener("change", e => { ft.acct = e.target.value; renderFutures(); });
+  /* Los dos selectores — el de Futuros y el de Cabina — escriben en el MISMO
+     sitio. Por eso no hace falta que uno avise al otro: los dos repintan desde
+     el mismo estado. */
+  $("ftAcct").addEventListener("change", e => { if (!FUT.setSelectedAccount(e.target.value)) renderFutures(); });
+  $("cabAcct").addEventListener("change", e => { FUT.setSelectedAccount(e.target.value); });
   $("ivSetup").addEventListener("change", e => { ivj.setup = e.target.value; renderInvestOps(); });
   $("calPrev").addEventListener("click", () => { ft.month = shiftMonth(ft.month, -1); renderCalendar(); });
   $("calNext").addEventListener("click", () => { ft.month = shiftMonth(ft.month, 1); renderCalendar(); });
@@ -6651,7 +6827,16 @@
     const accts = state.settings.accounts || [];
     if (!accts.length) { el.innerHTML = `<p class="empty">Ninguna cuenta registrada. Pulsa <code>+ Registrar cuenta</code>: con la firma, el tamaño y el drawdown ya se calculan el colchón y la consistencia con tus operaciones reales.</p>`; return; }
     el.innerHTML = accts.map(a => {
-      const c = consistency(a); const g = c.agg;
+      /* El estado operativo sale del MISMO motor que lo pinta en la Cabina. Sin
+         esto, Futuros enseñaba los números de la cuenta pero no si se puede
+         operar con ella: dos pantallas de la misma cuenta diciendo cosas
+         distintas sobre si el día está cerrado.
+
+         Y se reaprovecha lo que el motor ya calculó: la consistencia y el
+         agregado vienen dentro. Volver a pedirlos duplicaría acctAgg por cuenta
+         y por repintado, que es la parte cara con miles de operaciones. */
+      const ev = FUT.evaluateRules(a.id);
+      const c = ev.c; const g = ev.agg;
       const st = futStats(tradesOf("futuros").filter(t => t.accountId === a.id));
       const led = (a.ledger || []).slice().sort((x, y) => String(y.date).localeCompare(String(x.date)));
       const kindOf = k => (LEDGER_KINDS.find(x => x[0] === k) || ["", k])[1];
@@ -6660,7 +6845,7 @@
       return `<section class="facct ${a.status === "activa" ? "" : "off"}" data-id="${a.id}">
         <header>
           <span class="firm">${esc(a.firm || "sin firma")}</span><span class="name">${esc(a.name || "sin nombre")}</span>
-          ${a.kind ? `<span class="chip">${esc(a.kind)}</span>` : ""}<span class="chip ${a.status === "activa" ? "good" : a.status === "quemada" ? "bad" : a.status === "pasada" ? "good" : "warn"}">${esc(a.status)}</span>
+          ${a.kind ? `<span class="chip">${esc(a.kind)}</span>` : ""}<span class="chip ${a.status === "activa" ? "good" : a.status === "quemada" ? "bad" : a.status === "pasada" ? "good" : "warn"}">${esc(a.status)}</span><span class="chip ${ST_CLS[ev.status]}" title="${esc(ev.reason)}">${ST_ICON[ev.status]} ${ST_LABEL[ev.status]}</span>
           <div class="tools"><button type="button" class="btn sm ghost" data-act="trade">+ Op.</button><button type="button" class="btn sm ghost" data-act="mov">+ Movimiento</button><button type="button" class="btn sm" data-act="edit">Editar</button></div>
         </header>
         <div class="body">
@@ -7795,6 +7980,16 @@
     ["risk", "escenario de riesgo", "escenarios de riesgo"],
   ];
 
+  /* Al cambiar la CUENTA SELECCIONADA no cambian los datos, cambia el punto de
+     vista: se repinta todo lo que depende de qué cuenta se está mirando. Es la
+     misma mecánica del fan-out de operaciones, con su aislamiento por zona. */
+  const FANOUT_SEL = [
+    ["operaciones", () => renderFutures()],
+    ["cuentas", () => renderAccounts()],
+    ["reglas", () => renderRules()],
+    ["calculadora de riesgo", () => refreshRiskFromAccount()],
+    ["pre-sesión", () => invalidatePre()],
+  ];
   const FANOUT_TRADES = [
     ["operaciones", () => renderFutures()],
     ["inversión", () => renderInvestOps()],
@@ -7832,6 +8027,12 @@
 
   try { localStorage.getItem(LS_KEY); state.store = "local"; } catch { state.store = "memory"; }
   loadLocal();
+  /* La cuenta seleccionada es parte del estado, no del momento: si ayer cerraste
+     mirando la LucidFlex, hoy abres mirando la LucidFlex. Se valida contra las
+     cuentas que existen para que borrar una no deje la app filtrando por un
+     fantasma. */
+  if (state.settings.meta && state.settings.meta.acct && acctById(state.settings.meta.acct)) ft.acct = state.settings.meta.acct;
+  else if (state.settings.meta) state.settings.meta.acct = "";
   setStoreLabel();
   renderAll();
   $("riskForm").innerHTML = riskFormHtml();
@@ -8264,7 +8465,5 @@
   })();
 })();
 </script>
-
-
 </body>
 </html>

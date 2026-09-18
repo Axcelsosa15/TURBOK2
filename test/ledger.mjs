@@ -34,10 +34,19 @@ async function corre(html, etiqueta) {
   return { bal, mov };
 }
 
-console.log('════ ANTES (cabina.bak13 · sin el arreglo) ════');
-const a = await corre('prev_v1.html', 'v1');
-console.log('  ' + a.bal);
-console.log('  ' + a.mov.slice(0, 220));
+/* La mitad «ANTES» compara contra una copia vieja de la app (prev_v1.html,
+   construida a mano desde cabina.bak13). Es arqueología: si el archivo no está,
+   no hay nada que probar ahí y la parte que SÍ tiene que seguir verde es la de
+   abajo. Sin esta guarda, el test entero moría por un archivo ausente. */
+import { existsSync } from 'node:fs';
+if (existsSync('prev_v1.html')) {
+  console.log('════ ANTES (cabina.bak13 · sin el arreglo) ════');
+  const a = await corre('prev_v1.html', 'v1');
+  console.log('  ' + a.bal);
+  console.log('  ' + a.mov.slice(0, 220));
+} else {
+  console.log('════ ANTES ════\n  (prev_v1.html no está: la comparación histórica se salta)');
+}
 console.log('\n════ DESPUÉS (con el arreglo) ════');
 const c = await corre('preview.html', 'v2');
 console.log('  ' + c.bal);
