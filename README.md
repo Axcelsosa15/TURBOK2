@@ -703,6 +703,85 @@ selección compartida, persistencia— más los casos límite que rompen esto de
 verdad: cuenta con cero operaciones, y la operación que cambia de día y de
 cuenta.
 
+### Medir antes de optimizar, y decirlo cuando la medida te contradice
+
+Guardar una operación con 1.500 en el journal llamaba a `acctAgg` **18 veces**
+con tres cuentas abiertas: seis por cuenta, devolviendo exactamente lo mismo
+cada vez. Parecía el cuello de botella. Memoricé `acctAgg`, `futStats`,
+`futFiltered` y las listas por cuenta, con la disciplina de siempre — la clave
+incluye **todo** lo que la función lee, así que no hay que acordarse de
+invalidar nada:
+
+```
+                       llamadas      reloj
+  acctAgg   antes  18        →  3
+  futStats  antes  7.500 ops →  3.000     190 ms → 181 ms
+```
+
+**Las llamadas cayeron 6× y el reloj no se movió.** Dicho claro: memoricé lo que
+parecía caro por número de llamadas y no lo era. Perfilando de verdad, en un
+guardado de 179 ms:
+
+```
+  renderFutures   103 ms   ← el DOM
+  renderQE         34 ms
+  futStatsCrudo     4 ms   ← la matemática
+```
+
+La cuenta nunca fue el coste. Lo era reconstruir la tabla, el calendario y los
+gráficos como cadenas de HTML.
+
+Lo que sí estaba mal era **cuántas veces** se reconstruían. Al arrancar,
+`loadLocal()` emite una vez por colección —trades, playbooks, ideas, markets,
+watch, positions— y cada suscriptor llamaba a sus renders a pelo:
+`renderFutures` corría 4 veces, `renderInvest` 6, para producir el mismo HTML.
+Ahora todos los suscriptores pasan por un agrupador que acumula zonas **por
+nombre** y las pinta una vez por tick:
+
+```
+  arranque (1.500 ops, 3 cuentas)   855 ms → 661 ms   (−23%)
+  arranque (300 ops, 1 cuenta)      678 ms → 563 ms   (−17%)
+  guardar una operación             161 ms → 167 ms   (sin cambio)
+```
+
+El guardado no mejora y no hay por qué fingir que sí: ahí solo emite `trades`,
+o sea no había nada que agrupar. Lo que queda por hacer, si alguna vez molesta,
+es no reconstruir la vista de Futuros cuando no está a la vista.
+
+Un microtask, no `requestAnimationFrame`: se resuelve antes de que el navegador
+pinte —nada se ve a medio actualizar— y no se congela en una pestaña de fondo,
+que dejaría los números viejos al volver.
+
+De paso desapareció el último `try{}catch{}` mudo: el de los destinos de la
+calculadora. Si falla, ahora se dice cuál falló.
+
+### El guardián de la arquitectura
+
+`test/capa2.mjs` no abre el navegador: lee el archivo en 40 ms y comprueba las
+afirmaciones que este README hace. Una afirmación que nadie comprueba deja de
+ser cierta en cuanto alguien tiene prisa.
+
+Vigila una definición por cálculo; que nadie llame a los `*Crudo` saltándose la
+memoria; que las 26 funciones de `FUT` sigan ahí; que cada memoria dependa de
+`coll("trades").rev` y que la huella de la cuenta cubra **todo** campo que
+`acctAgg` lee de ella; y que ningún número tenga dos implementaciones.
+
+La primera versión marcaba tres falsos positivos, y los tres enseñan lo mismo:
+`MULT` existe pero **se deriva** de `QE.CONTRACTS`; `riskThreshold` existe pero
+**delega** en `QE.sueloPara`; y el tercer «duplicado» era un comentario que dice
+*«nunca calcules el P&L así»*. Buscaba nombres, no implementaciones. Un guardián
+que falla siempre acaba ignorado, que es peor que no tenerlo. Ahora comprueba
+que cada envoltorio **siga delegando**.
+
+Y se probó rompiéndolo a propósito — un guardián que no puede fallar es teatro:
+
+```
+  quito trailBase y ledger de la huella          → ❌ fuera de la huella: ledger, trailBase
+  llamo a acctAggCrudo saltándome la memoria     → ❌ 2 llamadas
+  riskThreshold deja de delegar                  → ❌ ya no llama a QE.sueloPara
+  desaparece calculateSQN de FUT                 → ❌ faltan: calculateSQN
+```
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia

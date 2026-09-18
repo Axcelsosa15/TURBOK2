@@ -2240,8 +2240,42 @@
   /* ---------- accounts ---------- */
   const acctsEl = $("accts");
   // Agrega lo que la cuenta lleva de verdad: base escrita a mano + todo el journal de futuros.
+  /* Las operaciones CERRADAS de una cuenta, en el orden en que ocurrieron.
+     Se memoriza por la misma razón que tradesOf: guardar UNA operación con tres
+     cuentas abiertas repetía este filtro 18 veces sobre las 1.500 del journal. */
+  const _listaMemo = new Map();
+  function tradesDe(accountId, soloCerradas) {
+    const mapa = accountId + "|" + (soloCerradas ? "c" : "t");
+    const key = coll("trades").rev + "|" + (autoFeesOn() ? 1 : 0);
+    const hit = _listaMemo.get(mapa);
+    if (hit && hit.key === key) return hit.val;
+    const val = tradesOf("futuros").filter(t => t.accountId === accountId && (!soloCerradas || t.pnlEff != null));
+    _listaMemo.set(mapa, { key, val });
+    return val;
+  }
+
+  /* acctAgg reconstruye la curva entera de la cuenta: con 500 operaciones por
+     cuenta eso no es gratis, y se llamaba SEIS veces por cuenta en cada guardado
+     —tarjeta de Cabina, tarjeta de Futuros, consistencia, motor de reglas,
+     calculadora de riesgo, tiles— devolviendo exactamente lo mismo cada vez.
+
+     La huella incluye todo lo que acctAgg lee de la cuenta. Si cambia un solo
+     campo, o entra una operación (c.rev), el resultado se recalcula. No puede
+     quedarse viejo: no hay que acordarse de invalidar nada.
+
+     Nadie muta lo que devuelve —verificado— así que compartir el objeto es seguro. */
+  const _aggMemo = new Map();
   function acctAgg(a) {
-    const list = tradesOf("futuros").filter(t => t.accountId === a.id && t.pnlEff != null);
+    const claveCuenta = coll("trades").rev + "|" + (autoFeesOn() ? 1 : 0) + "|" +
+      JSON.stringify([a.total, a.best, a.size, a.dd, a.ddKind, a.trailBase, a.limit, a.ledger]);
+    const cache = _aggMemo.get(a.id);
+    if (cache && cache.key === claveCuenta) return cache.val;
+    const val = acctAggCrudo(a);
+    _aggMemo.set(a.id, { key: claveCuenta, val });
+    return val;
+  }
+  function acctAggCrudo(a) {
+    const list = tradesDe(a.id, true);
     const byDay = {}; list.forEach(t => { byDay[t.date] = (byDay[t.date] || 0) + t.pnlEff; });
     const days = Object.keys(byDay).sort().map(d => ({ date: d, pnl: byDay[d] }));
     const jTotal = days.reduce((s, d) => s + d.pnl, 0);
@@ -5286,7 +5320,7 @@
     accounts() { return state.settings.accounts || []; },
     account(id) { return acctById(id); },
     rules() { return state.settings.rules || []; },
-    trades(accountId) { const l = tradesOf("futuros"); return accountId ? l.filter(t => t.accountId === accountId) : l; },
+    trades(accountId) { return accountId ? tradesDe(accountId) : tradesOf("futuros"); },
     tradesOn(accountId, date) { return FUT.trades(accountId).filter(t => t.date === date); },
 
     /* ── selección de cuenta ──
@@ -5895,8 +5929,44 @@
     else { const f = FT_FILTROS.find(x => x.k === b.dataset.clr); if (f) ft[f.k] = f.off || ""; }
     renderFutures();
   });
-  function futFiltered() { let l = tradesOf("futuros").filter(inRange); if (ft.setup) l = l.filter(t => t.setupId === ft.setup); if (ft.instr) l = l.filter(t => t.instrument === ft.instr); if (ft.ses) l = l.filter(t => (tradeSes(t) || "__sin") === ft.ses); if (ft.acct) l = l.filter(acctMatch); return l; }
+  /* Memorizada por los mismos motivos, y con la misma disciplina: la clave
+     incluye TODO lo que el filtro lee. Si cambia un filtro o entra una
+     operación, se recalcula. Devolver siempre el mismo array mientras nada
+     cambie es lo que permite que futStats acierte en su memoria. */
+  const _filtMemo = { key: null, val: null };
+  function futFiltered() {
+    const key = coll("trades").rev + "|" + (autoFeesOn() ? 1 : 0) + "|" +
+      [state.today, ft.range, ft.month, ft.day, ft.setup, ft.instr, ft.ses, ft.acct].join("~");  // inRange mira state.today
+    if (_filtMemo.key === key) return _filtMemo.val;
+    let l = tradesOf("futuros").filter(inRange);
+    if (ft.setup) l = l.filter(t => t.setupId === ft.setup);
+    if (ft.instr) l = l.filter(t => t.instrument === ft.instr);
+    if (ft.ses) l = l.filter(t => (tradeSes(t) || "__sin") === ft.ses);
+    if (ft.acct) l = l.filter(acctMatch);
+    _filtMemo.key = key; _filtMemo.val = l;
+    return l;
+  }
+  /* futStats hace seis pasadas sobre la lista y dos filtros más dentro de grp().
+     Con 1.500 operaciones en el journal, guardar UNA repetía ese trabajo sobre
+     3.000 operaciones: la misma lista para los tiles y para cada tarjeta de
+     cuenta.
+
+     La memoria va sobre la IDENTIDAD de la lista, no sobre su contenido: las
+     listas que se reutilizan (tradesOf, tradesDe, futFiltered) son memorizadas y
+     devuelven siempre el mismo array mientras nada cambie, así que aciertan. Una
+     lista construida al vuelo —el P&L de un día del calendario— falla y se
+     calcula, que es justo lo que debe pasar. Es débil: no retiene nada.
+
+     Pura sobre la lista: todo lo que lee ya viene calculado en cada operación. */
+  const _statsMemo = new WeakMap();
   function futStats(list) {
+    const hit = _statsMemo.get(list);
+    if (hit) return hit;
+    const val = futStatsCrudo(list);
+    _statsMemo.set(list, val);
+    return val;
+  }
+  function futStatsCrudo(list) {
     const closed = list.filter(t => t.pnlEff != null || t.rReal != null);
     const wins = closed.filter(t => (t.pnlEff ?? t.rReal) > 0), losses = closed.filter(t => (t.pnlEff ?? t.rReal) < 0), be = closed.length - wins.length - losses.length;
     const gw = wins.reduce((s, t) => s + (t.pnlEff || 0), 0), gl = Math.abs(losses.reduce((s, t) => s + (t.pnlEff || 0), 0));
@@ -6837,7 +6907,7 @@
          y por repintado, que es la parte cara con miles de operaciones. */
       const ev = FUT.evaluateRules(a.id);
       const c = ev.c; const g = ev.agg;
-      const st = futStats(tradesOf("futuros").filter(t => t.accountId === a.id));
+      const st = futStats(tradesDe(a.id));
       const led = (a.ledger || []).slice().sort((x, y) => String(y.date).localeCompare(String(x.date)));
       const kindOf = k => (LEDGER_KINDS.find(x => x[0] === k) || ["", k])[1];
       const target = Number(a.target) || 0;
@@ -7980,31 +8050,37 @@
     ["risk", "escenario de riesgo", "escenarios de riesgo"],
   ];
 
+  /* CATÁLOGO DE ZONAS. Cada zona es un trozo de pantalla con nombre y la función
+     que lo reconstruye. Las listas de abajo se componen de estas mismas zonas, y
+     el agrupador de más abajo las deduplica POR NOMBRE — por eso la identidad
+     importa: si «inversiones» apareciera con dos nombres distintos en dos
+     listas, se pintaría dos veces. El nombre es también lo que se le enseña al
+     usuario cuando una zona revienta. */
+  const Z = {
+    futuros:    ["operaciones", () => renderFutures()],
+    invOps:     ["inversión", () => renderInvestOps()],
+    playbook:   ["playbook", () => renderPlaybook()],
+    contadores: ["contadores", () => counts()],
+    invMetr:    ["métricas de inversión", () => renderInvestMetrics()],
+    dia:        ["día", () => syncDayFromTrades()],
+    historico:  ["histórico", () => renderHistory()],
+    cuentas:    ["cuentas", () => renderAccounts()],
+    reglas:     ["reglas", () => renderRules()],
+    riesgo:     ["calculadora de riesgo", () => refreshRiskFromAccount()],
+    respaldo:   ["respaldo", () => renderBackup()],
+    presesion:  ["pre-sesión", () => invalidatePre()],
+    ideas:      ["formas de hacer dinero", () => renderIdeas()],
+    invest:     ["inversiones", () => renderInvest()],
+    destinos:   ["destinos de la calculadora", () => { fillQtDest(); renderQtNote(); }],
+    escenarios: ["escenarios", () => renderScenarios()],
+    riesgosGuardados: ["riesgos guardados", () => renderRiskSaved()],
+  };
   /* Al cambiar la CUENTA SELECCIONADA no cambian los datos, cambia el punto de
-     vista: se repinta todo lo que depende de qué cuenta se está mirando. Es la
-     misma mecánica del fan-out de operaciones, con su aislamiento por zona. */
-  const FANOUT_SEL = [
-    ["operaciones", () => renderFutures()],
-    ["cuentas", () => renderAccounts()],
-    ["reglas", () => renderRules()],
-    ["calculadora de riesgo", () => refreshRiskFromAccount()],
-    ["pre-sesión", () => invalidatePre()],
-  ];
-  const FANOUT_TRADES = [
-    ["operaciones", () => renderFutures()],
-    ["inversión", () => renderInvestOps()],
-    ["playbook", () => renderPlaybook()],
-    ["contadores", () => counts()],
-    ["métricas de inversión", () => renderInvestMetrics()],
-    ["día", () => syncDayFromTrades()],
-    ["histórico", () => renderHistory()],
-    ["cuentas", () => renderAccounts()],
-    ["reglas", () => renderRules()],
-    ["calculadora de riesgo", () => refreshRiskFromAccount()],
-    ["respaldo", () => renderBackup()],
-    ["pre-sesión", () => invalidatePre()],
-  ];
-  function fanout(lista) {
+     vista: se repinta lo que depende de qué cuenta se está mirando. */
+  const FANOUT_SEL = [Z.futuros, Z.cuentas, Z.reglas, Z.riesgo, Z.presesion];
+  const FANOUT_TRADES = [Z.futuros, Z.invOps, Z.playbook, Z.contadores, Z.invMetr, Z.dia,
+                         Z.historico, Z.cuentas, Z.reglas, Z.riesgo, Z.respaldo, Z.presesion];
+  function pinta(lista) {
     const rotos = [];
     for (const [nombre, fn] of lista) {
       try { fn(); } catch (e) { rotos.push(nombre); try { console.error("render «" + nombre + "» falló:", e); } catch (x) { } }
@@ -8013,14 +8089,52 @@
       try { flash(`No se pudieron actualizar: ${rotos.join(", ")}. Los números de esa zona pueden estar viejos — recarga la página.`); } catch (x) { }
     }
   }
+
+  /* Las zonas pendientes se acumulan y se pintan UNA vez por tick.
+
+     Motivo medido, no estético: al arrancar, loadLocal() emite una vez por
+     colección —trades, playbooks, ideas, markets, watch, positions…— y cada
+     emisión repintaba la vista de Futuros entera. Con 1.500 operaciones eso eran
+     CUATRO reconstrucciones de la tabla, el calendario y los gráficos: 468 ms de
+     los que 351 no servían para nada, porque las cuatro producían el mismo HTML.
+
+     Un microtask, no requestAnimationFrame: se resuelve antes de que el
+     navegador pinte, así que nada llega a verse a medio actualizar, y no depende
+     de que la pestaña esté visible (rAF se congela en segundo plano y dejaría
+     los números viejos al volver). Las zonas se guardan por nombre, de modo que
+     dos emisiones seguidas no la pintan dos veces.
+
+     Lo que necesita repintar YA —el editor al cerrarse, un botón que cambia lo
+     que tiene debajo— sigue llamando a su render directamente. Esto sólo agrupa
+     la reacción a datos que cambian. */
+  const _pend = new Map();
+  let _armado = false;
+  function fanout(lista) {
+    for (const par of lista) _pend.set(par[0], par);
+    if (_armado) return;
+    _armado = true;
+    Promise.resolve().then(() => {
+      _armado = false;
+      const zonas = [..._pend.values()];
+      _pend.clear();
+      pinta(zonas);
+    });
+  }
+  /* TODOS los suscriptores pasan por el agrupador. Antes solo lo hacía el de
+     operaciones y el resto llamaba a sus renders a pelo, así que al arrancar
+     —seis colecciones emitiendo en el mismo tick— la vista de inversiones se
+     reconstruía seis veces y la de futuros tres. Por nombre, ahora es una.
+
+     De paso desaparece el último try{}catch{} mudo de la app: el de los destinos
+     de la calculadora. Si falla, se dice cuál falló en vez de tragárselo. */
   coll("trades").subscribe(() => fanout(FANOUT_TRADES));
-  coll("playbooks").subscribe(() => { renderFutures(); renderInvestOps(); renderPlaybook(); counts(); });
-  coll("ideas").subscribe(() => { renderIdeas(); counts(); });
-  coll("markets").subscribe(() => { renderInvest(); try { fillQtDest(); renderQtNote(); } catch (e) { } });
-  coll("positions").subscribe(() => { renderInvest(); counts(); });
-  coll("watch").subscribe(() => { renderInvest(); });
-  coll("scenarios").subscribe(() => { renderScenarios(); });
-  coll("risk").subscribe(() => { renderRiskSaved(); });
+  coll("playbooks").subscribe(() => fanout([Z.futuros, Z.invOps, Z.playbook, Z.contadores]));
+  coll("ideas").subscribe(() => fanout([Z.ideas, Z.contadores]));
+  coll("markets").subscribe(() => fanout([Z.invest, Z.destinos]));
+  coll("positions").subscribe(() => fanout([Z.invest, Z.contadores]));
+  coll("watch").subscribe(() => fanout([Z.invest]));
+  coll("scenarios").subscribe(() => fanout([Z.escenarios]));
+  coll("risk").subscribe(() => fanout([Z.riesgosGuardados]));
 
   $("demoToggle").addEventListener("click", () => { if (state.demo) { location.reload(); return; } enterDemo(); setStoreLabel(); });
   $("demoExit").addEventListener("click", () => location.reload());
