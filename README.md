@@ -443,6 +443,46 @@ Verificación: 560 valores comparados en vivo contra tras recargar, cero rancios
 **10 archivos, todos idénticos** — las cuatro mejoras son puramente aditivas y
 ningún número existente cambió.
 
+### Captura, no más análisis (MAE / MFE)
+
+Hasta aquí, 45 versiones analizando datos que ya existían. Esto añade **datos
+que no existían**, que es el cuello de botella real. `excursion.js`:
+
+- **MAE** (*Maximum Adverse Excursion*): lo más en contra que fue antes de resolverse.
+- **MFE** (*Maximum Favourable Excursion*): lo más a favor que llegó antes de que salieras.
+
+Son los dos números que el P&L **no puede contener**, y contestan lo único que el
+resultado no dice:
+
+| Pregunta | Se responde con |
+| --- | --- |
+| ¿Cuánto podría apretar el stop sin perder ganadoras? | cuantil alto del MAE **de las ganadoras** |
+| ¿Cuánto dejo en la mesa por salir pronto? | MFE frente a la salida real |
+| ¿Cuántas ganancias reales devuelvo? | operaciones que llegaron a +1R y acabaron en pérdida |
+
+**El MAE se mide sólo sobre ganadoras, a propósito.** En una perdedora el MAE
+acaba siendo el stop por definición; meterlas contaminaría la conclusión.
+
+**Un error de diseño que cazó la prueba.** La primera versión promediaba la
+captura sobre todas las operaciones. En una perdedora que fue a favor y volvió,
+la captura es *negativa*: el panel llegó a mostrar **«captura de la salida
+−61,5%»**, que no significa nada. Ahora la captura se promedia sólo sobre
+ganadoras, y las perdedoras que fueron a favor contestan su propia pregunta en
+una tarjeta aparte — **ganancias devueltas**, el síntoma más caro que existe y el
+que el P&L nunca ve, porque cuenta la pérdida y no la ganancia que hubo antes.
+
+**Cuatro campos nuevos, todos opcionales**: hora de salida, por qué saliste
+(objetivo / stop / manual / tiempo / noticia / nervios), MAE y MFE. Se piden
+después de la salida porque antes no existen, y son opcionales por una razón de
+diseño explícita: **un campo que frena el registro reduce el número de
+operaciones registradas, y ese número es el cuello de botella**. Una operación
+guardada sin ellos funciona exactamente igual.
+
+La superficie es deliberadamente corta: tres tarjetas que sólo aparecen cuando
+hay con qué sostenerlas. Sin datos suficientes sale un contador — *«llevas 3; con
+5 empiezan a salir números y con 30 se pueden creer»*— que hace más por el
+registro que cualquier gráfico.
+
 ### El motor anterior
 
 `engine/MathEngine.js` (v1, 92 pruebas) queda en el repo como referencia

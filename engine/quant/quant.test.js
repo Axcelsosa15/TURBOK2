@@ -567,5 +567,105 @@ grupo("avisos que la interfaz puede mostrar");
   const r = Q.calcularTradeApp({ instrument: "MNQ", direction: "long", entry: 21000, exit: 21030, stop: 20990, qty: 2 });
   eq(r.avisos.length, 0, "una operación limpia no genera ruido");
 }
+grupo("excursión · MAE y MFE");
+{
+  const e = Q.excursionDeOperacion({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990, salida: 21030, mae: 20994, mfe: 21045 });
+  eq(e.riesgoPuntos, 10, "riesgo en puntos");
+  eq(e.adversoPuntos, 6, "fue 6 puntos en contra");
+  eq(e.maeR, 0.6, "MAE = 0.6R");
+  eq(e.mfeR, 4.5, "MFE = 4.5R");
+  eq(e.logradoR, 3, "salió con +3R");
+  near(e.capturaMFE, 30 / 45, 1e-4, "capturó dos tercios del recorrido");
+  eq(e.usoDelStop, 0.6, "gastó el 60% del stop");
+  eq(e.ticksAdverso, 24, "6 puntos MNQ = 24 ticks");
+  eq(e.ganadora, true, "clasifica ganadora");
+}
+{
+  const e = Q.excursionDeOperacion({ simbolo: "MNQ", direccion: "short", entrada: 21030, stop: 21040, salida: 21000, mae: 21036, mfe: 20985 });
+  eq(e.maeR, 0.6, "corto: MAE simétrico");
+  eq(e.mfeR, 4.5, "corto: MFE simétrico");
+  eq(e.logradoR, 3, "corto: mismo R logrado");
+}
+{
+  const e = Q.excursionDeOperacion({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990, salida: 21030 });
+  eq(e.maeR, null, "sin MAE devuelve null, no cero");
+  eq(e.mfeR, null, "sin MFE devuelve null, no cero");
+  eq(e.capturaMFE, null, "y sin MFE no hay captura que calcular");
+}
+{
+  const e = Q.excursionDeOperacion({ simbolo: "MNQ", direccion: "long", entrada: 21000, salida: 21030, mae: 20994, mfe: 21045 });
+  eq(e.maeR, null, "sin stop no hay R: división por cero evitada");
+  eq(e.adversoPuntos, 6, "pero la distancia en puntos sí existe");
+}
+{
+  /* un MAE al otro lado de la entrada no es excursión adversa: es ruido de captura */
+  const e = Q.excursionDeOperacion({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990, salida: 21030, mae: 21005, mfe: 21045 });
+  eq(e.adversoPuntos, 0, "un MAE por encima de la entrada en largo se lee como 0, no como negativo");
+}
+eq(Q.excursionDeOperacion({ simbolo: "MNQ", direccion: "long" }), null, "sin entrada no hay excursión");
+eq(Q.excursionDeOperacion({ simbolo: "FOO", direccion: "long", entrada: 100, stop: 90, salida: 120, mae: 96, mfe: 130 }).maeR, 0.4,
+   "símbolo desconocido: R sigue existiendo porque es cociente de precios");
+
+grupo("excursión · conclusiones agregadas");
+{
+  /* 12 ganadoras que nunca pasaron del 50% del stop: sobra la mitad del stop */
+  const ops = [];
+  for (let i = 0; i < 12; i++) ops.push({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990,
+    salida: 21020, mae: 21000 - (3 + (i % 3)), mfe: 21040 });
+  const a = Q.analizarExcursion(ops).value;
+  eq(a.conMAE, 12, "cuenta las que traen MAE");
+  ok(a.stop.usoP95 <= 0.55, "el 95% de las ganadoras no pasó del 55% del stop");
+  ok(a.stop.margenSobrante >= 0.45, "sobra casi la mitad del stop");
+  ok(a.stop.recorteSugerido > 0, "y sugiere recortarlo");
+  ok(!a.stop.fiable, "pero con n=12 avisa de que no es fiable");
+}
+{
+  /* ganadoras que usan casi todo el stop: no hay nada que recortar */
+  const ops = [];
+  for (let i = 0; i < 10; i++) ops.push({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990,
+    salida: 21020, mae: 20991, mfe: 21040 });
+  const a = Q.analizarExcursion(ops).value;
+  eq(a.stop.recorteSugerido, 0, "sin margen sobrante no sugiere recorte");
+}
+{
+  const ops = [];
+  for (let i = 0; i < 10; i++) ops.push({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990,
+    salida: 21010, mae: 20995, mfe: 21050 });
+  const a = Q.analizarExcursion(ops).value;
+  near(a.salida.capturaMedia, 0.2, 1e-6, "captura el 20% del recorrido disponible");
+  near(a.salida.dejadoEnLaMesaR, 4, 1e-6, "deja 4R de media en la mesa");
+}
+{
+  /* mezcla de ganadoras y perdedoras: la captura NO puede salir negativa */
+  const ops = [];
+  for (let i = 0; i < 10; i++) ops.push({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990,
+    salida: 21020, mae: 20995, mfe: 21040 });
+  for (let i = 0; i < 20; i++) ops.push({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990,
+    salida: 20990, mae: 20990, mfe: 21030 });
+  const a = Q.analizarExcursion(ops).value;
+  ok(a.salida.capturaMedia > 0 && a.salida.capturaMedia <= 1, "la captura se promedia sólo sobre ganadoras: nunca negativa");
+  eq(a.salida.n, 10, "y su n son las ganadoras, no el total");
+}
+{
+  /* 20 operaciones que llegaron a +3R y acabaron en el stop */
+  const ops = [];
+  for (let i = 0; i < 20; i++) ops.push({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990,
+    salida: 20990, mae: 20990, mfe: 21030 });
+  for (let i = 0; i < 10; i++) ops.push({ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990,
+    salida: 21020, mae: 20995, mfe: 21025 });
+  const a = Q.analizarExcursion(ops).value;
+  eq(a.devueltas.llegaronA1R, 30, "todas llegaron al menos a 1R a favor");
+  eq(a.devueltas.acabaronEnPerdida, 20, "y 20 acabaron en pérdida");
+  near(a.devueltas.tasa, 20 / 30, 1e-4, "dos de cada tres ganancias se devolvieron");
+  near(a.devueltas.rMedioDevuelto, 4, 1e-6, "devolviendo 4R de media (de +3R a -1R)");
+}
+eq(Q.analizarExcursion([]).value.n, 0, "lista vacía no revienta");
+{
+  const a = Q.analizarExcursion([{ simbolo: "MNQ", direccion: "long", entrada: 21000, stop: 20990, salida: 21020, mae: 20995, mfe: 21040 }]).value;
+  eq(a.stop, null, "con una sola operación no se concluye nada sobre el stop");
+  eq(a.salida, null, "ni sobre la salida");
+  ok(a.faltanParaMedir > 0, "y dice cuántas faltan");
+}
+
 console.log(`\n${pass} ok · ${fail} fallos (avisos)`);
 if (fallos.length) { console.log("\nFALLOS:"); fallos.forEach(f => console.log("  ✗ " + f)); process.exit(1); }

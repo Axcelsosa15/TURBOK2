@@ -23,6 +23,7 @@ export * from "./edge.js";
 export * from "./curve.js";
 export * from "./survival.js";
 export * from "./compliance.js";
+export * from "./excursion.js";
 
 import { isOk, toNum, roundTo, sym } from "./kernel.js";
 import { CONTRACTS, resolveContract, rootOf } from "./contracts.js";
@@ -31,6 +32,7 @@ import { analizarEdge } from "./edge.js";
 import { construirCurva, metricasCurva, evaluarConsistencia, DD_TIPOS } from "./curve.js";
 import { simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha } from "./survival.js";
 import { evaluarCumplimiento } from "./compliance.js";
+import { analizarExcursion, excursionDeOperacion } from "./excursion.js";
 
 /* =========================================================================
    Adaptador para Cabina
@@ -198,6 +200,7 @@ export const QuantEngine = {
   /* curva     */ construirCurva, metricasCurva, evaluarConsistencia, DD_TIPOS,
   /* riesgo    */ simularCuenta, barridoDeRiesgo, simularParametrico, probabilidadDeRacha,
   /* reglas    */ evaluarCumplimiento,
+  /* excursion */ analizarExcursion, excursionDeOperacion,
   /* app       */ calcularTradeApp, rRealApp, rPlanApp, radiografiaCuenta, desdeTradeApp,
 };
 export default QuantEngine;
