@@ -43,21 +43,22 @@ await p.fill('#ef_total', '0'); await p.fill('#ef_best', '0'); await p.fill('#ef
 await p.click('#edSave'); await p.waitForTimeout(900);
 const v = await p.evaluate(() => {
   const c = document.querySelector('.acct');
-  const mod = n => { const el = [...c.querySelectorAll('.acc-mod')].find(x => x.querySelector('h3').textContent.trim() === n); return el; };
-  const fila = (el, lb) => { const r = [...el.querySelectorAll('.acc-rows > div')].find(x => x.children[0].textContent.trim() === lb); return r ? r.children[1].textContent.trim() : '?'; };
-  const cons = mod('Consistencia'), dd = mod('Drawdown');
+  const mod = n => [...c.querySelectorAll('.metric')].find(x => x.querySelector('.lab').textContent.replace(/[\s\u25b8\u25be]+$/,'').trim() === n) || null;
+  // las filas de detalle viven ahora dentro de la métrica desplegable
+  const fila = (el, lb) => { if (!el) return '?'; const r = [...el.querySelectorAll('.mdet > div')].find(x => x.children[0].textContent.trim() === lb); return r ? r.children[1].textContent.trim() : '?'; };
+  const cons = mod('Consistencia'), dd = mod('Colchón');
   const pico = [...c.querySelectorAll('.acc-rows.tri > div')].find(x => /Pico/.test(x.children[0].textContent));
   return {
-    balance: c.querySelector('.acc-bal .big .v').textContent.trim(),
+    balance: c.querySelector('.acc-figs .fig:first-child .v').textContent.trim(),
     pico: pico ? pico.children[1].textContent.trim() : '?',
     suelo: fila(dd, 'Suelo de la cuenta'),
-    consistencia: cons.querySelector('.big').textContent.trim(),
-    estado: cons.querySelector('.chip').textContent.trim(),
+    consistencia: cons.querySelector('.mtop .v').textContent.trim(),
+    estado: cons.querySelector('.mtop .s').textContent.trim(),
     falta: fila(cons, 'Ganancia que falta'),
     necesario: fila(cons, 'Total necesario'),
   };
 });
-const esperado = { balance: '$25,315', pico: '$25,315', suelo: '$24,315', consistencia: '53.97%', estado: 'NO CUMPLE', falta: '+$25' };
+const esperado = { balance: '$25,315', pico: '$25,315', suelo: '$24,315', consistencia: '53.97%', estado: 'límite 50% · lo supera', falta: '+$25' };
 for (const k of Object.keys(esperado)) {
   const ok = v[k] === esperado[k];
   say((ok ? '✓ ' : '✗ ') + k + ':', v[k] + (ok ? '' : '   (esperabas ' + esperado[k] + ')'));

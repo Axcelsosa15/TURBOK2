@@ -36,16 +36,16 @@ await p.click('.tabbtn[data-tab="cabina"]'); await p.waitForTimeout(700);
 console.log('=== tus números contra los calculados ===');
 const g = await p.evaluate(() => {
   const c = document.querySelector('.acct');
-  const kpi = n => { const el = [...c.querySelectorAll('.acc-kpi')].find(x => x.querySelector('.k').textContent.trim() === n); return el ? el.querySelector('.v').textContent.trim() + ' | ' + (el.querySelector('.s') ? el.querySelector('.s').textContent.trim() : '') : '(no)'; };
-  const mod = n => { const el = [...c.querySelectorAll('.acc-mod')].find(x => x.querySelector('h3').textContent.trim() === n); if (!el) return '(no)';
-    return el.querySelector('.big').textContent.trim() + ' | ' + [...el.querySelectorAll('.acc-rows > div')].map(r => r.children[0].textContent.trim() + '=' + r.children[1].textContent.trim()).join(' · '); };
-  return { balance: c.querySelector('.acc-bal .big .v').textContent.trim(),
-    delta: c.querySelector('.acc-bal .delta .v').textContent.trim() + ' ' + c.querySelector('.acc-bal .delta .s').textContent.trim(),
-    estado: c.querySelector('.acc-state').textContent.trim(),
-    operar: c.querySelector('.acc-st').textContent.replace(/\s+/g, ' ').trim(),
-    cobrar: [...c.querySelectorAll('.acc-watch .wch')].map(x => x.textContent.replace(/\s+/g, ' ').trim()).join(' | '),
-    neta: kpi('Ganancia neta'), dd: kpi('Drawdown'), colchon: kpi('Colchón'), mejor: kpi('Mejor día'), cons: kpi('Consistencia'), riesgo: kpi('Riesgo de hoy'),
-    mCons: mod('Consistencia'), mDD: mod('Drawdown'), mRisk: mod('Riesgo de hoy'), mHoy: mod('Hoy'),
+  const kpi = n => { const el = [...c.querySelectorAll('.metric')].find(x => x.querySelector('.lab').textContent.replace(/[\s\u25b8\u25be]+$/,'').trim() === n); return el ? el.querySelector('.mtop .v').textContent.trim() + ' | ' + el.querySelector('.mtop .s').textContent.trim() : '(no)'; };
+  const mod = n => { const el = [...c.querySelectorAll('.metric')].find(x => x.querySelector('.lab').textContent.replace(/[\s\u25b8\u25be]+$/,'').trim() === n); if (!el) return '(no)';
+    return el.querySelector('.mtop .v').textContent.trim() + ' | ' + [...el.querySelectorAll('.mdet > div')].map(r => r.children[0].textContent.trim() + '=' + r.children[1].textContent.trim()).join(' · '); };
+  return { balance: c.querySelector('.acc-figs .fig:first-child .v').textContent.trim(),
+    delta: c.querySelector('.acc-figs .fig:first-child .s').textContent.trim() + ' ' + c.querySelector('.acc-figs .fig:first-child .s').textContent.trim(),
+    estado: c.querySelector('.acc-id').textContent.trim(),
+    operar: c.querySelector('.acc-verdict').textContent.replace(/\s+/g, ' ').trim(),
+    cobrar: [...document.querySelectorAll('.rulec')].map(x => x.querySelector('.rname').textContent.trim() + ' ' + x.querySelector('.rnow').textContent.trim()).join(' | '),
+    neta: kpi('Ganancia neta'), dd: kpi('Colchón'), colchon: kpi('Colchón'), mejor: kpi('Ganancia neta'), cons: kpi('Consistencia'), riesgo: kpi('Riesgo de hoy'),
+    mCons: mod('Consistencia'), mDD: mod('Colchón'), mRisk: mod('Riesgo de hoy'), mHoy: mod('Ganancia neta'),
     curva: [...c.querySelectorAll('.acc-rows.tri > div')].map(r => r.children[0].textContent.trim() + '=' + r.children[1].textContent.trim()).join(' · '),
     recientes: [...c.querySelectorAll('.acc-recent tbody tr')].length };
 });
@@ -78,8 +78,8 @@ for (const [nombre, exit] of [['pérdida 100 (50%)', 20950], ['pérdida 160 (80%
   await p.click('#edSave'); await p.waitForTimeout(400);
   await p.click('.tabbtn[data-tab="cabina"]'); await p.waitForTimeout(500);
   const o = await p.evaluate(() => { const c = document.querySelector('.acct');
-    const el = [...c.querySelectorAll('.acc-mod')].find(x => x.querySelector('h3').textContent.trim() === 'Riesgo de hoy');
-    return { chip: el.querySelector('.chip').textContent.trim(), big: el.querySelector('.big').textContent.trim(), estado: c.querySelector('.acc-st .tag').textContent.trim() }; });
+    const el = [...c.querySelectorAll('.metric')].find(x => /Riesgo de hoy/i.test(x.querySelector('.lab').textContent));
+    return { chip: el.querySelector('.mtop .s').textContent.trim(), big: el.querySelector('.mtop .v').textContent.trim(), estado: c.querySelector('.acc-verdict .vtag').textContent.trim() }; });
   say(nombre + ':', o.chip + ' · queda ' + o.big + ' · ' + o.estado);
 }
 console.log('\n--- errores js ---'); console.log(errs.length ? errs.join('\n') : 'none');

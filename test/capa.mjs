@@ -27,7 +27,11 @@ const num = s => { const m=String(s||'').match(/-?\$?-?[\d][\d,]*(\.\d+)?/); ret
 const tras = (t, et) => { const i=t.indexOf(et); return i<0? null : t.slice(i+et.length, i+et.length+16); };
 
 await p.click('.tabbtn[data-tab="cabina"]'); await p.waitForTimeout(800);
-const cabT = await p.evaluate(()=>document.querySelector('.acct').innerText.replace(/\s+/g,' '));
+/* textContent y no innerText: con el rediseño, el detalle de cada métrica
+   está plegado hasta que lo pides, e innerText salta lo que no se pinta. La
+   pregunta de esta prueba no es «¿se ve?» sino «¿coinciden las dos pestañas?»,
+   así que se lee el texto completo de la tarjeta. */
+const cabT = await p.evaluate(()=>document.querySelector('.acct').textContent.replace(/\s+/g,' '));
 await p.click('.tabbtn[data-tab="futuros"]'); await p.waitForTimeout(500);
 await p.click('button[data-v="cuentas"]'); await p.waitForTimeout(800);
 const futT = await p.evaluate(()=>document.querySelector('.ftview.active').innerText.replace(/\s+/g,' '));
@@ -36,7 +40,7 @@ const tiles = await p.evaluate(()=>document.getElementById('ftTiles').innerText.
 
 const pares = [
   ['ganancia total', num(tras(cabT,'Ganancia total')),       num(tras(futT,'GANANCIA TOTAL'))],
-  ['balance',        num(tras(cabT,'BALANCE ACTUAL')),       num(tras(futT,'BALANCE'))],
+  ['balance',        num(tras(cabT,'Balance')),       num(tras(futT,'BALANCE'))],
   ['colchón',        num(tras(cabT,'Colchón que queda')),    num(tras(futT,'COLCHÓN'))],
   ['suelo / umbral', num(tras(cabT,'Suelo de la cuenta')),   num(tras(futT,'umbral'))],
   ['mejor día',      num(tras(cabT,'Mejor día')),            num(tras(futT,'MEJOR DÍA'))],

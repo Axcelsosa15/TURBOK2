@@ -12,17 +12,17 @@ const HOY = await p.evaluate(() => new Date().toLocaleDateString('en-CA', { time
 async function foto(tag) {
   const o = await p.evaluate(() => {
     const c = document.querySelector('.acct');
-    const mod = n => { const el = [...c.querySelectorAll('.acc-mod')].find(x => x.querySelector('h3').textContent.trim() === n); return el ? el.querySelector('.big').textContent.trim() : '?'; };
+    const mod = n => { const el = [...c.querySelectorAll('.metric')].find(x => new RegExp(n.slice(0,6),'i').test(x.querySelector('.lab').textContent)); return el ? el.querySelector('.mtop .v').textContent.trim() : '?'; };
     const cal = document.querySelector('#calCab .d.today');
     return {
-      balance: c.querySelector('.acc-bal .big .v').textContent.trim(),
-      delta: c.querySelector('.acc-bal .delta .v').textContent.trim(),
+      balance: c.querySelector('.acc-figs .fig:first-child .v').textContent.trim(),
+      delta: c.querySelector('.acc-figs .fig:first-child .s').textContent.trim(),
       hoy: mod('Hoy'), riesgo: mod('Riesgo de hoy'), dd: mod('Drawdown'),
       diario: document.getElementById('jResult').value,
       calendario: cal ? cal.textContent.replace(/\s+/g, ' ').trim() : '(sin celda)',
       calCls: cal ? cal.className : '',
       nFut: document.getElementById('nFut').textContent || '0',
-      estado: c.querySelector('.acc-st .tag').textContent.trim(),
+      estado: c.querySelector('.acc-verdict .vtag').textContent.trim(),
     };
   });
   await p.click('.tabbtn[data-tab="futuros"]'); await p.click('#ftSeg button[data-v="diario"]'); await p.waitForTimeout(500);

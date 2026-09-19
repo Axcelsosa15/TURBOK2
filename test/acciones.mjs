@@ -29,7 +29,7 @@ const filas = await p.locator('.acc-recent tbody tr').count();
 if (filas) { await p.click('.acc-recent tbody tr'); await p.waitForTimeout(450);
   say('Fila abre la operación:', await p.textContent('#edTitle').catch(() => '(no abrió)'));
   await p.click('#edCancel').catch(() => {}); }
-else say('Últimas operaciones:', 'vacío → ' + (await p.textContent('.acc-recent .empty')).slice(0, 60));
+else say('Últimas operaciones:', 'vacío → ' + (await p.textContent('.acc-recent .vacio')).slice(0, 60));
 await p.context().close();
 
 console.log('=== casos límite ===');
@@ -38,15 +38,15 @@ const q = await open();
 await q.evaluate(() => document.querySelector('.acc-acts [data-act="cfg"]').click()); await q.waitForTimeout(350);
 await q.fill('#ef_size', '0'); await q.fill('#ef_dd', '0'); await q.fill('#ef_total', '0'); await q.fill('#ef_best', '0');
 await q.click('#edSave'); await q.waitForTimeout(500);
-say('sin tamaño ni dd:', await q.evaluate(() => { const c = document.querySelector('.acct'); return c.querySelector('.acc-bal .big .v').textContent.trim() + ' · ' + c.querySelector('.acc-st .tag').textContent.trim() + ' · dd=' + [...c.querySelectorAll('.acc-mod')].find(x => x.querySelector('h3').textContent.trim() === 'Drawdown').querySelector('.chip').textContent.trim(); }));
+say('sin tamaño ni dd:', await q.evaluate(() => { const c = document.querySelector('.acct'); return c.querySelector('.acc-figs .fig:first-child .v').textContent.trim() + ' · ' + c.querySelector('.acc-verdict .vtag').textContent.trim() + ' · dd=' + [...c.querySelectorAll('.metric')].find(x => /Colch/i.test(x.querySelector('.lab').textContent)).querySelector('.mtop .s').textContent.trim(); }));
 // 2. drawdown roto: balance por debajo del suelo
 await q.evaluate(() => document.querySelector('.acc-acts [data-act="cfg"]').click()); await q.waitForTimeout(350);
 await q.fill('#ef_size', '25000'); await q.fill('#ef_dd', '1000'); await q.fill('#ef_total', '-1200'); await q.fill('#ef_best', '0');
 await q.click('#edSave'); await q.waitForTimeout(500);
-say('drawdown roto:', await q.evaluate(() => { const c = document.querySelector('.acct'); const m = [...c.querySelectorAll('.acc-mod')].find(x => x.querySelector('h3').textContent.trim() === 'Drawdown'); return c.querySelector('.acc-st .tag').textContent.trim() + ' · ' + m.querySelector('.chip').textContent.trim() + ' · colchón ' + m.querySelector('.big').textContent.trim(); }));
+say('drawdown roto:', await q.evaluate(() => { const c = document.querySelector('.acct'); const m = [...c.querySelectorAll('.metric')].find(x => /Colch/i.test(x.querySelector('.lab').textContent)); return c.querySelector('.acc-verdict .vtag').textContent.trim() + ' · ' + m.querySelector('.mtop .s').textContent.trim() + ' · colchón ' + m.querySelector('.mtop .v').textContent.trim(); }));
 // 3. cuenta quemada
 await q.evaluate(() => { const s = document.querySelector('.acct select[data-f="status"]'); s.value = 'quemada'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await q.waitForTimeout(500);
-say('marcada quemada:', await q.evaluate(() => { const c = document.querySelector('.acct'); return c.querySelector('.acc-state').textContent.trim() + ' · ' + c.querySelector('.acc-st .tag').textContent.trim(); }));
+say('marcada quemada:', await q.evaluate(() => { const c = document.querySelector('.acct'); return c.querySelector('.acc-id').textContent.trim() + ' · ' + c.querySelector('.acc-verdict .vtag').textContent.trim(); }));
 // 4. borrar todas las cuentas
 await q.evaluate(() => { state => 0; });
 for (let i = 0; i < 4; i++) {

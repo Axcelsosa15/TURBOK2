@@ -25,10 +25,10 @@ say('P&L antes:', await p.evaluate(() => (document.getElementById('ftTiles').tex
 await p.click('#jrTable tbody tr .hitstop'); await p.waitForTimeout(800);
 say('P&L después:', await p.evaluate(() => (document.getElementById('ftTiles').textContent || '').replace(/\s+/g, ' ').match(/P&L neto(-?\$[\d,]+)/)?.[1] || '—'));
 await p.click('.tabbtn[data-tab="cabina"]'); await p.waitForTimeout(600);
-say('balance cuenta:', await p.evaluate(() => document.querySelector('.acc-bal .big .v').textContent.trim()));
+say('balance cuenta:', await p.evaluate(() => document.querySelector('.acc-figs .fig:first-child .v').textContent.trim()));
 say('P&L diario:', await p.inputValue('#jResult'));
 say('calendario hoy:', await p.evaluate(() => { const c = document.querySelector('#calCab .d.today'); return c.textContent.replace(/\s+/g, ' ').trim() + ' [' + c.className + ']'; }));
-say('estado cuenta:', await p.evaluate(() => document.querySelector('.acc-st .tag').textContent.trim()));
+say('estado cuenta:', await p.evaluate(() => document.querySelector('.acc-verdict .vtag').textContent.trim()));
 
 console.log('=== C. instrumento desconocido ya no inventa el P&L ===');
 await p.click('.tabbtn[data-tab="futuros"]'); await p.click('#ftNew'); await p.waitForTimeout(350);

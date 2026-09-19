@@ -608,7 +608,7 @@ mano. No siempre fue así — esta misma sesión eliminó la tabla `MULT` duplic
 
 **Las pruebas de la app vivían en un directorio efímero.** Si el contenedor
 moría, se perdían — y con ellas la única forma de re-verificar que la
-arquitectura sigue siendo cierta. Ahora están en `test/` (38 archivos), con
+arquitectura sigue siendo cierta. Ahora están en `test/` (41 archivos), con
 `test/build-preview.mjs` para reconstruir el preview desde `index.html`.
 
 Las dos más valiosas no comparan contra un valor escrito a mano: comparan **la
@@ -754,6 +754,71 @@ que dejaría los números viejos al volver.
 
 De paso desapareció el último `try{}catch{}` mudo: el de los destinos de la
 calculadora. Si falla, ahora se dice cuál falló.
+
+### El rediseño, y lo que la medición dijo de él
+
+Un rediseño se justifica con defectos, no con gustos. Los que había, medidos:
+
+- **8 radios distintos** (1, 2, 3, 4, 5, 6, 7, 999) y **17 espaciados**
+  (5, 6, 7, 9, 10, 11, 13, 14, 18…). No es un sistema, es una acumulación.
+- **19 tamaños de tipo** en la misma pantalla.
+- La tarjeta de cuenta tenía **siete zonas apiladas** con cuatro rejillas
+  distintas, y dentro de ellas el texto se recortaba a media palabra:
+  `GANANCI/A`, `PÉRDIDAS SEGU`, y una columna de una palabra por línea que se
+  salía por el borde derecho. Eso no es densidad, es un defecto.
+- **Lo más grande de la tarjeta era `3950.00%`** —la consistencia sobre una
+  ganancia diminuta, un número sin significado— mientras `RESTRINGIDA`, que es
+  lo único que decide si puedes operar, iba en gris pequeño a media tarjeta.
+- Las reglas duras eran seis tarjetas iguales en 820px, y dentro de cada una el
+  LÍMITE era lo más grande y el ESTADO ACTUAL lo más pequeño. Jerarquía al
+  revés: el límite no cambia nunca; lo que cambia es dónde estás tú.
+
+Lo que se hizo, y lo que costó:
+
+```
+                             antes    después
+  radios en px sueltos           8          0   (4 tokens)
+  espaciados fuera de escala   126          9   (los 9 son márgenes ópticos)
+  tamaños de tipo               19         10
+  alto de la página          3.457px    3.524px  (mismo contenido, mejor orden)
+  alto en un teléfono       10.063px    8.384px  (−17%)
+  desborde horizontal móvil   sí          0px
+```
+
+**La tarjeta de cuenta** pasó a responder las preguntas en el orden en que se
+hacen: ¿puedo operar? (el veredicto, arriba y a lo ancho, con su motivo) ·
+¿cuánto tengo? · ¿cómo voy hoy? · ¿cuánto riesgo queda? (cuatro métricas con la
+misma anatomía) · ¿y el detalle? (sólo si lo pides). Desaparecieron la rejilla
+de seis KPIs, las tres tarjetas-módulo y la fila de chips que repetía lo que ya
+dice el centro de reglas. Treinta números que nadie puede leer no son más
+información: son menos.
+
+**Container queries, no media queries**, en la tarjeta. En una pantalla de
+1600px caben dos cuentas lado a lado: cada una mide 420px y una media query de
+viewport creería que hay sitio de sobra para cuatro columnas. La tarjeta se mide
+a sí misma, y las cifras usan `clamp(…, cqi, …)` para caber sin truncarse.
+
+**El teclado.** ⌘K abre una paleta que lista acciones, pestañas y cuentas, y
+seis letras sueltas navegan. La regla que hace que esto no sea un desastre:
+**una letra nunca actúa si estás escribiendo**. Sin esa guarda, teclear
+«Nota: probé…» en el diario abriría el editor de operaciones en la N.
+`test/cmd.mjs` lo comprueba explícitamente, además de que ⌘K sí funcione con
+el foco dentro de un campo.
+
+Todo lo que hace la paleta entra por las mismas puertas que un clic —`showTab`,
+`setFtView`, `openTrade`, `FUT.setSelectedAccount`—. Si algo sólo se pudiera
+hacer con ⌘K sería una función escondida, no un atajo.
+
+**Lo que no se tocó**: la capa de datos. Cabina y Futuros siguen leyendo de
+`coll("trades")`, `acctAgg` y el mismo motor de reglas; `sync.mjs` y `vivo.mjs`
+pasan sin cambios. Seis pruebas sí hubo que actualizar —apuntaban a selectores
+que el rediseño movió— y una de ellas descubrió un error mío: había bajado la
+consistencia a un decimal, y `53.97%` no es `54.0%` cuando el límite es 50.
+
+`test/diseno.mjs` mide todo esto sobre la página viva: recorre los 804 nodos
+visibles y lista los espaciados fuera de escala, los tamaños de tipo, los radios
+y cualquier elemento cuyo contenido no quepa. Es la prueba que convierte
+«parece consistente» en un número.
 
 ### El guardián de la arquitectura
 
