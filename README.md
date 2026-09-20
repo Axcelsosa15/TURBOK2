@@ -871,6 +871,67 @@ tres vivían porque ninguna prueba tocaba esa parte del DOM:
 - La cabecera contaba las reglas sin configurar como «activas», es decir,
   afirmaba vigilar algo que nadie había escrito.
 
+### Ciclo de vida prop, y una salud que no miente
+
+**Siete estados, no cuatro.** «Activa» no decía si estabas en evaluación o
+fondeado — la diferencia entre arriesgar $150 de inscripción y arriesgar tu
+fuente de ingresos — y no había dónde anotar que hay un payout pedido, que es
+el momento en que más cuidado hay que tener.
+
+```
+  evaluacion · fondeada · payout_pendiente · payout_aprobado
+  quemada · pausada · archivada
+```
+
+Son un solo eje a propósito: desde el asiento del trader, una cuenta está en
+exactamente uno de estos sitios. Un payout pendiente es una cuenta fondeada en
+un momento concreto, no una segunda dimensión que llevar.
+
+La migración lee el tipo escrito a mano, que es el único dato que distingue
+evaluación de fondeada. **Ante la duda, evaluación**: es lo que se corrige con
+un clic, mientras que equivocarse hacia «fondeada» pintaría de verde una cuenta
+que aún no lo está.
+
+Y se migra **al leer**, no sólo al normalizar. Una cuenta puede entrar por
+`FUT.createAccount`, por un respaldo viejo o por la base del artefacto sin pasar
+por `normalize()`. Con un estado desconocido, `EST_VIVA` devolvía `undefined` y
+la cuenta quedaba **BLOQUEADA para siempre** sin que nada explicara por qué. Lo
+encontró `sync.mjs` en cuanto cambié los estados.
+
+#### La salud es el mínimo, no la media
+
+Una cuenta con el 95% del colchón intacto y el 0% del riesgo del día disponible
+no tiene «salud 48%»: tiene el día cerrado. **La media esconde justo el factor
+que te mata**, que es el único que hay que mirar. Así que la salud es el mínimo,
+y lo que devuelve no es sólo el número — es qué factor manda:
+
+```
+  Salud 10%  ▁▁▁▁▁   Lo que manda: riesgo del día · $100 de $1,000
+```
+
+«Salud 12%» sin decir por qué no sirve de nada.
+
+Se separan dos cosas que el lenguaje mezcla:
+
+```
+  RIESGO     lo que puede QUITARTE la cuenta   → decide la salud
+  PROGRESO   lo que intentas CONSEGUIR         → se informa, no la baja
+```
+
+Una cuenta recién abierta tiene 0% de progreso hacia el objetivo y está
+perfectamente sana. Meter el progreso en el mínimo diría lo contrario.
+
+Y la regla que costó dos intentos: **cualquier factor que no se pueda medir deja
+la salud sin número**. La primera versión ignoraba los ciegos y una cuenta sin
+tamaño salía al 100% con el colchón sin medir — exactamente lo que no puede
+pasar. El mínimo de un conjunto que contiene un desconocido es desconocido. Es
+la misma disciplina que ya impide imprimir ∞.
+
+La tarjeta muestra además **cuándo se leyeron por última vez las reglas de esa
+firma**, con enlace al contrato. Las props las cambian sin avisar, y un contrato
+que llevas cuatro meses sin mirar es un contrato que puede que ya no sea el
+tuyo. Sin fecha no se inventa una: dice «sin verificar».
+
 ### El guardián de la arquitectura
 
 `test/capa2.mjs` no abre el navegador: lee el archivo en 40 ms y comprueba las

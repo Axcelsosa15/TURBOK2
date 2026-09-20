@@ -143,6 +143,55 @@ ok((await p.evaluate(() => document.querySelector('.rulec:first-child .rtog').te
 const cab = await p.evaluate(() => document.querySelector('#rulesState').textContent.trim());
 ok(/sin configurar/i.test(cab), 'la cabecera cuenta las SIN CONFIGURAR aparte de las activas', cab);
 
+/* ═══ 8 · CICLO DE VIDA Y SALUD ═══ */
+console.log('\n═══ 8 · siete estados, migrados desde los cuatro viejos ═══');
+const mig = await p.evaluate(() => {
+  const r = {};
+  for (const [viejo, kind] of [['activa','Evaluación'], ['activa','Cuenta Fondeada'], ['pasada',''], ['quemada',''], ['pausada',''], ['loquesea','']]) {
+    const id = 'm_' + viejo + '_' + (kind || 'x');
+    FUT.createAccount({ id, firm: 'T', name: id, kind, size: 50000, dd: 2000, status: viejo });
+    r[viejo + (kind ? '/' + kind.slice(0, 5) : '')] = FUT.account(id).status;
+  }
+  return r;
+});
+ok(mig['activa/Evalu'] === 'evaluacion', 'activa + «Evaluación» → evaluación', mig['activa/Evalu']);
+ok(mig['activa/Cuent'] === 'fondeada',   'activa + «Cuenta Fondeada» → fondeada', mig['activa/Cuent']);
+ok(mig['pasada'] === 'fondeada',  'pasada → fondeada', mig['pasada']);
+ok(mig['quemada'] === 'quemada' && mig['pausada'] === 'pausada', 'quemada y pausada se respetan');
+ok(mig['loquesea'] === 'evaluacion', 'un estado desconocido cae en evaluación, no en el limbo', mig['loquesea']);
+/* El bug que esto atrapa: un estado que EST_VIVA no conocía dejaba la cuenta
+   BLOQUEADA para siempre, sin que nada explicara por qué. */
+ok((await p.evaluate(() => FUT.evaluateRules('m_loquesea_x').status)) !== 'LOCKED',
+   'y no queda bloqueada por un estado que la app no reconoce');
+
+console.log('\n═══ 9 · la salud es el MÍNIMO, no la media ═══');
+const sal = await p.evaluate(() => {
+  FUT.createAccount({ id: 'sana', firm: 'T', name: 'Sana', size: 50000, dd: 2000, target: 3000,
+    status: 'fondeada', rules: { maxLoss: 1000 } });
+  const base = FUT.calculateAccountHealth('sana');
+  // colchón intacto (100%) pero el día casi agotado: −$900 sobre un tope de $1.000
+  FUT.createTrade({ accountId: 'sana', instrument: 'MNQ', direction: 'long', qty: 1,
+    date: '2026-09-18', time: '09:31', entry: 21000, stop: 20990, exit: 21000 - 450 });
+  return { base, despues: FUT.calculateAccountHealth('sana') };
+});
+ok(sal.base.score === 100, 'cuenta nueva y fondeada: salud 100', sal.base.score);
+ok(sal.base.progreso.some(x => x.k === 'objetivo' && x.v === 0),
+   'con 0% de progreso al objetivo — el progreso NO baja la salud', JSON.stringify(sal.base.progreso.map(x => x.k + '=' + x.v)));
+ok(sal.despues.score === 10, 'tras −$900 de $1.000: salud 10, no la media con el colchón', sal.despues.score);
+ok(sal.despues.peor && sal.despues.peor.k === 'diario', 'y nombra el factor que manda', sal.despues.nota);
+const medias = sal.despues.riesgo.map(x => x.v);
+ok(sal.despues.score / 100 === Math.min(...medias), 'es literalmente el mínimo', JSON.stringify(medias));
+
+console.log('\n═══ 10 · lo que no se puede medir no cuenta como sano ═══');
+const ciega = await p.evaluate(() => {
+  FUT.createAccount({ id: 'ciega', firm: 'T', name: 'Sin datos', size: 0, dd: 0, status: 'evaluacion' });
+  return FUT.calculateAccountHealth('ciega');
+});
+ok(ciega.score === null, 'sin tamaño ni pérdida máxima la salud es «—», no 100', String(ciega.score));
+ok(ciega.ciegos.length >= 1 && /no se puede medir/i.test(ciega.nota) && /colch/i.test(ciega.nota), 'y dice exactamente qué no puede medir', ciega.nota);
+const quemada = await p.evaluate(() => { FUT.updateAccount('sana', { status: 'quemada' }); return FUT.calculateAccountHealth('sana'); });
+ok(quemada.score === 0 && quemada.muerta === true, 'una cuenta quemada es salud 0', `${quemada.score} · ${quemada.nota}`);
+
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
 console.log('  errores JS:', errs.length, errs.length ? '\n   ' + errs.join('\n   ') : '');

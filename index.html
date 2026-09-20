@@ -547,6 +547,34 @@
      dentro se agrupa con espacio y con una línea de 1px cuando dos zonas
      necesitan quedar separadas de verdad. */
 
+  /* Salud: el factor que manda, no una media. Vive pegada al veredicto. */
+  .acc-health { display: flex; align-items: baseline; gap: var(--s2); flex: none; margin-left: auto;
+    font-family: var(--font-mono); }
+  .acc-health .hk { font-size: 9.5px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--dim); }
+  .acc-health .hv { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .acc-health.good .hv { color: var(--positive); }
+  .acc-health.warn .hv { color: var(--warning); }
+  .acc-health.bad  .hv { color: var(--negative); }
+  .acc-health .hbar { display: block; width: 56px; height: 3px; border-radius: var(--r-pill);
+    background: rgba(255,255,255,.08); overflow: hidden; }
+  .acc-health .hbar > i { display: block; height: 100%; border-radius: var(--r-pill);
+    background: var(--muted); transition: width var(--mo-slow) var(--ease); }
+  .acc-health.good .hbar > i { background: var(--positive); }
+  .acc-health.warn .hbar > i { background: var(--warning); }
+  .acc-health.bad  .hbar > i { background: var(--negative); }
+  .acc-health .hs { font-size: var(--t-meta); color: var(--dim); max-width: 22ch;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @container acct (max-width: 560px) { .acc-health { margin-left: 0; width: 100%; } .acc-health .hs { max-width: none; } }
+
+  /* Estado del ciclo de vida y antigüedad del contrato, junto al nombre. */
+  .acc-id .kind.est.good { color: var(--positive); border-color: rgba(91,196,137,.35); }
+  .acc-id .kind.est.warn { color: var(--warning); border-color: rgba(224,164,88,.35); }
+  .acc-id .kind.est.bad  { color: var(--negative); border-color: rgba(224,96,79,.35); }
+  .acc-id .kind.cttr { color: var(--dim); border-style: dashed; }
+  .acc-id .kind.cttr.warn { color: var(--warning); border-color: rgba(224,164,88,.35); }
+  .acc-id .kind.cttr a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
   /* El veredicto: la primera pregunta del día, a lo ancho y con su motivo.
      Fondo teñido apenas —una banda de color a pantalla completa cansa—, y
      la barra lateral de 2px carga el peso semántico. */
@@ -1880,13 +1908,55 @@
       { id: "nochange", kind: "fixed", name: "Sin cambios al protocolo", why: "Ajustar el sistema en caliente es procrastinación productiva. Se revisa con datos, no con emociones.", role: "" },
     ],
     accounts: [
-      { id: "lucidflex25", firm: "Lucid Trading", name: "LucidFlex 25K", kind: "Evaluación", limit: 30, total: 0, best: 0, size: 25000, dd: 1500, status: "activa" },
-      { id: "lucid25",     firm: "Lucid Trading", name: "Lucid 25K",     kind: "Fondeada",   limit: 50, total: 0, best: 0, size: 25000, dd: 1500, status: "activa" },
-      { id: "alpha50",     firm: "Alpha Futures", name: "Alpha 50K",     kind: "Evaluación", limit: 50, total: 0, best: 0, size: 50000, dd: 2000, status: "activa" },
+      { id: "lucidflex25", firm: "Lucid Trading", name: "LucidFlex 25K", kind: "Evaluación", limit: 30, total: 0, best: 0, size: 25000, dd: 1500, status: "evaluacion" },
+      { id: "lucid25",     firm: "Lucid Trading", name: "Lucid 25K",     kind: "Fondeada",   limit: 50, total: 0, best: 0, size: 25000, dd: 1500, status: "fondeada" },
+      { id: "alpha50",     firm: "Alpha Futures", name: "Alpha 50K",     kind: "Evaluación", limit: 50, total: 0, best: 0, size: 50000, dd: 2000, status: "evaluacion" },
     ],
     customized: false,
   };
-  const STATUSES = ["activa", "pausada", "pasada", "quemada"];
+  /* ═══════════ EL CICLO DE VIDA DE UNA CUENTA PROP ═══════════
+     Siete estados, no cuatro. «Activa» no decía si estabas en evaluación o
+     fondeado, que es la diferencia entre arriesgar $150 de inscripción y
+     arriesgar tu fuente de ingresos. Y no había forma de anotar que hay un
+     payout pedido, que es el momento en que más cuidado hay que tener.
+
+     Son un solo eje a propósito: desde el asiento del trader, una cuenta está
+     en exactamente uno de estos sitios. Un payout pendiente es una cuenta
+     fondeada en un momento concreto, no una segunda dimensión que llevar. */
+  const ESTADOS = [
+    ["evaluacion",       "EVALUACIÓN",      true,  "warn"],
+    ["fondeada",         "FONDEADA",        true,  "good"],
+    ["payout_pendiente", "PAYOUT PEDIDO",   true,  "warn"],
+    ["payout_aprobado",  "PAYOUT APROBADO", true,  "good"],
+    ["quemada",          "QUEMADA",         false, "bad"],
+    ["pausada",          "EN PAUSA",        false, "dim"],
+    ["archivada",        "ARCHIVADA",       false, "dim"],
+  ];
+  const STATUSES  = ESTADOS.map(x => x[0]);
+  const EST_LABEL = Object.fromEntries(ESTADOS.map(x => [x[0], x[1]]));
+  const EST_VIVA  = Object.fromEntries(ESTADOS.map(x => [x[0], x[2]]));
+  const EST_CLS   = Object.fromEntries(ESTADOS.map(x => [x[0], x[3]]));
+  /* Migración desde los cuatro de antes. «Activa» no sabía de qué fase venía,
+     así que se lee el tipo escrito a mano: es el único dato que lo dice. Ante
+     la duda, evaluación — es lo que se corrige con un clic, y equivocarse hacia
+     «fondeada» pintaría de verde una cuenta que aún no lo está. */
+  /* Se migra AL LEER, no sólo al normalizar. Una cuenta puede entrar por
+     FUT.createAccount, por un respaldo viejo o por la base del artefacto sin
+     pasar por normalize(), y un estado desconocido hacía que EST_VIVA
+     devolviera undefined: la cuenta quedaba BLOQUEADA para siempre sin que
+     nada explicara por qué. Leer siempre por aquí lo hace imposible. */
+  function estadoDe(a) { return migraEstado(a && a.status, a && a.kind); }
+  function vivaLa(a) { return !!EST_VIVA[estadoDe(a)]; }
+  function migraEstado(v, kind) {
+    const x = String(v || "").toLowerCase();
+    if (STATUSES.includes(x)) return x;
+    if (x === "quemada") return "quemada";
+    if (x === "pausada") return "pausada";
+    const k = String(kind || "").toLowerCase();
+    if (x === "pasada") return "fondeada";
+    if (x === "activa") return /fonde|funded|live|real/.test(k) ? "fondeada" : "evaluacion";
+    return "evaluacion";
+  }
   /* El rol es lo que conecta una regla escrita a mano con el motor: sin rol, una
      regla es solo un recordatorio; con rol, la cabina la vigila sola. */
   const ROLES = [["", "sin rol"], ["maxLoss", "pérdida máx. del día"], ["maxGain", "tope de ganancia"], ["maxLosses", "pérdidas seguidas"], ["maxContracts", "contratos máximos"], ["instrument", "instrumentos permitidos"]];
@@ -2092,7 +2162,7 @@
     else if (s.rules && typeof s.rules === "object") { const v = s.rules; for (const r of out.rules) { if (r.id === "maxloss" && v.maxLoss != null) r.value = Number(v.maxLoss); if (r.id === "maxlosses" && v.maxLosses != null) r.value = Number(v.maxLosses); if (r.id === "maxgain" && v.maxGain != null) r.value = Number(v.maxGain); if (r.id === "contracts" && v.maxContracts != null) r.value = Number(v.maxContracts); } if (v.custom) out.customized = true; }
     // una cabina anterior guardaba «Solo MNQ» sin decir qué instrumento permitía
     out.rules.forEach(r => { if (r.role === "instrument" && !r.allow) r.allow = "MNQ"; });
-    if (Array.isArray(s.accounts)) out.accounts = s.accounts.filter(a => a && a.id).map(a => ({ id: String(a.id), firm: String(a.firm || ""), name: String(a.name || ""), kind: String(a.kind || ""), limit: Number(a.limit) || 50, total: Number(a.total) || 0, best: Number(a.best) || 0, size: Math.max(0, Number(a.size) || 0), dd: Math.max(0, Number(a.dd) || 0), target: Math.max(0, Number(a.target) || 0), ddKind: DD_KEYS.includes(a.ddKind) ? a.ddKind : "trailing_lock", trailBase: a.trailBase === "cierre" ? "cierre" : "intradia", ledger: Array.isArray(a.ledger) ? a.ledger.filter(e => e && e.id).map(e => ({ id: String(e.id), date: String(e.date || ""), kind: LEDGER_KEYS.includes(e.kind) ? e.kind : "payout", amount: Math.abs(Number(e.amount) || 0), note: String(e.note || "") })) : [], status: STATUSES.includes(a.status) ? a.status : "activa",
+    if (Array.isArray(s.accounts)) out.accounts = s.accounts.filter(a => a && a.id).map(a => ({ id: String(a.id), firm: String(a.firm || ""), name: String(a.name || ""), kind: String(a.kind || ""), limit: Number(a.limit) || 50, total: Number(a.total) || 0, best: Number(a.best) || 0, size: Math.max(0, Number(a.size) || 0), dd: Math.max(0, Number(a.dd) || 0), target: Math.max(0, Number(a.target) || 0), ddKind: DD_KEYS.includes(a.ddKind) ? a.ddKind : "trailing_lock", trailBase: a.trailBase === "cierre" ? "cierre" : "intradia", ledger: Array.isArray(a.ledger) ? a.ledger.filter(e => e && e.id).map(e => ({ id: String(e.id), date: String(e.date || ""), kind: LEDGER_KEYS.includes(e.kind) ? e.kind : "payout", amount: Math.abs(Number(e.amount) || 0), note: String(e.note || "") })) : [], status: migraEstado(a.status, a.kind),
       /* El contrato de la firma. Un campo vacío NO es cero: es «no escrito», y
          se distingue con null para poder decir «sin configurar» en vez de
          «cero», que significaría «no puedes perder nada». */
@@ -2959,6 +3029,70 @@
     return `Sin vigilancia completa: falta escribir ${lista} en el contrato de esta cuenta. Se puede operar, pero la cabina no puede decir que estés a salvo.`;
   }
 
+  /* ═══════════════ SALUD DE LA CUENTA ═══════════════
+
+     La salud es el MÍNIMO de sus factores, no la media. Una cuenta con el 95%
+     del colchón intacto y el 0% del riesgo del día disponible no tiene «salud
+     48%»: tiene el día cerrado. La media esconde justo el factor que te mata,
+     que es el único que hay que mirar.
+
+     Y se separan dos cosas que el lenguaje mezcla:
+
+       RIESGO     lo que puede QUITARTE la cuenta   → decide la salud
+       PROGRESO   lo que intentas CONSEGUIR         → se informa, no la baja
+
+     Una cuenta recién abierta tiene 0% de progreso hacia el objetivo y está
+     perfectamente sana. Meter el progreso en el mínimo diría lo contrario.
+
+     Un factor que no se puede medir —la regla no está escrita— no cuenta como
+     sano: se devuelve aparte, y quien pinte esto tiene que decir que no lo
+     sabe en vez de rellenar el hueco con verde. */
+  function accountHealth(a, ev) {
+    ev = ev || evaluateAccountRules(a);
+    const dd = ev.dd, r = ev.risk, ce = ev.cons, g = ev.agg;
+
+    const riesgo = [];
+    if (dd.ok) riesgo.push({ k: "colchon", lab: "Colchón hasta quemarla",
+      v: dd.max ? Math.max(0, Math.min(1, dd.buffer / dd.max)) : 1,
+      txt: `${money(dd.buffer)} de ${money(dd.max)}` });
+    if (r.ok) riesgo.push({ k: "diario", lab: "Riesgo del día",
+      v: r.max ? Math.max(0, Math.min(1, r.remaining / r.max)) : 1,
+      txt: `${money(r.remaining)} de ${money(r.max)}` });
+
+    const progreso = [];
+    const objetivo = Number(a.target) || 0;
+    if (objetivo > 0) progreso.push({ k: "objetivo", lab: "Objetivo",
+      v: Math.max(0, Math.min(1, g.total / objetivo)), txt: `${money(g.total)} de ${money(objetivo)}` });
+    const buffer = a.rules && a.rules.payoutBuffer ? Number(a.rules.payoutBuffer) : 0;
+    if (buffer > 0) progreso.push({ k: "payout", lab: "Colchón para cobrar",
+      v: Math.max(0, Math.min(1, (g.balance - g.size) / buffer)), txt: `${money(g.balance - g.size)} de ${money(buffer)}` });
+
+    /* Lo que no se puede medir se dice, no se rellena. */
+    const ciegos = [];
+    if (!dd.ok) ciegos.push("el colchón (falta tamaño o drawdown)");
+    if (!r.ok) ciegos.push("el riesgo del día (falta la pérdida máxima)");
+
+    if (!vivaLa(a))
+      return { score: 0, peor: null, riesgo, progreso, ciegos, muerta: true,
+               nota: estadoDe(a) === "quemada" ? "Cuenta quemada." : "Fuera de juego: " + (EST_LABEL[estadoDe(a)] || estadoDe(a)).toLowerCase() + "." };
+    /* CUALQUIER factor ciego deja la salud sin número, no sólo que falten
+       todos. El mínimo de un conjunto que contiene un desconocido es
+       desconocido: una cuenta con el riesgo del día intacto pero el colchón sin
+       medir no está al 100% — está sin medir, y decir 100% es la mentira que
+       más caro sale. Es la misma disciplina que ya impide imprimir ∞. */
+    if (!riesgo.length || ciegos.length)
+      return { score: null, peor: null, riesgo, progreso, ciegos, muerta: false,
+               nota: "No se puede medir " + ciegos.join(" ni ") + "." };
+
+    const peor = riesgo.reduce((w, x) => x.v < w.v ? x : w);
+    const bloqueos = [];
+    if (ce.hasData && !ce.compliant) bloqueos.push(`consistencia ${pct(ce.ratio)} sobre ${pct(ce.limit)}`);
+    if (ev.violations && ev.violations.length) bloqueos.push(plu(ev.violations.length, "regla rota", "reglas rotas"));
+    return { score: Math.round(peor.v * 100), peor, riesgo, progreso, ciegos, bloqueos, muerta: false,
+             nota: `Lo que manda: ${peor.lab.toLowerCase()} · ${peor.txt}` +
+                   (ciegos.length ? ` · sin medir ${ciegos.join(" y ")}` : "") };
+  }
+
   const RULE_RANK = { READY: 0, WARNING: 1, RESTRICTED: 2, LOCKED: 3, FAILED: 4 };
   /* Devuelve el estado de la cuenta y los números que lo sostienen. La escalera va
      de abajo a arriba: lo que quema la cuenta manda sobre lo que cierra el día, y
@@ -2972,14 +3106,14 @@
     let status = "READY", why = "", canTrade = true;
     const set = (st, msg, ct) => { status = st; why = msg; canTrade = ct; };
     if (dd.ok && dd.breached) set("FAILED", `El balance tocó el suelo de ${money(dd.floor)}. La cuenta está quemada aunque la firma tarde en marcarlo.`, false);
-    else if (a.status === "quemada") set("FAILED", "Marcada como quemada. Aquí no se opera más.", false);
+    else if (estadoDe(a) === "quemada") set("FAILED", "Marcada como quemada. Aquí no se opera más.", false);
     else if (r.locked) set("LOCKED", `Llevas ${money(-r.used)} hoy contra un tope de ${money(-r.max)}. Se cierra la plataforma: no hay más entradas.`, false);
     else if (k.streakHit) set("LOCKED", `${plu(k.streak, "pérdida seguida", "pérdidas seguidas")} con un límite de ${k.streakMax}. Se cierra el día: subir tamaño para recuperar es justo lo que prohíbe la regla.`, false);
-    else if (a.status === "pausada") set("LOCKED", "Archivada: la pusiste en pausa tú mismo. Reactívala desde el menú ··· cuando vuelvas a ella.", false);
+    else if (!vivaLa(a)) set("LOCKED", estadoDe(a) === "archivada" ? "Archivada. No se opera con ella; sigue aquí por el historial." : "En pausa: la paraste tú mismo. Reactívala desde el menú ··· cuando vuelvas a ella.", false);
     else if (k.off.length) set("RESTRICTED", `Hoy hay operaciones en ${k.off.join(", ")} y la regla solo permite ${k.allow.join(", ")}. Queda anotado.`, true);
     else if (k.over.length) set("RESTRICTED", `${plu(k.over.length, "operación pasó", "operaciones pasaron")} de ${k.maxC} contratos. El tamaño se decide antes de la sesión.`, true);
     else if (!ce.compliant && ce.hasData) set("RESTRICTED", `Consistencia ${pct(ce.ratio)} sobre un límite de ${pct(ce.limit)}. No impide operar: bloquea pasar o retirar hasta acumular ${money(ce.additional)} más sin superar el mejor día.`, true);
-    else if (a.status === "pasada") set("READY", "Objetivo cumplido. Lo que registres aquí ya cuenta para la fondeada.", true);
+    else if (estadoDe(a) === "payout_pendiente") set("WARNING", "Payout pedido. Hasta que se apruebe, una racha roja puede costarte el cobro además del progreso.", true);
     else if (r.ok && r.pct >= 0.75) set("WARNING", `Quedan ${money(r.remaining)} antes del tope diario. Una pérdida más y se acabó el día.`, true);
     else if (k.streakMax && k.streak === k.streakMax - 1) set("WARNING", `${plu(k.streak, "pérdida seguida", "pérdidas seguidas")}. Una más y el día se cierra por regla.`, true);
     else if (r.ok && r.pct >= 0.50) set("WARNING", `Ya usaste ${pct(r.pct)} del riesgo de hoy. Quedan ${money(r.remaining)}.`, true);
@@ -3079,10 +3213,31 @@
      tres tarjetas-módulo con treinta cifras de 10px, y una fila de chips que
      repetía lo que ya dice el centro de reglas. Treinta números que nadie
      puede leer no son más información: son menos. */
+  /* Cuándo se leyeron por última vez las reglas de esta firma. Las props las
+     cambian sin avisar, y un contrato que llevas cuatro meses sin mirar es un
+     contrato que puede que ya no sea el tuyo. Sin fecha no se inventa una: se
+     dice que no está verificado. */
+  /* El tipo escrito a mano («Evaluación») decía lo que ahora dice el estado.
+     Se sigue guardando porque es lo que permite migrar cuentas viejas, pero no
+     se pinta dos veces: sólo si aporta algo que el estado no diga ya. */
+  function kindDistinto(a) {
+    if (!a.kind) return false;
+    const k = String(a.kind).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const e = String(EST_LABEL[estadoDe(a)] || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    return k !== e && !e.includes(k) && !k.includes(e);
+  }
+  const DIAS_CONTRATO_VIEJO = 120;
+  function contratoChip(a) {
+    const r = a.rules || {};
+    const url = r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">contrato</a>` : "contrato";
+    if (!r.verifiedAt) return `<span class="kind cttr" title="Nadie ha anotado cuándo se leyeron las reglas de esta firma.">${url} sin verificar</span>`;
+    const dias = Math.round((new Date(state.today + "T12:00:00Z") - new Date(r.verifiedAt + "T12:00:00Z")) / 86400000);
+    const viejo = dias > DIAS_CONTRATO_VIEJO;
+    return `<span class="kind cttr ${viejo ? "warn" : ""}" title="Reglas verificadas el ${esc(r.verifiedAt)}${r.version ? " · " + esc(r.version) : ""}">${url} ${dias <= 0 ? "verificado hoy" : `hace ${plu(dias, "día", "días")}`}</span>`;
+  }
   function acctCard(a, i, n) {
     const c = consistency(a), ev = evaluateAccountRules(a);
     const g = ev.agg, t = ev.today, r = ev.risk, d = ev.dd, ce = ev.cons, cap = gainCap(c);
-    const ESTADO = { activa: "ACTIVA", pausada: "EN PAUSA", quemada: "QUEMADA", pasada: "PASADA" };
     const delta = g.balance - g.size, deltaPct = g.size ? delta / g.size : null;
     const sig = v => (v >= 0 ? "+" : "") + money(v);
 
@@ -3090,15 +3245,16 @@
       <div class="acc-id">
         <span class="firm">${esc(a.firm || "sin firma")}</span>
         <span class="name">${esc(a.name || "Sin nombre")}</span>
-        ${a.kind ? `<span class="kind">${esc(a.kind)}</span>` : ""}
-        ${a.status !== "activa" ? `<span class="kind">${esc(ESTADO[a.status] || a.status)}</span>` : ""}
+        ${kindDistinto(a) ? `<span class="kind">${esc(a.kind)}</span>` : ""}
+        <span class="kind est ${EST_CLS[estadoDe(a)]}">${esc(EST_LABEL[estadoDe(a)])}</span>
+        ${contratoChip(a)}
       </div>
       <div class="acc-menu">
         <button type="button" class="icon" data-act="menu" aria-haspopup="true" aria-expanded="false" title="Acciones de la cuenta">•••</button>
         <div class="menu" hidden>
           <button type="button" data-act="cfg">Editar</button>
           <button type="button" data-act="dup">Duplicar</button>
-          <button type="button" data-act="arch">${a.status === "pausada" ? "Reactivar" : "Archivar"}</button>
+          <button type="button" data-act="arch">${estadoDe(a) === "pausada" ? "Reactivar" : "Archivar"}</button>
           <button type="button" class="del" data-act="del">Borrar</button>
         </div>
       </div>
@@ -3108,9 +3264,22 @@
        rejilla de tres columnas dentro de una tarjeta con overflow:hidden: el
        motivo se recortaba en una columna de una palabra por línea y se salía
        por el borde derecho. Ahora es una sola fila que fluye. */
+    /* La salud va junto al veredicto porque responden a la misma pregunta desde
+       dos lados: el veredicto dice SI puedes operar, la salud dice CUÁNTO
+       margen te queda antes de no poder. Y nombra el factor que manda, que es
+       lo único accionable — «salud 12%» sin decir por qué no sirve de nada. */
+    const h = accountHealth(a, ev);
+    const hCls = h.muerta ? "bad" : h.score == null ? "dim" : h.score >= 60 ? "good" : h.score >= 30 ? "warn" : "bad";
+    const salud = `<div class="acc-health ${hCls}" title="${esc(h.nota)}">
+      <span class="hk">Salud</span>
+      <span class="hv">${h.score == null ? "—" : h.score + "%"}</span>
+      ${h.score == null ? "" : `<span class="hbar"><i style="width:${h.score}%"></i></span>`}
+      <span class="hs">${esc(h.peor ? h.peor.lab.toLowerCase() : h.nota)}</span>
+    </div>`;
     const veredicto = `<div class="acc-verdict ${ST_CLS[ev.status]}">
       <span class="vtag"><i aria-hidden="true">${ST_ICON[ev.status]}</i>${ST_LABEL[ev.status]}</span>
       <span class="vwhy">${esc(ev.why)}</span>
+      ${salud}
     </div>`;
 
     const figs = `<div class="acc-figs">
@@ -3229,10 +3398,10 @@
     const orden = `<div class="acc-order edit-only">
       <button type="button" class="icon" data-act="up" title="Subir" ${i === 0 ? "disabled" : ""}>▲</button>
       <button type="button" class="icon" data-act="down" title="Bajar" ${i === n - 1 ? "disabled" : ""}>▼</button>
-      <select data-f="status" aria-label="Estado de ${esc(a.name)}">${STATUSES.map(x => `<option value="${x}" ${a.status === x ? "selected" : ""}>${x}</option>`).join("")}</select>
+      <select data-f="status" aria-label="Estado de ${esc(a.name)}">${ESTADOS.map(([v, l]) => `<option value="${v}" ${estadoDe(a) === v ? "selected" : ""}>${l}</option>`).join("")}</select>
     </div>`;
 
-    return `<article class="acct ${a.status === "pausada" ? "paused" : a.status === "quemada" ? "burned" : a.status === "pasada" ? "passed" : ""}" data-id="${a.id}">
+    return `<article class="acct ${vivaLa(a) ? "" : estadoDe(a) === "quemada" ? "burned" : "paused"}" data-id="${a.id}">
       ${head}${veredicto}${figs}${metrics}${abajo}${acciones}${orden}
     </article>`;
   }
@@ -3247,7 +3416,7 @@
     const meta = $("acctsMeta");
     if (meta) {
       // El resumen mira solo las cuentas activas: una archivada o quemada no es un problema de hoy.
-      const vivas = accts.filter(a => a.status === "activa");
+      const vivas = accts.filter(vivaLa);
       const peor = vivas.map(a => evaluateAccountRules(a).status).reduce((w, st) => RULE_RANK[st] > RULE_RANK[w] ? st : w, "READY");
       meta.innerHTML = accts.length
         ? `${plu(accts.length, "cuenta", "cuentas")} · ${vivas.length} ${vivas.length === 1 ? "activa" : "activas"}${vivas.length ? ` · <span class="${ST_CLS[peor]}">${ST_LABEL[peor]}</span>` : ""}${FUT.selectedAccount() ? ` · trabajando en <b id="acctsSelName">${esc(FUT.selectedAccount().name || "sin nombre")}</b>` : ""}`
@@ -3316,11 +3485,11 @@
       m.hidden = abierto; btn.setAttribute("aria-expanded", String(!abierto)); return;
     }
     if (act === "dup") {
-      const copia = Object.assign(clone(a), { id: uid("a"), name: (a.name || "Cuenta") + " (copia)", total: 0, best: 0, ledger: [], status: "activa" });
+      const copia = Object.assign(clone(a), { id: uid("a"), name: (a.name || "Cuenta") + " (copia)", total: 0, best: 0, ledger: [], status: "evaluacion" });
       arr.splice(i + 1, 0, copia); persistSettings(); renderAccounts();
       flash(`«${copia.name}» creada sin ganancia previa ni movimientos: es una cuenta nueva con la misma configuración.`); return;
     }
-    if (act === "arch") { a.status = a.status === "pausada" ? "activa" : "pausada"; persistSettings(); renderAccounts(); return; }
+    if (act === "arch") { a.status = estadoDe(a) === "pausada" ? "evaluacion" : "pausada"; persistSettings(); renderAccounts(); return; }
     if (act === "newtrade") { openTrade(null, "futuros", { accountId: a.id }); return; }
     if (act === "cfg") { openAccountEditor(a); return; }
     if (act === "journal") { FUT.setSelectedAccount(a.id); showTab("futuros"); setFtView("diario"); return; }
@@ -5879,7 +6048,9 @@
 
     createAccount(a) {
       const id = a && a.id ? a.id : uid("a");
-      state.settings.accounts.push(Object.assign({ status: "activa", total: 0, best: 0, ledger: [] }, a, { id }));
+      const rec = Object.assign({ status: "evaluacion", total: 0, best: 0, ledger: [] }, a, { id });
+      rec.status = migraEstado(rec.status, rec.kind);
+      state.settings.accounts.push(rec);
       persistSettings(); fanout(FANOUT_SEL); return id;
     },
     updateAccount(id, patch) {
@@ -5922,6 +6093,7 @@
     },
     calculateEquityCurve(accountId) { const g = FUT.calculateAccountStats(accountId); return g ? g.curva : null; },
     calculateRiskState(accountId, date) { return FUT.evaluateRules(accountId, date); },
+    calculateAccountHealth(accountId) { const a = acctById(accountId); return a ? accountHealth(a) : null; },
     calculateConcentration(accountId) {
       const a = acctById(accountId);
       if (a) { const c = consistency(a); return { ratio: c.ratio, best: c.best, total: c.total, limite: c.L }; }
@@ -5985,7 +6157,7 @@
     if (ft.acct && ft.acct !== "__none" && acctById(ft.acct)) return ft.acct;
     const last = tradesOf("futuros").find(t => t.accountId && acctById(t.accountId));
     if (last) return last.accountId;
-    const act = (state.settings.accounts || []).find(a => a.status === "activa");
+    const act = (state.settings.accounts || []).find(vivaLa);
     return act ? act.id : "";
   }
 
@@ -7296,7 +7468,7 @@
     const over = items.filter(i => i.value > L).length;
     $("cnMeta").innerHTML = `${ac ? esc(acctLabel(ac.id)) + " · límite " + pct(L) : "sin cuenta filtrada · referencia " + pct(L)} · ${over} ${over === 1 ? "día lo supera" : "días lo superan"}`;
     wrap.innerHTML = chartBars(items, { W: chartW(wrap), H: 170, pl: 42, fmt: v => (v * 100).toFixed(0) + "%", aria: "Peso de cada día en la ganancia", maxLabels: 14 });
-    const accts = (state.settings.accounts || []).filter(a => a.status !== "quemada");
+    const accts = (state.settings.accounts || []).filter(vivaLa);
     out.innerHTML = accts.length ? `<div class="twrap" style="margin-top:16px"><table class="t"><thead><tr><th>Cuenta</th><th class="r">Ganancia</th><th class="r">Mejor día</th><th class="r">Ratio</th><th class="r">Límite</th><th>Estado</th></tr></thead><tbody>${accts.map(a => { const c = consistency(a); return `<tr><td class="ui">${esc(a.name || a.firm || "sin nombre")}</td><td class="r">${money(c.total)}</td><td class="r">${money(c.best)}</td><td class="r ${c.noProfit ? "dim" : c.over ? "neg" : "pos"}">${c.noProfit ? "—" : pct(c.ratio)}</td><td class="r">${pct(c.L)}</td><td class="ui">${c.noProfit ? `<span class="dim">sin ganancia${c.total < 0 ? ` · ${money(c.total)}` : ""}</span>` : c.over ? `<span class="chip bad">falta ${money(c.needed)}</span>` : `<span class="chip good">cumple · tope hoy ${money(c.capToday)}</span>`}</td></tr>`; }).join("")}</tbody></table></div>` : "";
   }
 
@@ -7362,7 +7534,7 @@
       help: "decide si un máximo que tocaste a media sesión cuenta. La mayoría de las props miden intradía; si la tuya mide al cierre, cámbialo. Intradía es lo conservador: nunca te infla el colchón." },
     { key: "limit", label: "Límite de consistencia (%)", type: "number", step: "1" },
     { key: "target", label: "Objetivo de la evaluación ($)", type: "number", step: "100", help: "0 si ya está fondeada" },
-    { key: "status", label: "Estado", type: "select", options: STATUSES.map(s => [s, s]) },
+    { key: "status", label: "Estado de la cuenta", type: "select", options: ESTADOS.map(x => [x[0], x[1]]) },
     { key: "total", label: "Ganancia previa ($)", type: "number", step: "10", w: 3, help: "lo que ya llevaba la cuenta antes de empezar a registrar aquí · en rojo se escribe con signo: -450" },
     { key: "best", label: "Mejor día previo ($)", type: "number", step: "10", w: 3, help: "el día verde más grande antes de registrar aquí · 0 si nunca hubo uno" },
     /* ─── EL CONTRATO DE ESTA FIRMA ───
@@ -7484,7 +7656,7 @@
       return `<section class="facct ${a.status === "activa" ? "" : "off"}" data-id="${a.id}">
         <header>
           <span class="firm">${esc(a.firm || "sin firma")}</span><span class="name">${esc(a.name || "sin nombre")}</span>
-          ${a.kind ? `<span class="chip">${esc(a.kind)}</span>` : ""}<span class="chip ${a.status === "activa" ? "good" : a.status === "quemada" ? "bad" : a.status === "pasada" ? "good" : "warn"}">${esc(a.status)}</span><span class="chip ${ST_CLS[ev.status]}" title="${esc(ev.reason)}">${ST_ICON[ev.status]} ${ST_LABEL[ev.status]}</span>
+          ${a.kind ? `<span class="chip">${esc(a.kind)}</span>` : ""}<span class="chip ${EST_CLS[estadoDe(a)]}">${esc(EST_LABEL[estadoDe(a)])}</span><span class="chip ${ST_CLS[ev.status]}" title="${esc(ev.reason)}">${ST_ICON[ev.status]} ${ST_LABEL[ev.status]}</span>
           <div class="tools"><button type="button" class="btn sm ghost" data-act="trade">+ Op.</button><button type="button" class="btn sm ghost" data-act="mov">+ Movimiento</button><button type="button" class="btn sm" data-act="edit">Editar</button></div>
         </header>
         <div class="body">
