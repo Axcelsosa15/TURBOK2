@@ -302,7 +302,12 @@ const lim = await p.evaluate(() => {
 const crudo = JSON.stringify(lim);
 ok(!/NO-FINITO/.test(crudo), 'ningún NaN/Infinity con una cuenta vacía', (crudo.match(/NO-FINITO:[^",]*/g) || []).join(' '));
 ok(lim.pf.valor === null && lim.wr.valor === null, 'profit factor y win rate son null, no 0 ni ∞');
-ok(lim.reglas.status === 'READY' && lim.reglas.canTrade === true, 'cuenta nueva = READY', lim.reglas.status);
+/* Una cuenta sin tamaño, sin drawdown y sin pérdida máxima escrita ya NO se
+   presenta como LISTA: está sin vigilar, que no es lo mismo. Se puede operar
+   —eso lo decide él— pero la cabina no dice que todo va bien cuando no tiene
+   con qué saberlo. */
+ok(lim.reglas.status === 'WARNING' && lim.reglas.canTrade === true, 'cuenta sin contrato = AVISO, y aun así operable', lim.reglas.status);
+ok(/falta escribir/i.test(lim.reglas.reason), 'y dice qué falta', lim.reglas.reason.slice(0, 70));
 const textoApp = await p.evaluate(() => document.body.innerText);
 ok(!/\bNaN\b|\bundefined\b|\$NaN/.test(textoApp), 'la pantalla no imprime NaN ni undefined',
    (textoApp.match(/.{0,25}(NaN|undefined).{0,25}/) || [''])[0]);

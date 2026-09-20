@@ -608,7 +608,7 @@ mano. No siempre fue así — esta misma sesión eliminó la tabla `MULT` duplic
 
 **Las pruebas de la app vivían en un directorio efímero.** Si el contenedor
 moría, se perdían — y con ellas la única forma de re-verificar que la
-arquitectura sigue siendo cierta. Ahora están en `test/` (41 archivos), con
+arquitectura sigue siendo cierta. Ahora están en `test/` (42 archivos), con
 `test/build-preview.mjs` para reconstruir el preview desde `index.html`.
 
 Las dos más valiosas no comparan contra un valor escrito a mano: comparan **la
@@ -819,6 +819,57 @@ consistencia a un decimal, y `53.97%` no es `54.0%` cuando el límite es 50.
 visibles y lista los espaciados fuera de escala, los tamaños de tipo, los radios
 y cualquier elemento cuyo contenido no quepa. Es la prueba que convierte
 «parece consistente» en un número.
+
+### El contrato de la firma, por cuenta
+
+Hasta aquí había **una** pérdida máxima diaria para todas las cuentas:
+`ruleByRole(role)` no recibía cuenta. Una LucidFlex con tope de $200 y una Apex
+con tope de $1.100 leían el mismo número, así que una de las dos mentía — y la
+que miente en la dirección peligrosa te quema la cuenta.
+
+Ahora hay **dos niveles**, porque son dos cosas distintas con consecuencias
+distintas:
+
+```
+  CONTRATO DE LA FIRMA   account.rules{}    romperlo QUEMA la cuenta
+  PROTOCOLO DEL TRADER   settings.rules[]   romperlo rompe la disciplina
+```
+
+El contrato manda. Si la cuenta no tiene ese número escrito, se hereda del
+protocolo **y se dice** que se ha heredado («$0 de $200 · del protocolo»): un
+límite heredado que creías propio es justo el error que esto viene a quitar. Si
+no existe en ninguno de los dos, la regla sale **SIN CONFIGURAR** con su propio
+color muerto — antes salía como AVISO «sin valor», que se lee igual que
+cualquier otro aviso.
+
+Lo que ya vive en la cuenta no se duplica: el objetivo es `a.target`, el
+drawdown `a.dd`, la consistencia `a.limit`. `account.rules{}` guarda sólo lo que
+faltaba, más la metadata del contrato: fecha de verificación, versión, enlace y
+notas. Dos sitios para el mismo número es el bug que se acababa de quitar; no se
+reintroduce con otro nombre.
+
+**Una cuenta sin las reglas que la queman ya no se presenta como LISTA.** Sale
+en AVISO diciendo exactamente qué falta escribir — «falta el tamaño y el
+drawdown máximo» — y sigue siendo operable, porque eso lo decide el trader. Lo
+que la cabina no hace es decir que todo va bien cuando no tiene con qué saberlo.
+Esto cambió el veredicto de una cuenta nueva de READY a WARNING, y con él una
+prueba de `sync.mjs` que lo daba por bueno.
+
+`test/prop.mjs` mete −$600 el mismo día en las dos cuentas: LucidFlex queda
+BLOQUEADA sobre su tope de $200 y Apex sigue operable con $500 restantes de sus
+$1.100. Ese contraste es toda la fase en una línea.
+
+**Tres defectos del rediseño anterior salieron a la luz al escribirla**, y los
+tres vivían porque ninguna prueba tocaba esa parte del DOM:
+
+- El chevrón del «por qué» de una regla buscaba el párrafo con
+  `nextElementSibling`, pero el rediseño lo había metido dentro de la fila:
+  devolvía `null` y reventaba al pulsarlo.
+- `paintRuleStates` actualizaba `.rnote`, renombrado a `.rnow`. Al no
+  encontrarlo, **el estado en vivo de cada regla dejó de refrescarse en
+  silencio**: seguía mostrando el número del último repintado completo.
+- La cabecera contaba las reglas sin configurar como «activas», es decir,
+  afirmaba vigilar algo que nadie había escrito.
 
 ### El guardián de la arquitectura
 

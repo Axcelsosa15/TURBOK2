@@ -432,6 +432,11 @@
   .rulec:hover { background: rgba(255,255,255,.018); }
   .rulec.warn { box-shadow: inset 2px 0 0 var(--warning); background: rgba(224,164,88,.035); }
   .rulec.bad  { box-shadow: inset 2px 0 0 var(--negative); background: rgba(224,96,79,.05); }
+  /* Sin configurar: ni verde ni rojo. Rayado, porque no hay nada que medir. */
+  .rulec.unset { box-shadow: inset 2px 0 0 var(--line-strong); }
+  .rulec.unset .rname, .rulec.unset .rv { color: var(--dim); }
+  .rulec.unset .rst { color: var(--muted); }
+  .rulec.unset .rnow { color: var(--dim); font-style: italic; }
 
   /* nº · nombre · dónde vas · límite · veredicto */
   .rulec .rh { display: grid; align-items: baseline; gap: var(--s2) var(--s3);
@@ -2062,6 +2067,20 @@
   }
   const COLLS = ["trades", "playbooks", "ideas", "markets", "watch", "positions", "scenarios", "risk"];
 
+  const RULE_NUM = ["maxLoss", "maxGain", "maxContracts", "maxLosses", "minDays", "payoutBuffer"];
+  function normRules(r) {
+    const out = {};
+    if (!r || typeof r !== "object") return out;
+    for (const k of RULE_NUM) {
+      const v = r[k];
+      if (v == null || v === "") continue;
+      const n = Number(v); if (Number.isFinite(n)) out[k] = Math.abs(n);
+    }
+    for (const k of ["instruments", "url", "notes", "version", "verifiedAt", "scaling", "news", "weekend"]) {
+      if (r[k] != null && String(r[k]).trim()) out[k] = String(r[k]).trim();
+    }
+    return out;
+  }
   function normalize(s) {
     const out = clone(DEFAULT_SETTINGS);
     if (!s || typeof s !== "object") return out;
@@ -2073,7 +2092,11 @@
     else if (s.rules && typeof s.rules === "object") { const v = s.rules; for (const r of out.rules) { if (r.id === "maxloss" && v.maxLoss != null) r.value = Number(v.maxLoss); if (r.id === "maxlosses" && v.maxLosses != null) r.value = Number(v.maxLosses); if (r.id === "maxgain" && v.maxGain != null) r.value = Number(v.maxGain); if (r.id === "contracts" && v.maxContracts != null) r.value = Number(v.maxContracts); } if (v.custom) out.customized = true; }
     // una cabina anterior guardaba «Solo MNQ» sin decir qué instrumento permitía
     out.rules.forEach(r => { if (r.role === "instrument" && !r.allow) r.allow = "MNQ"; });
-    if (Array.isArray(s.accounts)) out.accounts = s.accounts.filter(a => a && a.id).map(a => ({ id: String(a.id), firm: String(a.firm || ""), name: String(a.name || ""), kind: String(a.kind || ""), limit: Number(a.limit) || 50, total: Number(a.total) || 0, best: Number(a.best) || 0, size: Math.max(0, Number(a.size) || 0), dd: Math.max(0, Number(a.dd) || 0), target: Math.max(0, Number(a.target) || 0), ddKind: DD_KEYS.includes(a.ddKind) ? a.ddKind : "trailing_lock", trailBase: a.trailBase === "cierre" ? "cierre" : "intradia", ledger: Array.isArray(a.ledger) ? a.ledger.filter(e => e && e.id).map(e => ({ id: String(e.id), date: String(e.date || ""), kind: LEDGER_KEYS.includes(e.kind) ? e.kind : "payout", amount: Math.abs(Number(e.amount) || 0), note: String(e.note || "") })) : [], status: STATUSES.includes(a.status) ? a.status : "activa" }));
+    if (Array.isArray(s.accounts)) out.accounts = s.accounts.filter(a => a && a.id).map(a => ({ id: String(a.id), firm: String(a.firm || ""), name: String(a.name || ""), kind: String(a.kind || ""), limit: Number(a.limit) || 50, total: Number(a.total) || 0, best: Number(a.best) || 0, size: Math.max(0, Number(a.size) || 0), dd: Math.max(0, Number(a.dd) || 0), target: Math.max(0, Number(a.target) || 0), ddKind: DD_KEYS.includes(a.ddKind) ? a.ddKind : "trailing_lock", trailBase: a.trailBase === "cierre" ? "cierre" : "intradia", ledger: Array.isArray(a.ledger) ? a.ledger.filter(e => e && e.id).map(e => ({ id: String(e.id), date: String(e.date || ""), kind: LEDGER_KEYS.includes(e.kind) ? e.kind : "payout", amount: Math.abs(Number(e.amount) || 0), note: String(e.note || "") })) : [], status: STATUSES.includes(a.status) ? a.status : "activa",
+      /* El contrato de la firma. Un campo vacío NO es cero: es «no escrito», y
+         se distingue con null para poder decir «sin configurar» en vez de
+         «cero», que significaría «no puedes perder nada». */
+      rules: normRules(a.rules) }));
     if (s.customized) out.customized = true;
     return out;
   }
@@ -2471,16 +2494,9 @@
        cosas distintas del mismo día. Sin selección no hay nada que estrechar y
        se mira el día completo, como antes. */
     const selReglas = FUT.selectedAccountId();
-    const k = dayRuleCheck(todayFutures(selReglas));
+    const k = dayRuleCheck(todayFutures(selReglas), selReglas ? acctById(selReglas) : null);
     const worst = rules.reduce((w, r) => { const st = ruleStatus(r, k); const rank = { bad: 3, warn: 2, good: 1, dim: 0 }[st.cls]; return rank > w.rank ? { rank, st } : w; }, { rank: -1, st: null });
-    const rotas = rules.filter(r => ruleStatus(r, k).cls === "bad").length;
-    const avisos = rules.filter(r => ruleStatus(r, k).cls === "warn").length;
-    const m = $("rulesState");
-    if (m) {
-      m.className = "rulesstate " + (rotas ? "bad" : avisos ? "warn" : "good");
-      const cuentaSel = selReglas ? acctById(selReglas) : null;
-      m.innerHTML = `<i></i>${rotas ? plu(rotas, "regla rota hoy", "reglas rotas hoy") : avisos ? plu(avisos, "regla en aviso", "reglas en aviso") : plu(rules.length, "regla activa", "reglas activas")}${cuentaSel ? ` · <span class="dim">${esc(cuentaSel.name || "cuenta")}</span>` : ""}`;
-    }
+    pintaCabeceraReglas(k);
     rulesEl.innerHTML = rules.map((r, i) => {
       const st = ruleStatus(r, k);
       const num = String(i + 1).padStart(2, "0");
@@ -2532,21 +2548,40 @@
   function rvinW(v) { return Math.max(2, String(v == null ? "" : v).length) + 0.8 + "ch"; }
   /* Refresca solo los estados, sin reconstruir las tarjetas: así no se pierde el
      foco de un campo ni se cierran los detalles que tengas abiertos. */
+  /* La cabecera cuenta rotas, avisos y SIN CONFIGURAR por separado. Sumar una
+     regla sin número a las «activas» es decir que se vigila algo que nadie ha
+     escrito, que es la mentira exacta que este cambio viene a quitar. */
+  function pintaCabeceraReglas(k) {
+    const m = $("rulesState"); if (!m) return;
+    const est = state.settings.rules.map(r => ruleStatus(r, k).cls);
+    const rotas = est.filter(x => x === "bad").length;
+    const avisos = est.filter(x => x === "warn").length;
+    const sin = est.filter(x => x === "unset").length;
+    const partes = [];
+    if (rotas) partes.push(plu(rotas, "regla rota hoy", "reglas rotas hoy"));
+    if (avisos) partes.push(plu(avisos, "en aviso", "en aviso"));
+    if (sin) partes.push(plu(sin, "sin configurar", "sin configurar"));
+    if (!partes.length) partes.push(plu(state.settings.rules.length, "regla activa", "reglas activas"));
+    const a = k.cuenta ? acctById(k.cuenta) : null;
+    if (a) partes.push(`<span class="dim">${esc(a.name || "cuenta")}</span>`);
+    m.className = "rulesstate " + (rotas ? "bad" : avisos ? "warn" : sin ? "dim" : "good");
+    m.innerHTML = `<i></i>${partes.join(" · ")}`;
+  }
   function paintRuleStates() {
-    const k = dayRuleCheck(todayFutures());
+    const sel = FUT.selectedAccountId();
+    const k = dayRuleCheck(todayFutures(sel), sel ? acctById(sel) : null);
     state.settings.rules.forEach(r => {
       const el = rulesEl.querySelector(`.rulec[data-id="${r.id}"]`); if (!el) return;
       const st = ruleStatus(r, k);
       el.className = "rulec " + st.cls;
       const c = el.querySelector(".rst"); if (c) c.innerHTML = `<i aria-hidden="true">${st.icon}</i>${st.code}`;
-      const n = el.querySelector(".rnote"); if (n) n.textContent = st.note;
+      /* .rnote se llama .rnow desde el rediseño. Al no encontrarlo, el estado
+         en vivo («$0 de $200») dejó de actualizarse sin decir nada: la regla
+         seguía mostrando el número del último repintado completo. */
+      const n = el.querySelector(".rnow"); if (n) n.textContent = st.note;
       const t = el.querySelector(".rvt"); if (t && r.role === "instrument") t.textContent = k.allow.length ? k.allow.join(" · ") : "—";
     });
-    const rotas = state.settings.rules.filter(r => ruleStatus(r, k).cls === "bad").length;
-    const avisos = state.settings.rules.filter(r => ruleStatus(r, k).cls === "warn").length;
-    const m = $("rulesState");
-    if (m) { m.className = "rulesstate " + (rotas ? "bad" : avisos ? "warn" : "good");
-      m.innerHTML = `<i></i>${rotas ? plu(rotas, "regla rota hoy", "reglas rotas hoy") : avisos ? plu(avisos, "regla en aviso", "reglas en aviso") : plu(state.settings.rules.length, "regla activa", "reglas activas")}`; }
+    pintaCabeceraReglas(k);
   }
 
   rulesEl.addEventListener("input", e => {
@@ -2563,7 +2598,17 @@
   rulesEl.addEventListener("click", e => {
     const btn = e.target.closest("button[data-act]"); if (!btn) return;
     const el = btn.closest(".rulec"); const arr = state.settings.rules; const i = arr.findIndex(x => x.id === el.dataset.id); if (i < 0) return;
-    if (btn.dataset.act === "det") { const pp = btn.nextElementSibling; pp.hidden = !pp.hidden; btn.setAttribute("aria-expanded", String(!pp.hidden)); btn.textContent = pp.hidden ? "Detalle" : "Ocultar"; return; }
+    /* El párrafo NO es hermano del botón: al pasar las reglas a lista, el
+       chevrón se metió dentro de la fila y el párrafo quedó en .rdet, que es
+       hermano de la fila. nextElementSibling devolvía null y esto reventaba con
+       «Cannot read properties of null». Se busca desde la regla, que es lo
+       único que no se mueve. */
+    if (btn.dataset.act === "det") {
+      const pp = el.querySelector(".rdet p"); if (!pp) return;
+      pp.hidden = !pp.hidden;
+      btn.setAttribute("aria-expanded", String(!pp.hidden));
+      return;
+    }
     if (btn.dataset.act === "del") { if (!armed(btn)) return; arr.splice(i, 1); }
     else if (!move(arr, i, btn.dataset.act === "up" ? -1 : 1)) return;
     persistSettings(); renderRules(); renderAccounts();
@@ -2733,8 +2778,7 @@
   ];
   // La pérdida máxima diaria es una regla dura global, no un campo por cuenta: se lee de ahí.
   function riskEngine(a, t) {
-    const rule = ruleByRole("maxLoss");
-    const max = rule ? Math.abs(Number(rule.value) || 0) : 0;
+    const max = reglaDe(a, "maxLoss").valor;
     if (!max) return { ok: false, max: 0, used: t.lossUsed, remaining: null, pct: 0, code: "none", label: "SIN REGLA", cls: "dim", locked: false };
     const used = t.lossUsed, p = Math.min(1, used / max);
     const step = p >= 1 ? { code: "locked", label: "BLOQUEADA", cls: "bad" } : RISK_STEPS.find(x => p < x.under);
@@ -2822,33 +2866,97 @@
      Una sola función mira el día y dice qué se rompió; la tarjeta de cada regla y
      el estado de cada cuenta salen de ahí, no de dos lecturas distintas. */
   function ruleVal(role, dflt) { const r = ruleByRole(role); return r && r.kind === "num" ? Math.abs(Number(r.value) || 0) : dflt; }
-  function allowedInstruments() {
-    const r = state.settings.rules.find(x => x.role === "instrument");
-    return String(r ? r.allow || "" : "").split(/[,;/\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+
+  /* ═══════════ EL CONTRATO DE LA FIRMA, POR CUENTA ═══════════
+
+     Hasta aquí había UNA pérdida máxima diaria para todas las cuentas. Una
+     LucidFlex con tope de $200 y una Apex con tope de $1.100 leían el mismo
+     número, así que una de las dos estaba mintiendo — y la que miente en la
+     dirección peligrosa te quema la cuenta.
+
+     Ahora hay dos niveles, porque son dos cosas distintas con consecuencias
+     distintas:
+
+       CONTRATO DE LA FIRMA   account.rules{}    romperlo quema la cuenta
+       PROTOCOLO DEL TRADER   settings.rules[]   romperlo rompe la disciplina
+
+     El contrato manda. Si la cuenta no tiene ese número escrito, se hereda del
+     protocolo y se DICE que se ha heredado. Si no existe en ninguno de los dos,
+     la regla no está configurada — y una regla sin configurar nunca se presenta
+     como cumplida.
+
+     Lo que ya vive en la cuenta no se duplica aquí: el objetivo es a.target, el
+     drawdown a.dd, la consistencia a.limit. Este objeto guarda sólo lo que
+     faltaba. Dos sitios para el mismo número es el bug que acabo de quitar; no
+     lo voy a reintroducir con otro nombre. */
+  const CUENTA_ROLES = ["maxLoss", "maxGain", "maxContracts", "maxLosses"];
+  function reglaDe(a, role) {
+    const propia = a && a.rules ? a.rules[role] : null;
+    if (propia != null && propia !== "" && Number.isFinite(Number(propia)))
+      return { valor: Math.abs(Number(propia)), origen: "cuenta" };
+    const r = ruleByRole(role);
+    if (r && r.kind === "num" && Number(r.value))
+      return { valor: Math.abs(Number(r.value)), origen: "protocolo" };
+    return { valor: 0, origen: null };   // sin configurar
   }
+  function instrumentosDe(a) {
+    const propio = a && a.rules ? a.rules.instruments : null;
+    const crudo = propio != null && String(propio).trim()
+      ? { txt: String(propio), origen: "cuenta" }
+      : (() => { const r = state.settings.rules.find(x => x.role === "instrument");
+                 const t = String(r ? r.allow || "" : ""); return { txt: t, origen: t.trim() ? "protocolo" : null }; })();
+    const lista = crudo.txt.split(/[,;/\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+    return { lista, origen: lista.length ? crudo.origen : null };
+  }
+  // compatibilidad: sin cuenta, sigue siendo el protocolo del trader
+  function allowedInstruments(a) { return instrumentosDe(a).lista; }
   function byTimeAsc(a, b) { return String(a.time || "").localeCompare(String(b.time || "")) || (a.updatedAt || 0) - (b.updatedAt || 0); }
   /* Qué dice el día sobre las reglas. Recibe la lista ya calculada para poder
      mirarla a nivel de trader (todas las cuentas) o de una cuenta concreta. */
-  function dayRuleCheck(list) {
+  function dayRuleCheck(list, a) {
     const closed = list.filter(x => x.pnlEff != null).slice().sort(byTimeAsc);
     const pnl = closed.reduce((s, x) => s + x.pnlEff, 0);
     let streak = 0;
     for (let i = closed.length - 1; i >= 0; i--) { if (closed[i].pnlEff < 0) streak++; else break; }
-    const allow = allowedInstruments();
+    /* Con cuenta manda su contrato; sin cuenta se mide el protocolo del trader,
+       que es lo único que se puede decir con verdad. `origen` viaja con cada
+       número para poder enseñar de dónde sale sin volver a buscarlo. */
+    const ins = instrumentosDe(a);
+    const allow = ins.lista;
     const off = allow.length ? [...new Set(list.map(x => String(x.instrument || "").toUpperCase()).filter(x => x && allow.indexOf(x) < 0))] : [];
-    const maxC = ruleVal("maxContracts", 0);
+    const rC = reglaDe(a, "maxContracts"), rL = reglaDe(a, "maxLoss"),
+          rG = reglaDe(a, "maxGain"),      rS = reglaDe(a, "maxLosses");
+    const maxC = rC.valor, maxL = rL.valor, maxG = rG.valor, maxS = rS.valor;
     const over = maxC ? list.filter(x => (Number(x.qty) || 0) > maxC) : [];
-    const maxL = ruleVal("maxLoss", 0), maxG = ruleVal("maxGain", 0), maxS = ruleVal("maxLosses", 0);
     const lossUsed = Math.max(0, -pnl);
-    return { list, n: list.length, closed: closed.length, pnl, lossUsed,
+    const origen = { instrument: ins.origen, maxLoss: rL.origen, maxGain: rG.origen,
+                     maxContracts: rC.origen, maxLosses: rS.origen };
+    // qué reglas no se pueden juzgar porque nadie ha escrito su número
+    const sinConfigurar = Object.keys(origen).filter(k => origen[k] == null);
+    return { list, n: list.length, closed: closed.length, pnl, lossUsed, cuenta: a ? a.id : null,
       lossMax: maxL, lossPct: maxL ? Math.min(1, lossUsed / maxL) : 0, lossRemaining: maxL ? Math.max(0, maxL - lossUsed) : null,
       streak, streakMax: maxS, streakHit: !!maxS && streak >= maxS,
-      allow, off, maxC, over, gainMax: maxG, gainHit: !!maxG && pnl >= maxG };
+      allow, off, maxC, over, gainMax: maxG, gainHit: !!maxG && pnl >= maxG,
+      origen, sinConfigurar };
   }
   function todayFutures(accountId) {
     return coll("trades").items
       .filter(t => t.type === "futuros" && t.date === state.today && (!accountId || t.accountId === accountId))
       .map(t => tradeCalc(Object.assign({}, t)));
+  }
+
+  /* Qué falta por escribir para poder juzgar esta cuenta, dicho por su nombre.
+     «Faltan datos» no sirve: hay que decir CUÁLES, o nadie los rellena. */
+  function sinVigilar(d, r, k) {
+    const faltan = [];
+    if (!d.ok) faltan.push("el tamaño y el drawdown máximo");
+    if (!r.ok) faltan.push("la pérdida máxima del día");
+    for (const [role, txt] of [["maxContracts", "los contratos máximos"], ["instrument", "los instrumentos permitidos"]])
+      if (k.origen && k.origen[role] == null) faltan.push(txt);
+    const lista = faltan.length > 1
+      ? faltan.slice(0, -1).join(", ") + " y " + faltan[faltan.length - 1]
+      : faltan[0];
+    return `Sin vigilancia completa: falta escribir ${lista} en el contrato de esta cuenta. Se puede operar, pero la cabina no puede decir que estés a salvo.`;
   }
 
   const RULE_RANK = { READY: 0, WARNING: 1, RESTRICTED: 2, LOCKED: 3, FAILED: 4 };
@@ -2858,7 +2966,7 @@
   function evaluateAccountRules(a, todayTrades) {
     const c = consistency(a), g = c.agg;
     const t = todayTrades || acctToday(a);
-    const k = dayRuleCheck(t.list);
+    const k = dayRuleCheck(t.list, a);
     const dd = ddEngine(g), ce = consEngine(c), r = riskEngine(a, t);
 
     let status = "READY", why = "", canTrade = true;
@@ -2877,8 +2985,13 @@
     else if (r.ok && r.pct >= 0.50) set("WARNING", `Ya usaste ${pct(r.pct)} del riesgo de hoy. Quedan ${money(r.remaining)}.`, true);
     else if (dd.ok && dd.util >= 0.75) set("WARNING", `Solo quedan ${money(dd.buffer)} sobre el suelo de ${money(dd.floor)}.`, true);
     else if (k.gainHit) set("WARNING", `Ya pasaste el tope de ganancia del día (${money(k.gainMax)}). La regla dice parar aquí.`, true);
+    /* Una cuenta con las reglas que la queman sin escribir NO está «lista»: está
+       sin vigilar, que se parece a lo mismo hasta el día que no se parece nada.
+       Se puede operar —no soy yo quien decide eso— pero no se dice que todo va
+       bien, porque no hay con qué saberlo. */
+    else if (!dd.ok || !r.ok) set("WARNING", sinVigilar(dd, r, k), true);
     else if (!ce.hasData) set("READY", "Sin datos aún: registra operaciones con esta cuenta o escribe la ganancia previa en los ajustes.", true);
-    else set("READY", r.ok ? `Riesgo de hoy intacto: ${money(r.remaining)} disponibles.` : "No hay regla de pérdida máxima escrita, así que el riesgo de hoy no se está vigilando.", true);
+    else set("READY", `Riesgo de hoy intacto: ${money(r.remaining)} disponibles.`, true);
 
     return {
       canTrade, status, why,
@@ -2896,39 +3009,51 @@
      del protocolo, no de una cuenta). LOCKED/FIJA para las que no se tocan,
      ACTIVA mientras se cumple, AVISO cerca del límite y ROTA cuando ya se rompió. */
   const RULE_ST = {
+    /* Una regla que nadie ha escrito NO es una regla que se cumple. Antes salía
+       como AVISO «sin valor», que se lee igual que un aviso cualquiera; ahora
+       tiene su propio estado y su propio color muerto, porque el sistema no
+       está vigilando nada ahí. */
+    unset:    { code: "SIN CONFIGURAR", cls: "unset", icon: "?" },
     fixed:    { code: "FIJA",   cls: "dim",  icon: "▪" },
     active:   { code: "ACTIVA", cls: "good", icon: "●" },
     warning:  { code: "AVISO",  cls: "warn", icon: "▲" },
     breached: { code: "ROTA",   cls: "bad",  icon: "✕" },
   };
+  /* De dónde sale el número: el contrato de la cuenta, el protocolo, o nadie.
+     Se enseña siempre — un límite heredado que creías propio es justo el error
+     que este cambio viene a quitar. */
+  function marcaOrigen(k, role) {
+    const o = k.origen ? k.origen[role] : null;
+    return o === "protocolo" && k.cuenta ? " · del protocolo" : "";
+  }
   function ruleStatus(r, k) {
     if (r.role === "instrument") {
       if (k.off.length) return Object.assign({ note: `hoy en ${k.off.join(", ")}` }, RULE_ST.breached);
-      if (!k.allow.length) return Object.assign({ note: "sin instrumento fijado: no se vigila" }, RULE_ST.warning);
+      if (!k.allow.length) return Object.assign({ note: "ninguna cuenta ni el protocolo lo fijan" }, RULE_ST.unset);
       const hoy = [...new Set(k.list.map(x => String(x.instrument || "").toUpperCase()).filter(Boolean))];
       return Object.assign({ note: hoy.length ? `hoy: ${hoy.join(", ")}` : "sin operaciones hoy" }, RULE_ST.fixed);
     }
     if (r.role === "maxLoss") {
-      if (!k.lossMax) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (!k.lossMax) return Object.assign({ note: k.cuenta ? "ni la cuenta ni el protocolo la escriben" : "sin valor en el protocolo" }, RULE_ST.unset);
       if (k.lossPct >= 1) return Object.assign({ note: "tope alcanzado" }, RULE_ST.breached);
-      if (k.lossPct >= 0.5) return Object.assign({ note: `${money(k.lossUsed)} de ${money(k.lossMax)}` }, RULE_ST.warning);
-      return Object.assign({ note: `${money(k.lossUsed)} de ${money(k.lossMax)}` }, RULE_ST.active);
+      if (k.lossPct >= 0.5) return Object.assign({ note: `${money(k.lossUsed)} de ${money(k.lossMax)}${marcaOrigen(k, "maxLoss")}` }, RULE_ST.warning);
+      return Object.assign({ note: `${money(k.lossUsed)} de ${money(k.lossMax)}${marcaOrigen(k, "maxLoss")}` }, RULE_ST.active);
     }
     if (r.role === "maxLosses") {
-      if (!k.streakMax) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (!k.streakMax) return Object.assign({ note: k.cuenta ? "ni la cuenta ni el protocolo la escriben" : "sin valor en el protocolo" }, RULE_ST.unset);
       if (k.streakHit) return Object.assign({ note: "día cerrado por regla" }, RULE_ST.breached);
       if (k.streak === k.streakMax - 1) return Object.assign({ note: `${k.streak} de ${k.streakMax}` }, RULE_ST.warning);
-      return Object.assign({ note: `${k.streak} de ${k.streakMax}` }, RULE_ST.active);
+      return Object.assign({ note: `${k.streak} de ${k.streakMax}${marcaOrigen(k, "maxLosses")}` }, RULE_ST.active);
     }
     if (r.role === "maxGain") {
-      if (!k.gainMax) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (!k.gainMax) return Object.assign({ note: k.cuenta ? "ni la cuenta ni el protocolo la escriben" : "sin valor en el protocolo" }, RULE_ST.unset);
       if (k.gainHit) return Object.assign({ note: "tope alcanzado: toca parar" }, RULE_ST.warning);
-      return Object.assign({ note: `${money(Math.max(0, k.pnl))} de ${money(k.gainMax)}` }, RULE_ST.active);
+      return Object.assign({ note: `${money(Math.max(0, k.pnl))} de ${money(k.gainMax)}${marcaOrigen(k, "maxGain")}` }, RULE_ST.active);
     }
     if (r.role === "maxContracts") {
-      if (!k.maxC) return Object.assign({ note: "sin valor" }, RULE_ST.warning);
+      if (!k.maxC) return Object.assign({ note: k.cuenta ? "ni la cuenta ni el protocolo la escriben" : "sin valor en el protocolo" }, RULE_ST.unset);
       if (k.over.length) return Object.assign({ note: plu(k.over.length, "operación pasada", "operaciones pasadas") }, RULE_ST.breached);
-      return Object.assign({ note: `máximo ${k.maxC}` }, RULE_ST.fixed);
+      return Object.assign({ note: `máximo ${k.maxC}${marcaOrigen(k, "maxContracts")}` }, RULE_ST.fixed);
     }
     return Object.assign({ note: r.kind === "fixed" ? "no se negocia" : "sin rol: no se vigila sola" }, r.kind === "fixed" ? RULE_ST.fixed : RULE_ST.active);
   }
@@ -6202,7 +6327,8 @@
       if (!ev.canTrade) razones.push({ t: `${a.name || a.firm}: ${ST_LABEL[ev.status]}`, d: ev.why });
       else if (ev.status === "RESTRICTED") razones.push({ t: `${a.name || a.firm}: RESTRINGIDA`, d: ev.why });
     }
-    const k = dayRuleCheck(todayFutures());
+    const sel = FUT.selectedAccountId();
+    const k = dayRuleCheck(todayFutures(sel), sel ? acctById(sel) : null);
     if (k.lossMax && k.lossPct >= 1) razones.push({ t: "Pérdida máxima del día alcanzada", d: `${money(-k.lossUsed)} contra un tope de ${money(-k.lossMax)}.` });
     if (k.streakHit) razones.push({ t: `${plu(k.streak, "pérdida seguida", "pérdidas seguidas")}`, d: `El límite son ${k.streakMax}. La regla dice cerrar el día.` });
     const n = state.settings.checks.length, marks = curChecks();
@@ -7239,13 +7365,57 @@
     { key: "status", label: "Estado", type: "select", options: STATUSES.map(s => [s, s]) },
     { key: "total", label: "Ganancia previa ($)", type: "number", step: "10", w: 3, help: "lo que ya llevaba la cuenta antes de empezar a registrar aquí · en rojo se escribe con signo: -450" },
     { key: "best", label: "Mejor día previo ($)", type: "number", step: "10", w: 3, help: "el día verde más grande antes de registrar aquí · 0 si nunca hubo uno" },
+    /* ─── EL CONTRATO DE ESTA FIRMA ───
+       Vacío significa «heredo el protocolo», no «cero». Por eso ninguno lleva
+       valor por defecto: un 0 puesto por la app diría «no puedes perder nada»,
+       que es una regla que ninguna firma escribe y que bloquearía la cuenta. */
+    { key: "r_maxLoss", label: "Pérdida máx. del día ($)", type: "number", step: "10", w: 2,
+      help: "el de ESTA firma · vacío = hereda el del protocolo" },
+    { key: "r_maxGain", label: "Tope de ganancia ($)", type: "number", step: "10", w: 2,
+      help: "vacío = hereda el del protocolo" },
+    { key: "r_maxContracts", label: "Contratos máximos", type: "number", step: "1", w: 2,
+      help: "vacío = hereda el del protocolo" },
+    { key: "r_maxLosses", label: "Pérdidas seguidas → cierre", type: "number", step: "1", w: 2,
+      help: "vacío = hereda el del protocolo" },
+    { key: "r_minDays", label: "Días mínimos de trading", type: "number", step: "1", w: 2,
+      help: "los que exige la firma para poder cobrar" },
+    { key: "r_payoutBuffer", label: "Colchón para cobrar ($)", type: "number", step: "10", w: 2,
+      help: "lo que la firma exige dejar por encima del inicio al retirar" },
+    { key: "r_instruments", label: "Instrumentos permitidos", w: 3,
+      help: "MNQ, MES… · vacío = hereda los del protocolo" },
+    { key: "r_verifiedAt", label: "Reglas verificadas el", type: "date", w: 3,
+      help: "el día que leíste el contrato en la web de la firma" },
+    { key: "r_url", label: "Enlace a las reglas", w: 3, ph: "https://…" },
+    { key: "r_version", label: "Versión del contrato", w: 3, ph: "v2 · sept 2026" },
+    { key: "r_notes", label: "Notas del contrato", type: "textarea", w: 6,
+      help: "lo que no cabe en un número: noticias, fin de semana, escalado" },
   ];
+  /* El contrato viaja aplanado por el editor (r_maxLoss) y plegado en el modelo
+     (a.rules.maxLoss). Estas dos funciones son la única frontera entre ambos. */
+  const RULE_CAMPOS = ["maxLoss", "maxGain", "maxContracts", "maxLosses", "minDays",
+                       "payoutBuffer", "instruments", "verifiedAt", "url", "version", "notes"];
+  function aplanaRules(r) {
+    const out = {};
+    RULE_CAMPOS.forEach(k => { if (r && r[k] != null) out["r_" + k] = r[k]; });
+    return out;
+  }
+  function pliegaRules(v) {
+    const crudo = {};
+    RULE_CAMPOS.forEach(k => { crudo[k] = v["r_" + k]; });
+    return normRules(crudo);
+  }
   function openAccountEditor(a) {
     const isNew = !a;
     const fields = ACCT_FIELDS.map(f => f.key === "ddKind" ? Object.assign({}, f, { options: DD_KINDS }) : f);
     openEditor({
       title: isNew ? "Registrar cuenta" : "Editar cuenta",
-      fields, values: a || { limit: 50, size: 50000, dd: 2000, ddKind: "trailing_lock", trailBase: "intradia", status: "activa", target: 3000, total: 0, best: 0 },
+      /* Los campos del contrato viven aplanados como r_* mientras el editor está
+         abierto y se vuelven a plegar en a.rules{} al guardar: el editor genérico
+         no sabe de objetos anidados, y no merece la pena enseñárselo por esto. */
+      fields, values: Object.assign(
+        { limit: 50, size: 50000, dd: 2000, ddKind: "trailing_lock", trailBase: "intradia", status: "activa", target: 3000, total: 0, best: 0 },
+        a || {},
+        aplanaRules(a && a.rules)),
       validate: v => {
         if (!(v.name || v.firm)) return "Ponle al menos un nombre o una firma";
         /* La ganancia previa SÍ puede ir en rojo: es un resultado, no un tamaño.
@@ -7259,7 +7429,9 @@
       },
       onSave: v => {
         const arr = state.settings.accounts;
-        const rec = Object.assign({}, a || { id: uid("a"), ledger: [] }, v, { limit: Math.min(99, Math.max(1, Number(v.limit) || 50)) });
+        const rec = Object.assign({}, a || { id: uid("a"), ledger: [] }, v,
+          { limit: Math.min(99, Math.max(1, Number(v.limit) || 50)), rules: pliegaRules(v) });
+        RULE_CAMPOS.forEach(k => { delete rec["r_" + k]; });
         const i = arr.findIndex(x => x.id === rec.id);
         if (i >= 0) arr[i] = rec; else arr.push(rec);
         persistSettings(); renderAccounts(); renderFutAccounts(); renderFutures();
