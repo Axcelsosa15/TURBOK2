@@ -788,30 +788,37 @@
   padding:var(--s3); border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface-2); }
 .tsc { display:flex; flex-direction:column; gap:1px; min-width:0; }
 .tsc .lab { font-size:var(--t-meta); letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
-.tsc b { font-family:var(--mono); font-size:var(--t-body); font-variant-numeric:tabular-nums; color:var(--text); }
+.tsc b { font-family:var(--font-mono); font-size:var(--t-body); font-variant-numeric:tabular-nums; color:var(--text); }
 .tsc b.pos, .tsc b.good { color:var(--positive); }
 .tsc b.neg, .tsc b.bad { color:var(--negative); }
 .tsc b.warn { color:var(--warning); }
 .tsc b.dim { color:var(--dim); }
 .tsc i { font-style:normal; font-size:var(--t-meta); color:var(--muted); line-height:1.35; }
 .tswarn { grid-column:1/-1; margin:var(--s2) 0 0; padding:var(--s2) var(--s3); font-size:var(--t-meta);
-  color:var(--negative); border:1px solid var(--negative-soft); border-radius:var(--r-sm); background:var(--negative-soft); }
+  color:var(--negative); border:1px solid var(--bad-soft); border-radius:var(--r-sm); background:var(--bad-soft); }
 .tshint { grid-column:1/-1; margin:var(--s2) 0 0; font-size:var(--t-meta); color:var(--muted); }
+.tsnudge { margin:var(--s3) 0 0; padding:var(--s2) var(--s3); font-size:var(--t-meta); line-height:1.5;
+  color:var(--text); border-left:2px solid var(--warning); border-radius:0 var(--r-sm) var(--r-sm) 0;
+  background:var(--warn-soft); }
+.tsnudge b { font-family:var(--font-mono); }
+.lnk { padding:0; font:inherit; color:var(--accent); text-decoration:underline; cursor:pointer;
+  background:none; border:0; }
+.lnk:hover { color:var(--text); }
 .tsprog { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; margin-top:var(--s2); }
 .tsprog > .lab { font-size:var(--t-meta); letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
 .tssecs { display:flex; gap:3px; flex-wrap:wrap; }
-.tssec { width:22px; height:22px; padding:0; font-family:var(--mono); font-size:10px; cursor:pointer;
+.tssec { width:22px; height:22px; padding:0; font-family:var(--font-mono); font-size:10px; cursor:pointer;
   color:var(--dim); background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm);
   transition:background var(--mo-fast) var(--ease), color var(--mo-fast) var(--ease), border-color var(--mo-fast) var(--ease); }
 .tssec:hover { color:var(--text); border-color:var(--line-strong); }
-.tssec.ok { color:var(--positive); border-color:var(--positive-soft); background:var(--positive-soft); }
+.tssec.ok { color:var(--positive); border-color:var(--good-soft); background:var(--good-soft); }
 .tsdiario { margin-top:var(--s2); }
 .tsd { display:flex; align-items:baseline; gap:var(--s2); flex-wrap:wrap; padding:var(--s2) 0;
   font-size:var(--t-meta); border-top:1px solid var(--line); }
-.tsd .f { font-family:var(--mono); color:var(--dim); white-space:nowrap; }
+.tsd .f { font-family:var(--font-mono); color:var(--dim); white-space:nowrap; }
 .tsd .o { flex:1 1 180px; color:var(--text); min-width:0; }
 .tsd .a { color:var(--muted); }
-.tsd .e { font-family:var(--mono); color:var(--dim); }
+.tsd .e { font-family:var(--font-mono); color:var(--dim); }
 .tsd .e.neg { color:var(--warning); }
 .card.ts .kv b { text-transform:none; }
 
@@ -6587,7 +6594,7 @@
     });
   }
 
-  function openTrade(t, typeForNew, seed) {
+  function openTrade(t, typeForNew, seed, alGuardar) {
     const type = t ? t.type : typeForNew; const isNew = !t; let shots = null;
     const values = t || Object.assign(type === "futuros" ? { date: ft.day || todayISO(), type, instrument: "MNQ", direction: "long", qty: 1, quality: "A", accountId: defaultAccountId() } : { date: todayISO(), type, op: "compra", horizon: "largo", market: "etfs" }, seed || {});
     const renderConds = (fieldsEl, setupId, checks) => {
@@ -6619,6 +6626,9 @@
         delete rec.pnlEff; delete rec.rReal; delete rec.rPlanned; delete rec.riskUsd; delete rec.multUnknown;
         if (isNew && type === "futuros") { const g = tradeGate(); if (g.blocked) { rec.offProtocol = g.razones.map(r => r.t); } }
         coll("trades").set(rec.id, rec);
+        /* Quien abrió el editor puede necesitar saber qué id salió — una tesis,
+           por ejemplo, para enlazar su post-mortem sin que nadie copie la R. */
+        if (alGuardar) { try { alGuardar(rec); } catch (e) { } }
         if (type === "futuros") { revealTrade(rec); if (rec.offProtocol) flash("registrada y marcada fuera de protocolo"); }
       },
       onDelete: isNew ? null : () => coll("trades").remove(t.id),
@@ -7836,9 +7846,15 @@
     const op = t.tradeId ? coll("trades").get(t.tradeId) : null;
     const opc = op ? tradeCalc(Object.assign({}, op)) : null;
     const rFinal = opc ? (opc.rReal != null ? opc.rReal : null) : null;
+    /* Que la operación haya cerrado no cierra la tesis: el post-mortem es un
+       paso deliberado de la plantilla, no un efecto secundario de vender. Pero
+       si nadie avisa, la lección no se escribe nunca — y la lección es lo único
+       que sobrevive a la jugada. */
+    const opCerrada = !!(op && op.exit != null && op.exit !== "");
+    const debePostmortem = opCerrada && t.status !== "cerrada" && t.status !== "cancelada" && !String(t.leccion || "").trim();
     return { porUnidad, porUnidadUsd, valido, stopAlReves, rr1, rr2, rr3, riesgo, distPct, tam, unidad,
              mult, multDesconocido: t.tipo === "futuro" && act !== "" && !mult,
-             op, rFinal, pnlFinal: opc ? opc.pnlEff : null };
+             op, opCerrada, debePostmortem, rFinal, pnlFinal: opc ? opc.pnlEff : null };
   }
 
   /* Las once secciones de la plantilla. Se editan de UNA EN UNA: la plantilla
@@ -8118,9 +8134,49 @@
     ]);
   }
 
+
+  /* ───────── de la tesis a la operación, sin copiar números ─────────
+     Sin este puente hay que teclear entrada, stop y tamaño otra vez en el
+     journal. Y lo que se teclea dos veces acaba diciendo dos cosas: el plan
+     con un stop y la operación con otro, sin forma de saber cuál se ejecutó.
+
+     Así que el plan viaja entero, y la operación que salga queda enlazada a la
+     tesis — que es de donde el post-mortem saca su R. El círculo se cierra sin
+     que ninguna cifra se escriba dos veces. */
+  function tsAbrirOperacion(t) {
+    const c = tesisCalc(t);
+    const fut = t.tipo === "futuro";
+    const cant = c.tam == null ? null : (fut ? Math.max(1, Math.floor(c.tam)) : Number(c.tam.toFixed(4)));
+    const enlaza = rec => {
+      TES.update(t.id, { tradeId: rec.id, status: t.status === "cerrada" ? t.status : "ejecucion" });
+      flash("operación enlazada a la tesis · su R saldrá de aquí");
+    };
+    if (fut) {
+      showTab("futuros");
+      openTrade(null, "futuros", {
+        instrument: String(t.asset || "").toUpperCase() || "MNQ",
+        direction: t.bias === "short" ? "short" : "long",
+        entry: t.entrada ?? "", stop: t.stop ?? "", target: t.tp1 ?? "",
+        qty: cant ?? 1, setupId: t.setupId || "",
+      }, enlaza);
+    } else {
+      showTab("invest");
+      openTrade(null, "inversion", {
+        asset: String(t.asset || "").toUpperCase(),
+        op: t.bias === "short" ? "venta" : "compra",
+        price: t.entrada ?? "", qty: cant ?? "",
+        setupId: t.setupId || "", note: t.tesis || "",
+      }, enlaza);
+    }
+  }
+
   function tsAccion(act, id, btn) {
     const t = coll("tesis").get(id); if (!t) return;
     if (act === "tssec") { const sec = tsSeccion(btn.dataset.sec); if (sec && sec.diario) tsAccion("tsnota", id, btn); else abreSeccion(t, btn.dataset.sec); }
+    else if (act === "tsop") tsAbrirOperacion(t);
+    else if (act === "tsver") { const op = t.tradeId ? coll("trades").get(t.tradeId) : null;
+      if (!op) { flash("esa operación ya no está en el journal"); return; }
+      showTab(op.type === "futuros" ? "futuros" : "invest"); setTimeout(() => openTrade(op), 60); }
     else if (act === "tsdel") { if (!armed(btn)) return; coll("tesis").remove(t.id); }
     else if (act === "tsdup") {
       const c = Object.assign({}, t, { id: uid("ts"), name: (t.name || t.asset || "tesis") + " (copia)", status: "watchlist",
@@ -8266,11 +8322,18 @@
       const cerrada = t.status === "cerrada";
       const kpis = [];
       if (c.valido) {
-        kpis.push(kpi("R:R a TP1", c.rr1 == null ? "—" : c.rr1.toFixed(2) + "R", c.rr1 == null ? "dim" : c.rr1 >= 2 ? "good" : "bad", c.rr1 != null && c.rr1 < 2 ? "por debajo de 2:1" : "planeado"));
+        /* El R planeado y el conseguido son una COMPARACIÓN. En baldosas
+           separadas hay que buscarlos; juntos se leen de un vistazo, que es lo
+           único que hace que la próxima vez se planee distinto. */
+        const sub = c.rFinal != null
+          ? `planeado · <span class="${c.rFinal >= c.rr1 ? "pos" : "neg"}">${nR(c.rFinal)} real</span>`
+          : (c.rr1 != null && c.rr1 < 2 ? "por debajo de 2:1" : "planeado");
+        kpis.push(kpi("R:R a TP1", c.rr1 == null ? "—" : c.rr1.toFixed(2) + "R", c.rr1 == null ? "dim" : c.rr1 >= 2 ? "good" : "bad", sub));
         kpis.push(kpi("Riesgo", c.riesgo == null ? "—" : money(c.riesgo, 2), c.riesgo == null ? "dim" : "warn", c.distPct == null ? "" : (c.distPct * 100).toFixed(2) + "% al stop"));
         kpis.push(kpi("Tamaño", c.tam == null ? "—" : (c.tam >= 10 ? String(Math.floor(c.tam)) : c.tam.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")), c.tam == null ? "dim" : "", c.tam == null ? "falta capital" : c.unidad));
       }
-      if (cerrada || c.op) kpis.push(kpi("R real", nR(c.rFinal), c.rFinal == null ? "dim" : c.rFinal > 0 ? "good" : c.rFinal < 0 ? "bad" : "", c.op ? "de la operación enlazada" : "sin operación enlazada"));
+      /* Sin plan que comparar (faltan precios) la R real sí necesita su sitio. */
+      if ((cerrada || c.op) && !c.valido) kpis.push(kpi("R real", nR(c.rFinal), c.rFinal == null ? "dim" : c.rFinal > 0 ? "good" : c.rFinal < 0 ? "bad" : "", c.op ? "de la operación enlazada" : "sin operación enlazada"));
       const falta = pr.faltan.filter(x => x.id !== "postmortem" || cerrada);
       return `<div class="card ts ${t.status === "cancelada" ? "retired" : ""}" data-id="${t.id}">
         <div class="ch"><h3>${esc(t.name || t.asset || "sin nombre")}</h3>
@@ -8284,6 +8347,7 @@
           ${t.setupId && coll("playbooks").get(t.setupId) ? `<span class="chip">${esc(coll("playbooks").get(t.setupId).name)}</span>` : ""}</div>
         ${kpis.length ? `<div class="kpis">${kpis.join("")}</div>` : ""}
         ${c.stopAlReves ? `<p class="tswarn">El stop está del lado equivocado para un ${t.bias === "short" ? "corto" : "largo"}.</p>` : ""}
+        ${c.debePostmortem ? `<p class="tsnudge">${c.valido && c.rFinal != null ? "La operación ya cerró" : `La operación ya cerró${c.rFinal == null ? "" : ` en <b>${nR(c.rFinal)}</b>`}`}. Falta la lección — es lo único de esta jugada que te sirve en la siguiente. <button type="button" class="lnk" data-act="tssec" data-sec="postmortem">Escribirla</button></p>` : ""}
         ${t.tesis ? `<div class="kv"><b>tesis</b><span>${esc(t.tesis)}</span>${t.invalida ? `<b>invalida</b><span>${esc(t.invalida)}</span>` : ""}${t.catalizador ? `<b>catalizador</b><span>${esc(t.catalizador)}${t.catalizadorFecha ? " · " + esc(dmy(t.catalizadorFecha)) : ""}</span>` : ""}${t.leccion ? `<b>lección</b><span>${esc(t.leccion)}</span>` : ""}</div>` : ""}
         <div class="tsprog"><span class="lab">Secciones</span>
           <div class="tssecs">${secs.map(x => { const ok = (() => { try { return x.listo(t); } catch (e) { return false; } })();
@@ -8292,7 +8356,7 @@
         ${tsDiarioHtml(t)}
         <div class="cf" style="justify-content:space-between;flex-wrap:wrap;gap:4px">
           <div class="tools"><button type="button" class="icon del" data-act="tsdel" title="Borrar">×</button></div>
-          <div class="tools"><button type="button" class="btn sm ghost" data-act="tsnota">+ Seguimiento</button><button type="button" class="btn sm ghost" data-act="tsdup">Duplicar</button><button type="button" class="btn sm" data-act="tssec" data-sec="ficha">Editar</button></div>
+          <div class="tools">${c.valido && !t.tradeId ? `<button type="button" class="btn sm ghost" data-act="tsop" title="Abre el journal con la entrada, el stop y el tamaño ya puestos">Abrir operación</button>` : ""}${t.tradeId ? `<button type="button" class="btn sm ghost" data-act="tsver" title="Ver la operación en el journal">Ver operación</button>` : ""}<button type="button" class="btn sm ghost" data-act="tsnota">+ Seguimiento</button><button type="button" class="btn sm ghost" data-act="tsdup">Duplicar</button><button type="button" class="btn sm" data-act="tssec" data-sec="ficha">Editar</button></div>
         </div>
       </div>`;
     }).join("");

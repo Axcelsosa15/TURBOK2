@@ -123,6 +123,57 @@ await p.click('.tabbtn[data-tab="playbook"]'); await p.waitForTimeout(300);
 await p.click('#pbNav .tabbtn[data-v="tesis"]'); await p.waitForTimeout(400);
 ok(await p.$$eval('#pbCards .card', n => n.length) >= 2, 'las tesis se guardan y vuelven');
 
+console.log('\n═══ el puente: plan → operación → post-mortem, sin teclear dos veces ═══');
+/* Sin puente hay que reescribir entrada, stop y tamaño en el journal. Y lo que
+   se teclea dos veces acaba diciendo dos cosas: el plan con un stop y la
+   operación con otro, sin forma de saber cuál se ejecutó. */
+await p.evaluate(() => {
+  TES.create({ id: 'ts_p', asset: 'MNQ', tipo: 'futuro', bias: 'long', status: 'planificada',
+               entrada: 21000, stop: 20975, tp1: 21075, capital: 25000, riesgoPct: 1 });
+});
+await p.click('.tabbtn[data-tab="playbook"]'); await p.waitForTimeout(300);
+await p.click('#pbNav .tabbtn[data-v="tesis"]'); await p.waitForTimeout(400);
+await p.click('#pbCards .card[data-id="ts_p"] button[data-act="tsop"]'); await p.waitForTimeout(600);
+const pre = await p.evaluate(() => ['instrument', 'direction', 'entry', 'stop', 'target', 'qty']
+  .reduce((o, k) => { const e = document.getElementById('ef_' + k); o[k] = e ? e.value : null; return o; }, {}));
+ok(pre.entry === '21000' && pre.stop === '20975', 'entrada y stop viajan del plan a la operación', JSON.stringify(pre));
+ok(pre.target === '21075', 'y el TP1 como objetivo');
+ok(pre.qty === '5', 'y el TAMAÑO calculado, no uno escrito otra vez', pre.qty);
+ok(pre.instrument === 'MNQ' && pre.direction === 'long', 'con el instrumento y la dirección del sesgo');
+
+await p.fill('#ef_exit', '21075');
+await p.click('#edSave'); await p.waitForTimeout(700);
+const post = await p.evaluate(() => ({ t: TES.get('ts_p'), c: TES.calc('ts_p') }));
+ok(!!post.t.tradeId, 'la operación queda enlazada a la tesis sola', post.t.tradeId);
+ok(post.t.status === 'ejecucion', 'y la tesis pasa a «en ejecución»', post.t.status);
+ok(cerca(post.c.rFinal, 3, 0.01), 'el post-mortem saca +3.00R de la operación real', post.c.rFinal);
+ok(cerca(post.c.rr1, 3, 0.01) && cerca(post.c.rFinal, post.c.rr1, 0.01),
+   'planeaba 3R y sacó 3R — dos fuentes distintas que coinciden porque ninguna se tecleó',
+   `plan ${post.c.rr1} · real ${post.c.rFinal}`);
+
+console.log('\n═══ vender no cierra la tesis, pero tampoco se calla ═══');
+/* El post-mortem es un paso deliberado de la plantilla, no un efecto de vender.
+   Si nadie avisa, la lección no se escribe nunca — y la lección es lo único de
+   la jugada que sirve en la siguiente. */
+await p.click('.tabbtn[data-tab="playbook"]'); await p.waitForTimeout(500);
+const nudge = await p.evaluate(() => { const e = document.querySelector('.card[data-id="ts_p"] .tsnudge'); return e ? e.textContent.replace(/\s+/g, ' ').trim() : ''; });
+ok(/ya cerró/.test(nudge), 'la ficha avisa de que la operación cerró', nudge.slice(0, 80));
+/* La comparación planeado vs real vive en la baldosa de R:R, no aquí: decirla
+   dos veces en el mismo centímetro es ruido, no énfasis. */
+const kpiR = await txt('.card[data-id="ts_p"] .kpis');
+ok(/3\.00R/.test(kpiR) && /\+3\.00R real/.test(kpiR),
+   'la comparación planeado vs real va junta, en una sola baldosa', kpiR.slice(0, 60));
+ok(!/del plan/.test(nudge), 'y el aviso no la repite — sólo pide la lección');
+ok(post.t.status !== 'cerrada', 'pero NO cierra la tesis por su cuenta');
+await p.evaluate(() => TES.update('ts_p', { leccion: 'Esperé la confirmación en 5m.' }));
+await p.waitForTimeout(450);
+const sinNudge = await p.evaluate(() => !!document.querySelector('.card[data-id="ts_p"] .tsnudge'));
+ok(!sinNudge, 'y el aviso desaparece al escribir la lección');
+
+const verOp = await p.evaluate(() => !!document.querySelector('.card[data-id="ts_p"] button[data-act="tsver"]'));
+const abrirOp = await p.evaluate(() => !!document.querySelector('.card[data-id="ts_p"] button[data-act="tsop"]'));
+ok(verOp && !abrirOp, 'con operación enlazada el botón pasa a «Ver operación»', `ver=${verOp} abrir=${abrirOp}`);
+
 console.log('\n═══ el respaldo se las lleva ═══');
 /* Un export que dice «todo» y deja fuera la investigación es peor que uno que
    avisa: se descubre al restaurar, cuando ya no hay de dónde sacarlo. */

@@ -1163,6 +1163,53 @@ La sección 10 es el diario de seguimiento, con su nota emocional de 0 a 10, que
 no es decoración: sirve para ver si las decisiones malas caen siempre en los
 días tensos.
 
+### El puente: plan → operación → post-mortem
+
+Faltaba el último tramo. Sin él hay que teclear entrada, stop y tamaño otra vez
+en el journal — y **lo que se teclea dos veces acaba diciendo dos cosas**: el
+plan con un stop y la operación con otro, sin forma de saber cuál se ejecutó.
+
+«Abrir operación» lleva el plan entero al editor del journal (instrumento,
+dirección del sesgo, entrada, stop, TP1 como objetivo y el tamaño **calculado**)
+y enlaza la operación resultante a la tesis. De ahí sale la R del post-mortem.
+El círculo se cierra sin que ninguna cifra se escriba dos veces:
+
+```
+plan 3.00R  →  operación (5 contratos MNQ)  →  real +2.40R
+   derivado         precargado, no tecleado       de tradeCalc
+```
+
+Dos decisiones dentro del puente:
+
+- **El tamaño de un futuro se trunca, nunca se redondea hacia arriba.** Medio
+  contrato no existe, y un `Math.round` pondría más riesgo del que autorizaste.
+- **Vender no cierra la tesis.** El post-mortem es un paso deliberado de la
+  plantilla, no un efecto secundario de salir. Pero si nadie avisa, la lección
+  no se escribe nunca — así que la ficha lo pide, y el aviso desaparece al
+  escribirla.
+
+En la baldosa, lo planeado y lo conseguido van **juntos** («3.00R planeado ·
++2.40R real», en rojo si te quedaste corto). En baldosas separadas hay que
+buscarlos; juntos se leen de un vistazo, que es lo único que hace que la próxima
+vez se planee distinto.
+
+### Un `var(--x)` que no existe no falla: se queda transparente
+
+Escribí `--positive-soft`, `--negative-soft` y `--warning-soft`. Los tokens se
+llaman `--good-soft`, `--bad-soft` y `--warn-soft`. También escribí `--mono`
+cinco veces, cuando es `--font-mono`.
+
+CSS no avisa de esto. `background: var(--warning-soft)` con el token sin definir
+simplemente **no pinta nada**: once declaraciones de esta función llevaban sin
+efecto, y sólo se vio porque el aviso del post-mortem salía sin recuadro en una
+captura. Es el peor tipo de fallo que hay en este repositorio —el que no deja
+hueco— y llevaba toda la sesión pudiendo pasar en cualquier regla.
+
+`capa2.mjs` tiene ahora una sección 8 que lee el `<style>` entero, cruza cada
+`var(--x)` contra los tokens definidos en `:root` y falla si alguno no existe.
+Descuenta los que llevan respaldo (`var(--x, algo)`), los que pone el JS con
+`setProperty` y los del navegador. Encontró `--mono` a la primera.
+
 `TES` es su puerta única, igual que `FUT` para futuros e `INV` para inversiones.
 `test/tesis.mjs` comprueba las 29 afirmaciones de arriba, incluida la que casi
 se me escapa: el bundle de respaldo ya se llevaba las tesis (`buildBundle`

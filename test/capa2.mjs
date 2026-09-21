@@ -143,6 +143,65 @@ const INVF = ['positions', 'position', 'transactions', 'markets', 'createTransac
 const sinInv = INVF.filter(f => !new RegExp('^    ' + f + '\\(|^    ' + f + ':', 'm').test(src));
 ok(sinInv.length === 0, `las ${INVF.length} funciones de INV`, sinInv.length ? 'faltan: ' + sinInv.join(', ') : '');
 
+console.log('\n═══ 7 · tesis: se escribe el precio, se deriva el resto ═══');
+/* La plantilla original pide a mano capital, riesgo $, tamaño, R:R y la R del
+   cierre. Cabina calcula las cinco, y un campo para escribirlas volvería a
+   crear dos fuentes para una cifra. Esto vigila que no vuelvan. */
+ok(defs('tesisCalc') === 1, 'tesisCalc'.padEnd(22), defs('tesisCalc') === 1 ? '' : defs('tesisCalc') + ' definiciones');
+
+for (const quien of ['tsDerivHtml', 'renderTesis', 'tsAbrirOperacion']) {
+  const c = cuerpoDe(quien);
+  ok(c !== '' && /tesisCalc\(/.test(c), `${quien} mide con tesisCalc`,
+     c === '' ? 'no existe' : /tesisCalc\(/.test(c) ? '' : 'calcula por su cuenta');
+}
+
+const secs = cuerpoDe('tsSecciones');
+for (const prohibido of ['rr', 'riesgoUsd', 'tamano', 'tamaño', 'distancia', 'rFinal'])
+  ok(!new RegExp('f\\("' + prohibido + '"').test(secs),
+     `sin campo para escribir «${prohibido}» a mano`);
+ok(/f\("capital"/.test(secs) && /f\("riesgoPct"/.test(secs),
+   'sí se escriben capital y riesgo %, que son decisiones, no cálculos');
+
+const tc = cuerpoDe('tesisCalc');
+ok(/MULT\[act\]/.test(tc), 'el multiplicador de un futuro sale de MULT, no de una tabla nueva',
+   /MULT/.test(tc) ? '' : 'tesisCalc se inventó sus propios contratos');
+ok(/coll\("trades"\)\.get\(t\.tradeId\)/.test(tc) && /tradeCalc\(/.test(tc),
+   'la R del post-mortem sale de la operación vía tradeCalc');
+ok(/stopAlReves/.test(tc) && /porUnidad <= 0/.test(tc),
+   'un stop del lado equivocado se detecta, no se convierte en R negativa');
+
+const TESF = ['all', 'get', 'sections', 'create', 'update', 'remove', 'addNote', 'calc', 'progress'];
+const sinTes = TESF.filter(f => !new RegExp('^    ' + f + '\\(', 'm').test(src));
+ok(sinTes.length === 0, `las ${TESF.length} funciones de TES`, sinTes.length ? 'faltan: ' + sinTes.join(', ') : '');
+
+/* El puente no puede redondear por su cuenta el tamaño de un futuro: medio
+   contrato no existe, y un Math.round dejaría el riesgo por encima del planeado. */
+const puente = cuerpoDe('tsAbrirOperacion');
+ok(/Math\.floor/.test(puente) && !/Math\.round/.test(puente),
+   'el tamaño de un futuro se trunca, nunca se redondea hacia arriba',
+   'redondear al alza pone más riesgo del que autorizaste');
+
+console.log('\n═══ 8 · ningún var(--x) que no exista ═══');
+/* Un token de color mal escrito NO falla: `background: var(--warning-soft)` con
+   ese token sin definir se queda transparente y la regla no pinta nada. Escribí
+   --positive-soft, --negative-soft y --warning-soft cuando los tokens se llaman
+   --good-soft, --bad-soft y --warn-soft. Seis usos, tres reglas invisibles, y
+   sólo se vio en una captura: el aviso del post-mortem salía sin recuadro.
+
+   Un fallo que no deja hueco es el más caro de todos, así que aquí se mira el
+   CSS entero y no sólo lo que acabo de tocar. */
+const css = (src.match(/<style>([\s\S]*?)<\/style>/g) || []).join('\n');
+const definidos = new Set([...css.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map(m => m[1]));
+/* Los que llegan de fuera del CSS: el navegador, o una variable puesta por JS. */
+const DEL_NAVEGADOR = new Set(['--safe-b', '--safe-t']);
+const usados = [...new Set([...css.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map(m => m[1]))];
+/* var(--x, algo) lleva su propio respaldo: si falta el token, cae ahí a propósito. */
+const conRespaldo = new Set([...css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*,/gi)].map(m => m[1]));
+const jsPone = new Set([...src.matchAll(/setProperty\(\s*["'](--[a-z0-9-]+)/gi)].map(m => m[1]));
+const huerfanos = usados.filter(v => !definidos.has(v) && !conRespaldo.has(v) && !DEL_NAVEGADOR.has(v) && !jsPone.has(v));
+ok(huerfanos.length === 0, `los ${usados.length} tokens usados existen`,
+   huerfanos.length ? 'sin definir: ' + huerfanos.join(', ') : '');
+
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
 process.exit(fallos.length ? 1 : 0);
