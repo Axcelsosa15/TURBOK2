@@ -756,6 +756,27 @@
   .jgrid.manual .lab { font-size: 9.5px; }
   .jgrid.manual input { font-size: 13.5px; padding:4px var(--s2); }
 
+  /* ── Detalle de una posición: las cinco piezas y las operaciones ──── */
+  .posrow .pdtog { background: none; border: 0; padding: 0 6px 0 0; color: var(--line-strong);
+    font-size: 11px; line-height: 1; cursor: pointer;
+    transition: color var(--mo-fast) var(--ease); }
+  .posrow:hover .pdtog { color: var(--muted); }
+  .posrow.open .pdtog { color: var(--accent); }
+  .posrow.open > td { background: var(--surface-3); }
+  tr.posdet > td { background: var(--surface-3); padding: 0 var(--s3) var(--s3); }
+  .pdgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line); border-radius: var(--r-sm); overflow: hidden; margin-top: var(--s2); }
+  .pdgrid > div { background: var(--surface-2); padding: var(--s2) var(--s3); }
+  .pdgrid .pk { display: block; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
+  .pdgrid b { display: block; margin-top: 3px; font-family: var(--font-mono); font-size: 16px;
+    font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .pdgrid i { display: block; margin-top: 2px; font-style: normal; font-size: var(--t-meta); color: var(--dim); }
+  .pdgrid .neto { background: var(--bg); }
+  .pdgrid .neto b { font-size: 18px; }
+  .pdops { margin-top: var(--s3); }
+  .pdops table.t th { font-size: 9.5px; }
+
   /* ── PALETA DE COMANDOS ────────────────────────────────────────────
      Superficie elevada sobre un velo, no un panel más de la página: aquí sí
      se gana la sombra, porque flota de verdad sobre el resto. */
@@ -1699,7 +1720,7 @@
     </section>
     <section class="panel">
       <header><h2>Rendimiento por posición</h2><span class="meta" id="ivPerfMeta"></span></header>
-      <div class="body"><p class="csub">Solo las posiciones con precio actual escrito. Sin precio no hay rendimiento que medir.</p><div class="chartwrap" id="ivPerfWrap"></div></div>
+      <div class="body"><p class="csub">Rendimiento neto sobre lo invertido: precio, ventas, dividendos y comisiones. Solo las posiciones con precio actual escrito o ya cerradas — sin precio no hay nada que medir.</p><div class="chartwrap" id="ivPerfWrap"></div></div>
     </section>
   </div>
   <div class="grid eq" style="margin-bottom:24px">
@@ -7702,8 +7723,21 @@
     const sf = $("ivSetup"); sf.innerHTML = `<option value="">todas las estrategias</option>` + coll("playbooks").items.filter(p => p.type === "inversion").map(p => `<option value="${p.id}" ${ivj.setup === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("");
     let list = tradesOf("inversion"); if (ivj.setup) list = list.filter(t => t.setupId === ivj.setup);
     const buys = list.filter(t => t.op === "compra" || t.op === "aporte"); const invested = buys.reduce((s, t) => s + (t.qty || 0) * (t.price || 0) + (t.fees || 0), 0);
-    const realized = list.reduce((s, t) => s + (t.pnl || 0), 0);
-    $("ivOpsMeta").innerHTML = list.length ? `${list.length} ops · desplegado ${money(invested)} · realizado <span class="${realized > 0 ? "pos" : realized < 0 ? "neg" : ""}">${money(realized)}</span>` : "";
+    /* Esta cabecera decía «realizado» sumando la columna Resultado, que se
+       escribe a mano. Nadie escribe la ganancia de una venta — sale del coste
+       medio — así que aquí ponía $400 mientras la tarjeta de arriba, que ya la
+       deriva, ponía $509. Dos cifras con el mismo nombre en la misma pantalla.
+
+       Este listado suma FILAS, no posiciones, y encima puede estar filtrado
+       por estrategia: no puede derivar ventas sin mentir sobre el filtro. Así
+       que dice lo que de verdad suma — la columna Resultado — y manda al sitio
+       donde el realizado sí está completo. */
+    const anotado = list.reduce((s, t) => s + (t.pnl || 0), 0);
+    const ventasSinAnotar = list.filter(t => t.op === "venta" && t.pnl == null).length;
+    $("ivOpsMeta").innerHTML = list.length
+      ? `${list.length} ops · desplegado ${money(invested)} · anotado <span class="${anotado > 0 ? "pos" : anotado < 0 ? "neg" : ""}">${money(anotado)}</span>`
+        + (ventasSinAnotar ? ` · ${plu(ventasSinAnotar, "venta", "ventas")} sin anotar: su ganancia sale del coste medio, arriba` : "")
+      : "";
     const wrap = $("ivOps");
     if (!list.length) { wrap.innerHTML = `<p class="empty">Sin operaciones de inversión. Cada compra, venta, aporte o dividendo va aquí, separado de los futuros.</p>`; return; }
     wrap.innerHTML = `<table class="t"><thead><tr><th>Fecha</th><th>Mercado</th><th>Activo</th><th>Op.</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Total</th><th class="r">Resultado</th><th>Horiz.</th><th>Img</th><th>Tesis</th><th></th></tr></thead><tbody>${list.map(t => { const total = (t.qty || 0) * (t.price || 0); return `<tr data-id="${t.id}"><td>${esc(dmy(t.date))}</td><td class="ui">${esc(marketName(t.market))}</td><td>${esc(t.asset)}</td><td><span class="chip ${t.op === "compra" || t.op === "aporte" ? "inv" : t.op === "venta" ? "warn" : "good"}">${esc(t.op)}</span></td><td class="r">${t.qty ?? "—"}</td><td class="r">${t.price != null ? money(t.price, 2) : "—"}</td><td class="r">${total ? money(total, 2) : "—"}</td><td class="r ${t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""}">${t.pnl == null ? "—" : money(t.pnl, 2)}</td><td>${esc(t.horizon || "")}</td><td>${thumbCell(t)}</td><td class="notes">${esc(t.note || "")}</td><td class="act"><button type="button" class="icon" data-act="edit" title="Editar">✎</button></td></tr>`; }).join("")}</tbody></table>`;
@@ -8110,29 +8144,80 @@
     const gemelas = coll("positions").items.filter(x =>
       String(x.asset || "").trim().toUpperCase() === activo && x.market === p.market);
     if (gemelas.length > 1) return { ambigua: true, gemelas: gemelas.length };
+    /* TODAS las operaciones del activo, no sólo las que mueven cantidad. Los
+       dividendos quedaban fuera del filtro, así que una posición de SCHD que
+       rindió un 6% contando el cobro mostraba el 2% de la subida del precio.
+       El dinero que entró por dividendo es rendimiento de esa inversión, no de
+       «la cartera en general». */
     const ops = tradesOf("inversion").filter(t =>
       String(t.asset || "").trim().toUpperCase() === activo &&
       (!p.market || !t.market || t.market === p.market) &&
-      (t.op === "compra" || t.op === "aporte" || t.op === "venta"));
+      ["compra", "aporte", "venta", "dividendo"].includes(t.op));
     if (!ops.length) return null;
     let qty = 0, coste = 0, vendidoQty = 0, realizado = 0, primera = null, ultima = null, nCompras = 0;
+    let dividendos = 0, comisiones = 0, invertido = 0, recuperado = 0, nVentas = 0, nCobros = 0;
     ops.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).forEach(t => {
       const q = Number(t.qty) || 0, px = Number(t.price) || 0, fe = Number(t.fees) || 0;
+      comisiones += fe;
+      if (t.op === "dividendo") {
+        /* El importe de un cobro vive en `pnl`: no tiene cantidad ni precio.
+           Suma al rendimiento, nunca al coste — mezclarlos escondería de dónde
+           vino el dinero, que es lo único que se quiere saber. */
+        dividendos += Number(t.pnl) || 0; nCobros++;
+        if (t.date && (!ultima || t.date > ultima)) ultima = t.date;
+        return;
+      }
       if (!q) return;
       if (t.op === "venta") {
-        /* Coste medio: se retira la parte proporcional del coste acumulado. */
+        /* Coste medio: se retira la parte proporcional del coste acumulado.
+           Las comisiones NO entran en el coste base — se restan aparte, al
+           final, para que se vea cuánto se llevó la fricción. Meterlas dentro
+           del coste las vuelve invisibles. */
         const medio = qty > 0 ? coste / qty : 0;
         const sale = Math.min(q, qty);
-        realizado += sale * px - sale * medio - fe;
-        coste -= sale * medio; qty -= sale; vendidoQty += sale;
+        realizado += sale * px - sale * medio;
+        recuperado += sale * px;
+        coste -= sale * medio; qty -= sale; vendidoQty += sale; nVentas++;
       } else {
-        qty += q; coste += q * px + fe; nCompras++;
+        qty += q; coste += q * px; invertido += q * px; nCompras++;
         if (!primera) primera = t.date;
         ultima = t.date;
       }
     });
     if (!nCompras) return null;
-    return { qty, coste, medio: qty > 0 ? coste / qty : null, realizado, vendidoQty, nCompras, primera, ultima, ops };
+    return { qty, coste, medio: qty > 0 ? coste / qty : null, realizado, vendidoQty,
+             nCompras, nVentas, nCobros, primera, ultima, ops,
+             dividendos, comisiones, invertido, recuperado };
+  }
+
+  /* ═════════ RENDIMIENTO DE UNA INVERSIÓN, PIEZA A PIEZA ═════════
+     Un solo número («+20.9%») no dice de dónde vino el dinero, y de dónde vino
+     es lo que decide si repetir la operación. Cinco piezas que suman:
+
+         no realizado   lo que subió y sigue dentro
+       + realizado      lo que se cerró vendiendo
+       + dividendos     lo que pagó por tenerla
+       − comisiones     lo que se llevó la fricción
+       ─────────────
+       = neto
+
+     Las comisiones se restan APARTE y no van dentro del coste base. Metidas en
+     el coste desaparecen de la vista, y la fricción sólo se corrige cuando se
+     mide. Es también lo que hace que las cinco líneas sumen exactamente. */
+  function posPerf(p, c) {
+    const l = c.lotes;
+    const noReal = c.pnl;                                   // valor − coste, de lo que sigue abierto
+    const real = l ? l.realizado : 0;
+    const divs = l ? l.dividendos : 0;
+    const fees = l ? l.comisiones : (Number(p.fees) || 0);
+    const neto = (noReal == null ? 0 : noReal) + real + divs - fees;
+    /* El retorno se mide sobre lo que de verdad se puso: el dinero invertido,
+       no el coste de lo que queda. Si vendiste la mitad, el coste restante es
+       la mitad y el porcentaje saldría inflado al doble. */
+    const base = l ? l.invertido : c.cost;
+    return { noReal, real, divs, fees, neto, base,
+             pct: base > 0 ? neto / base : null,
+             parcial: noReal == null };
   }
 
   function posCalc(p) {
@@ -8149,7 +8234,144 @@
       return { cost, cur, pnl: cur == null ? null : cur - cost, pct: cur == null || !cost ? null : (cur - cost) / cost,
                qty: l.qty, medio: l.medio, lotes: l, derivada: true };
     }
+    /* Posición cerrada del todo: cantidad cero pero con historia. No es «sin
+       datos» — es una inversión terminada, y su realizado y sus dividendos
+       siguen contando en el rendimiento global. */
+    if (l && l.qty === 0 && l.nCompras) {
+      return { cost: 0, cur: 0, pnl: 0, pct: null, qty: 0, medio: null, lotes: l, derivada: true, cerrada: true };
+    }
     const cost = (p.qty || 0) * (p.entry || 0) + (p.fees || 0); const cur = p.current != null ? (p.qty || 0) * p.current : null; return { cost, cur, qty: p.qty || 0, medio: p.entry || null, derivada: false, pnl: cur != null ? cur - cost : null, pct: cur != null && cost ? (cur - cost) / cost : null }; }
+  /* ═══════ LA TABLA DE POSICIONES, CON LAS CINCO PIEZAS ═══════
+     Antes la columna P&L enseñaba sólo lo que subió el precio. Una posición
+     con dividendos salía con un número más bajo del real, y no había forma de
+     saberlo mirando: el dato faltante no deja hueco.
+
+     Ahora la columna manda el NETO, y el desglose se abre al pulsar la fila —
+     el mismo gesto que las métricas de una cuenta prop. Nivel 1 de un vistazo,
+     nivel 2 a un clic. */
+  const posAbierta = {};
+  function tablaPosiciones(ps) {
+    const fila = p => {
+      const c = posCalc(p), f = posPerf(p, c);
+      const abierta = posAbierta[p.id];
+      const sig = v => (v >= 0 ? "+" : "") + money(v, 2);
+      const cls = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
+      const nota = c.ambigua
+        ? `<div class="stale" style="color:var(--warn)">${c.gemelas} posiciones de ${esc(p.asset)} aquí · únelas para derivar de las operaciones</div>`
+        : c.derivada
+        ? `<div class="stale">${plu(c.lotes.nCompras, "compra", "compras")}${c.lotes.nVentas ? ` · ${plu(c.lotes.nVentas, "venta", "ventas")}` : ""}${c.lotes.nCobros ? ` · ${plu(c.lotes.nCobros, "cobro", "cobros")}` : ""}${c.cerrada ? " · cerrada" : ""}</div>`
+        : "";
+      const det = !abierta ? "" : `<tr class="posdet"><td colspan="9"><div class="pdgrid">
+        ${[["No realizado", f.noReal, "lo que subió y sigue dentro"],
+           ["Realizado", f.real, "lo que se cerró vendiendo"],
+           ["Dividendos", f.divs, "lo que pagó por tenerla"],
+           ["Comisiones", f.fees ? -f.fees : 0, "lo que se llevó la fricción"]]
+          .map(([k, v, why]) => `<div><span class="pk">${esc(k)}</span><b class="${cls(v)}">${v == null ? "—" : sig(v)}</b><i>${esc(why)}</i></div>`).join("")}
+        <div class="neto"><span class="pk">Neto</span><b class="${cls(f.neto)}">${sig(f.neto)}</b><i>${f.pct == null ? "sobre lo invertido" : `${(f.pct * 100).toFixed(2)}% sobre ${money(f.base, 2)} invertidos`}</i></div>
+      </div>${histPos(p, c)}</td></tr>`;
+      return `<tr data-id="${p.id}" class="posrow ${abierta ? "open" : ""}">
+        <td><button type="button" class="pdtog" data-act="posdet" aria-expanded="${!!abierta}">${abierta ? "▾" : "▸"}</button><strong>${esc(p.asset)}</strong>${nota}</td>
+        <td>${esc(dmy(c.derivada && c.lotes.primera ? c.lotes.primera : p.date))}</td>
+        <td class="r">${c.qty ? redondeaQty(c.qty) : c.cerrada ? "0" : "—"}</td>
+        <td class="r">${c.medio != null ? money(c.medio, 2) + (c.derivada ? `<div class="stale">medio</div>` : "") : "—"}</td>
+        <td class="r">${p.current != null ? money(p.current, 2) + precioEdad(p) : '<span class="dim">—</span>'}</td>
+        <td class="r">${money(c.cost, 2)}</td>
+        <td class="r ${cls(f.neto)}">${sig(f.neto)}${f.pct == null ? "" : ` · ${(f.pct >= 0 ? "+" : "") + (f.pct * 100).toFixed(1)}%`}
+          ${f.divs || f.real ? `<div class="stale">precio ${f.noReal == null ? "—" : sig(f.noReal)}${f.real ? ` · vendido ${sig(f.real)}` : ""}${f.divs ? ` · cobros ${sig(f.divs)}` : ""}</div>` : ""}</td>
+        <td class="notes">${esc(p.thesis || "")}</td>
+        <td class="act"><button type="button" class="icon" data-act="pos" title="Editar">✎</button></td>
+      </tr>${det}`;
+    };
+    return `<div class="twrap"><table class="t"><thead><tr>
+      <th>Activo</th><th>Desde</th><th class="r">Cant.</th><th class="r">Medio</th>
+      <th class="r">Actual</th><th class="r">Coste</th><th class="r">P&amp;L neto</th><th>Tesis</th><th></th>
+    </tr></thead><tbody>${ps.map(fila).join("")}</tbody></table></div>`;
+  }
+  /* Las operaciones que producen ese número, en orden. Es la trazabilidad que
+     convierte una cifra en algo que se puede discutir: de dónde salió. */
+  function histPos(p, c) {
+    const ops = c.lotes ? c.lotes.ops.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))) : [];
+    if (!ops.length) return `<p class="empty" style="margin:var(--s2) 0 0">Escrita a mano: no hay operaciones detrás de estas cifras.</p>`;
+    const OP = { compra: "compra", aporte: "aporte", venta: "venta", dividendo: "cobro" };
+    return `<div class="twrap pdops"><table class="t compact"><thead><tr><th>Fecha</th><th>Tipo</th><th class="r">Cant.</th><th class="r">Precio</th><th class="r">Importe</th><th class="r">Comisión</th></tr></thead><tbody>
+      ${ops.map(t => {
+        const q = Number(t.qty) || 0, px = Number(t.price) || 0;
+        const imp = t.op === "dividendo" ? Number(t.pnl) || 0 : q * px * (t.op === "venta" ? 1 : -1);
+        return `<tr><td class="nw">${esc(dmy(t.date))}</td><td>${esc(OP[t.op] || t.op)}</td>
+          <td class="r">${q ? redondeaQty(q) : "—"}</td><td class="r">${px ? money(px, 2) : "—"}</td>
+          <td class="r ${imp > 0 ? "pos" : imp < 0 ? "neg" : ""}">${(imp >= 0 ? "+" : "") + money(imp, 2)}</td>
+          <td class="r dim">${t.fees ? money(t.fees, 2) : "—"}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
+  }
+
+  /* ═══════════ PUERTA ÚNICA DE INVERSIONES ═══════════
+     El hermano de FUT, sobre LA MISMA capa de datos: coll("trades") y
+     coll("positions"). No es una segunda base — es la otra cara de la misma,
+     con el vocabulario de carteras en vez del de cuentas prop.
+
+     El orden que impone la arquitectura, y que estas funciones respetan:
+
+         OPERACIONES → POSICIÓN → RENDIMIENTO INDIVIDUAL → CARTERA
+
+     Nunca al revés. El rendimiento de una cartera es la suma de los
+     rendimientos de sus inversiones, y el de una inversión sale de sus
+     operaciones. Ningún nivel se escribe a mano. */
+  const INV = {
+    // ── lecturas ──
+    positions() { return coll("positions").items; },
+    position(id) { return coll("positions").get(id); },
+    transactions(activo) {
+      const l = tradesOf("inversion");
+      if (!activo) return l;
+      const a = String(activo).trim().toUpperCase();
+      return l.filter(t => String(t.asset || "").trim().toUpperCase() === a);
+    },
+    markets() { return marketsMerged ? marketsMerged() : coll("markets").items; },
+
+    // ── escrituras: por las mismas puertas que un clic ──
+    createTransaction(t) {
+      const id = t && t.id ? t.id : uid("t");
+      coll("trades").set(id, Object.assign({ type: "inversion", op: "compra", createdAt: Date.now() }, t, { id }));
+      return id;
+    },
+    updateTransaction(id, patch) {
+      const prev = coll("trades").get(id); if (!prev) return false;
+      coll("trades").set(id, Object.assign({}, prev, patch, { id })); return true;
+    },
+    deleteTransaction(id) { if (!coll("trades").get(id)) return false; coll("trades").remove(id); return true; },
+    createPosition(p) {
+      const id = p && p.id ? p.id : uid("p");
+      coll("positions").set(id, Object.assign({ createdAt: Date.now() }, p, { id }));
+      return id;
+    },
+    updatePosition(id, patch) {
+      const prev = coll("positions").get(id); if (!prev) return false;
+      coll("positions").set(id, Object.assign({}, prev, patch, { id })); return true;
+    },
+    deletePosition(id) { if (!coll("positions").get(id)) return false; coll("positions").remove(id); return true; },
+
+    /* ── NIVEL 1 · rendimiento de UNA inversión ──
+       Las cinco piezas por separado, nunca un solo número. */
+    performance(posId) {
+      const p = coll("positions").get(posId); if (!p) return null;
+      const c = posCalc(p);
+      const perf = posPerf(p, c);
+      const l = c.lotes || null;
+      return {
+        activo: p.asset, mercado: p.market, derivada: !!c.derivada, ambigua: !!c.ambigua, cerrada: !!c.cerrada,
+        cantidad: c.qty, costeMedio: c.medio, precioActual: p.current ?? null,
+        costeBase: c.cost, valorMercado: c.cur,
+        noRealizado: perf.noReal, realizado: perf.real, dividendos: perf.divs,
+        comisiones: perf.fees, neto: perf.neto, invertido: perf.base, retorno: perf.pct,
+        desde: l ? l.primera : p.date, operaciones: l ? l.ops.length : 0,
+        compras: l ? l.nCompras : 0, ventas: l ? l.nVentas : 0, cobros: l ? l.nCobros : 0,
+      };
+    },
+    /* ── NIVEL 2 · la cartera, agregando el nivel 1 ── */
+    portfolio() { return investStats(); },
+  };
+  window.INV = INV;
+
   /* ---------- métricas de la cartera ---------- */
   function monthsBack(n) { const out = []; const d = new Date(state.today + "T12:00:00Z"); d.setUTCDate(1); for (let i = 0; i < n; i++) { out.unshift(d.toISOString().slice(0, 7)); d.setUTCMonth(d.getUTCMonth() - 1); } return out; }
   function investStats() {
@@ -8163,8 +8385,31 @@
       rows.push({ p, c, val });
     }
     const unreal = priced ? cur - cost : 0;
-    const realized = ops.reduce((s, t) => s + (t.pnl || 0), 0);
-    const income = ops.filter(t => t.op === "dividendo").reduce((s, t) => s + (t.pnl || 0), 0);
+    /* El realizado de la cartera salía de `t.pnl`, que es un campo que se
+       escribe a mano. Nadie escribe la ganancia de una venta — se deduce del
+       coste medio — así que la tarjeta que dice «ventas y cobros cerrados»
+       enseñaba sólo los cobros. Con una venta de VOO con +$108.57 dentro,
+       la cartera decía $400 en lugar de $508.57.
+
+       Ahora sale de los MISMOS lotes que la fila de la posición, para que las
+       dos vistas no puedan discrepar. Las operaciones que una posición
+       derivada ya contó se marcan, y sólo las huérfanas caen al campo escrito
+       a mano: así nada se cuenta dos veces. */
+    const contadas = new Set();
+    let ventas = 0, cobros = 0, comisiones = 0, invertido = 0;
+    for (const r of rows) {
+      const l = r.c.lotes; if (!l) continue;
+      ventas += l.realizado; cobros += l.dividendos; comisiones += l.comisiones; invertido += l.invertido;
+      l.ops.forEach(t => contadas.add(t.id));
+    }
+    ops.forEach(t => {
+      if (contadas.has(t.id)) return;
+      comisiones += Number(t.fees) || 0;
+      if (t.op === "dividendo") cobros += Number(t.pnl) || 0;
+      else if (t.op === "venta") ventas += Number(t.pnl) || 0;
+    });
+    const income = cobros;
+    const realized = ventas + cobros;
     const contributed = ops.filter(t => t.op === "compra" || t.op === "aporte").reduce((s, t) => s + (t.qty || 0) * (t.price || 0) + (t.fees || 0), 0);
     const totalRet = cost ? (unreal + realized) / cost : null;
     /* (valor − coste) / coste es retorno simple sobre coste total, y con aportes
@@ -8192,7 +8437,7 @@
     const byMonth = {}; ops.forEach(t => { const k = String(t.date || "").slice(0, 7); if (!k) return; const o = byMonth[k] || (byMonth[k] = { in: 0, inc: 0 }); if (t.op === "compra" || t.op === "aporte") o.in += (t.qty || 0) * (t.price || 0) + (t.fees || 0); if (t.op === "dividendo") o.inc += (t.pnl || 0); });
     const monthsWithIn = last6.filter(m => byMonth[m] && byMonth[m].in > 0).length;
     const defensive = ["bonos"].reduce((s, id) => s + (byMarket[id] ? byMarket[id].val : 0), 0);
-    return { ps, ops, rows, sorted, cost, cur, priced, unreal, realized, income, contributed, totalRet, cartera, concentration, noPlan, viejos, noPrice: ps.length - priced, byMarket, markets: mk, byMonth, last6, monthsWithIn, defensive, defensiveShare: cur ? defensive / cur : null, yieldPct: cost ? income / cost : null, top: sorted[0] || null };
+    return { ps, ops, rows, sorted, cost, cur, priced, unreal, realized, income, contributed, totalRet, cartera, concentration, noPlan, viejos, noPrice: ps.length - priced, byMarket, markets: mk, ventas, comisiones, invertido, byMonth, last6, monthsWithIn, defensive, defensiveShare: cur ? defensive / cur : null, yieldPct: cost ? income / cost : null, top: sorted[0] || null };
   }
   function pctSigno(x, dec) { return x == null ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(dec == null ? 1 : dec) + "%"; }
   /* El titular pasa a ser el IRR, que es la cifra correcta; el retorno simple
@@ -8212,16 +8457,17 @@
       <div class="s">simple sobre coste ${pctSigno(s.totalRet)}${brecha ? ` · <span class="dim">difieren ${Math.abs(c.brecha * 100).toFixed(1)} pts</span>` : ""}</div></div>`;
   }
 
+  function sig2(v) { return (v >= 0 ? "+" : "") + money(v, 2); }
   function renderInvestTiles() {
     const s = investStats(); const ps = s.ps;
     $("ivTiles").innerHTML = `
       <div class="tile"><span class="lab">Posiciones</span><div class="v">${ps.length}</div><div class="s">en ${s.markets.length} ${s.markets.length === 1 ? "mercado" : "mercados"}</div></div>
-      <div class="tile"><span class="lab">Invertido</span><div class="v">${ps.length ? money(s.cost) : "—"}</div><div class="s">coste + comisiones</div></div>
+      <div class="tile"><span class="lab">Invertido</span><div class="v">${ps.length ? money(s.cost) : "—"}</div><div class="s">${s.comisiones ? `coste · ${money(s.comisiones, 2)} en comisiones aparte` : "coste de lo que sigue abierto"}</div></div>
       <div class="tile"><span class="lab">Valor actual</span><div class="v ${ps.length && s.priced ? (s.cur > s.cost ? "good" : s.cur < s.cost ? "bad" : "") : ""}">${ps.length ? money(s.cur) : "—"}</div><div class="s">${s.noPrice ? `${s.noPrice} sin precio actual` : "según tus precios"}</div></div>
       <div class="tile"><span class="lab">P&amp;L no realizado</span><div class="v ${s.unreal > 0 ? "good" : s.unreal < 0 ? "bad" : ""}">${ps.length && s.priced ? money(s.unreal) : "—"}</div><div class="s">${ps.length && s.cost && s.priced ? (s.unreal >= 0 ? "+" : "") + (s.unreal / s.cost * 100).toFixed(1) + "%" : "faltan precios"}</div></div>
       ${ivRetornoTile(s)}
       
-      <div class="tile"><span class="lab">Realizado</span><div class="v ${s.realized > 0 ? "good" : s.realized < 0 ? "bad" : ""}">${s.ops.length ? money(s.realized) : "—"}</div><div class="s">ventas y cobros cerrados</div></div>
+      <div class="tile"><span class="lab">Realizado</span><div class="v ${s.realized > 0 ? "good" : s.realized < 0 ? "bad" : ""}">${s.ops.length ? money(s.realized) : "—"}</div><div class="s">${s.ops.length ? `${sig2(s.ventas)} vendiendo · ${sig2(s.income)} cobrado` : "ventas y cobros cerrados"}</div></div>
       <div class="tile"><span class="lab">Ingresos cobrados</span><div class="v ${s.income > 0 ? "good" : ""}">${s.income ? money(s.income) : "—"}</div><div class="s">${s.yieldPct ? (s.yieldPct * 100).toFixed(2) + "% sobre lo invertido" : "dividendos, cupones, primas"}</div></div>
       <div class="tile"><span class="lab">Aportado</span><div class="v">${s.contributed ? money(s.contributed) : "—"}</div><div class="s">${s.monthsWithIn} de los últimos 6 meses</div></div>
       <div class="tile"><span class="lab">Concentración</span><div class="v ${s.concentration == null ? "" : s.concentration > .5 ? "bad" : s.concentration > .35 ? "warn" : "good"}">${s.concentration == null ? "—" : pct(s.concentration)}</div><div class="s">${s.top ? "mayor: " + esc(s.top.p.asset) : "posición más grande"}</div></div>
@@ -8238,11 +8484,17 @@
   }
   function renderIvPerf(s) {
     const wrap = $("ivPerfWrap"); if (!wrap) return;
-    const items = s.rows.filter(r => r.c.pct != null).sort((a, b) => b.c.pct - a.c.pct);
+    /* Este gráfico medía `c.pct` — sólo lo que subió el precio. La tabla de
+       abajo ya mide el neto con dividendos dentro, así que la misma SCHD salía
+       al 2% aquí y al 6% tres paneles más abajo. Dos números para una
+       posición, en la misma pantalla. Ahora los dos salen de `posPerf`. */
+    const items = s.rows.map(r => ({ p: r.p, c: r.c, f: posPerf(r.p, r.c) }))
+      .filter(r => r.f.pct != null && (!r.f.parcial || r.c.cerrada))
+      .sort((a, b) => b.f.pct - a.f.pct);
     if (!items.length) { wrap.innerHTML = `<p class="empty">Ninguna posición tiene precio actual. Escríbelo en la posición y aquí verás cuál tira y cuál pesa.</p>`; $("ivPerfMeta").textContent = ""; return; }
     const best = items[0], worst = items[items.length - 1];
-    $("ivPerfMeta").innerHTML = `mejor <span class="pos">${esc(best.p.asset)} ${(best.c.pct * 100).toFixed(1)}%</span> · peor <span class="neg">${esc(worst.p.asset)} ${(worst.c.pct * 100).toFixed(1)}%</span>`;
-    wrap.innerHTML = chartBars(items.map(r => ({ label: String(r.p.asset || "").slice(0, 8), value: r.c.pct, title: `${r.p.asset} · ${(r.c.pct >= 0 ? "+" : "") + (r.c.pct * 100).toFixed(1)}% · ${money(r.c.pnl, 2)}` })), { W: chartW(wrap), H: 170, pl: 46, fmt: v => (v * 100).toFixed(0) + "%", aria: "Rendimiento por posición", maxLabels: 12 });
+    $("ivPerfMeta").innerHTML = `mejor <span class="pos">${esc(best.p.asset)} ${(best.f.pct * 100).toFixed(1)}%</span> · peor <span class="neg">${esc(worst.p.asset)} ${(worst.f.pct * 100).toFixed(1)}%</span>`;
+    wrap.innerHTML = chartBars(items.map(r => ({ label: String(r.p.asset || "").slice(0, 8), value: r.f.pct, title: `${r.p.asset} · ${(r.f.pct >= 0 ? "+" : "") + (r.f.pct * 100).toFixed(1)}% neto · ${sig2(r.f.neto)} sobre ${money(r.f.base, 2)} invertidos` })), { W: chartW(wrap), H: 170, pl: 46, fmt: v => (v * 100).toFixed(0) + "%", aria: "Rendimiento por posición", maxLabels: 12 });
   }
   function renderIvFlows(s) {
     const months = monthsBack(12);
@@ -8320,7 +8572,7 @@
         <header><h2>Posiciones</h2><span class="meta">${ps.length ? `${money(tot)} invertido · ${priced ? money(cur) + " actual" : "sin precios"}` : ""}</span></header>
         <div class="body">
           ${isFut ? `<p class="note-p">Los futuros no se registran aquí. Van al Journal de futuros y a la Cabina: son trading, no inversión.</p>` : ""}
-          ${ps.length ? `<div class="twrap"><table class="t"><thead><tr><th>Activo</th><th>Desde</th><th class="r">Cant.</th><th class="r">Entrada</th><th class="r">Actual</th><th class="r">Coste</th><th class="r">P&amp;L</th><th>Tesis</th><th>Salida planeada</th><th></th></tr></thead><tbody>${ps.map(p => { const c = posCalc(p); return `<tr data-id="${p.id}"><td><strong>${esc(p.asset)}</strong>${c.derivada ? `<div class="stale">${plu(c.lotes.nCompras, "compra", "compras")}${c.lotes.vendidoQty ? " · vendido en parte" : ""}</div>` : c.ambigua ? `<div class="stale" style="color:var(--warn)">${c.gemelas} posiciones de ${esc(p.asset)} aquí · únelas para derivar de las operaciones</div>` : ""}</td><td>${esc(dmy(c.derivada && c.lotes.primera ? c.lotes.primera : p.date))}</td><td class="r">${c.qty ? redondeaQty(c.qty) : "—"}</td><td class="r">${c.medio != null ? money(c.medio, 2) + (c.derivada ? `<div class="stale">medio</div>` : "") : "—"}</td><td class="r">${p.current != null ? money(p.current, 2) + precioEdad(p) : '<span class="dim">—</span>'}</td><td class="r">${money(c.cost, 2)}</td><td class="r ${c.pnl > 0 ? "pos" : c.pnl < 0 ? "neg" : ""}">${c.pnl == null ? "—" : money(c.pnl, 2) + " · " + (c.pct >= 0 ? "+" : "") + (c.pct * 100).toFixed(1) + "%"}</td><td class="notes">${esc(p.thesis || "")}</td><td class="notes">${esc(p.exitPlan || "")}</td><td class="act"><button type="button" class="icon" data-act="pos" title="Editar">✎</button></td></tr>`; }).join("")}</tbody></table></div>` : `<p class="empty">Sin posiciones en ${esc(m.name)}.</p>`}
+          ${ps.length ? tablaPosiciones(ps) : vacio("Sin posiciones en " + m.name, "Una posición agrupa todas las compras, ventas y cobros de un activo. Las cifras salen de ahí, no de escribirlas.", "+ Añadir posición", "posadd")}
           ${isFut ? "" : `<button type="button" class="add" id="posAdd">+ Añadir posición</button>`}
         </div>
       </section>
@@ -8337,6 +8589,17 @@
     $("gRename").addEventListener("click", () => openEditor({ title: "Renombrar mercado", fields: [{ key: "name", label: "Nombre", w: 4 }, { key: "short", label: "Abreviatura", ph: "XYZ" }], values: { name: m.name, short: m.short }, validate: v => v.name ? null : "Falta el nombre", onSave: v => { coll("markets").set(m.id, Object.assign({}, coll("markets").get(m.id) || { id: m.id }, m, v)); renderMarketList(); renderMarketDetail(); } }));
     $("gDel").addEventListener("click", function () { if (!armed(this)) return; if (DEFAULT_MARKETS.find(d => d.id === m.id)) coll("markets").set(m.id, { id: m.id, deleted: true }); else coll("markets").remove(m.id); iv.market = null; renderMarketList(); renderMarketDetail(); });
     const pa = $("posAdd"); if (pa) pa.addEventListener("click", () => openPosition(null, m.id));
+    /* El botón del estado vacío entra por la misma puerta que el de abajo. */
+    el.querySelectorAll('button[data-act="posadd"]').forEach(b => b.addEventListener("click", () => openPosition(null, m.id)));
+    /* Desplegar el detalle no toca datos: se repinta sólo esta vista, nunca la
+       pestaña entera, para no perder el scroll ni cerrar lo demás. */
+    el.querySelectorAll('button[data-act="posdet"]').forEach(b => b.addEventListener("click", () => {
+      const id = b.closest("tr").dataset.id;
+      const ya = posAbierta[id];
+      Object.keys(posAbierta).forEach(k => delete posAbierta[k]);
+      if (!ya) posAbierta[id] = true;
+      renderMarketDetail();
+    }));
     $("watchAdd").addEventListener("click", () => openWatch(null, m.id));
     el.querySelectorAll("button[data-act='pos']").forEach(b => b.addEventListener("click", () => { const p = coll("positions").get(b.closest("tr").dataset.id); if (p) openPosition(p, m.id); }));
     el.querySelectorAll("button[data-act='watch']").forEach(b => b.addEventListener("click", () => { const w = coll("watch").get(b.closest("tr").dataset.id); if (w) openWatch(w, m.id); }));

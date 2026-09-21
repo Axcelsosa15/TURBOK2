@@ -967,6 +967,76 @@ sacar el cálculo de una operación del render; lo que le faltaba era todo lo
 demás — la curva, el drawdown como estado, y cualquier noción de cuánta de una
 cifra es señal.
 
+## Lo que rindió una inversión, pieza a pieza
+
+Una posición de SCHD que subió un 2% de precio y pagó $400 en dividendos
+rindió un **6%**, no un 2%. Cabina enseñaba el 2%.
+
+El motivo era un filtro de una línea: `posLotes` recorría las operaciones de
+un activo quedándose con `compra | aporte | venta`. Los dividendos quedaban
+fuera. Sumaban en el IRR de la cartera — ahí sí entraban como flujo — pero no
+en la posición que los había pagado. El dato faltante no deja hueco: la fila
+enseñaba un número entero, creíble y falso.
+
+Ahora el rendimiento de una inversión son **cinco piezas que suman exactamente**:
+
+```
+  no realizado   lo que subió y sigue dentro
++ realizado      lo que se cerró vendiendo
++ dividendos     lo que pagó por tenerla
+− comisiones     lo que se llevó la fricción
+─────────────
+= neto
+```
+
+Dos decisiones que parecen de detalle y no lo son:
+
+- **Las comisiones se restan aparte, nunca dentro del coste base.** Metidas en
+  el coste desaparecen de la vista, y la fricción sólo se corrige cuando se
+  mide. Es además lo que hace que las cinco líneas cuadren al céntimo.
+- **El porcentaje se mide sobre lo invertido, no sobre el coste que queda.**
+  Si vendiste la mitad, el coste restante es la mitad y el mismo beneficio
+  saldría al doble. Vender no mejora el rendimiento de lo que compraste.
+
+Una posición vendida del todo no es «sin datos»: es una inversión terminada.
+Cantidad cero, y su realizado y sus dividendos siguen contando.
+
+### El mismo número no puede decir dos cosas
+
+Arreglar el cálculo destapó lo que de verdad costaba dinero: **la misma
+posición aparecía con dos cifras distintas en una sola pantalla**. Lo vio una
+captura, no un test.
+
+| Dónde | Decía | Por qué |
+|---|---|---|
+| Tabla de posiciones | SCHD **+6.0%** | ya usaba las cinco piezas |
+| Gráfico «Rendimiento por posición» | SCHD **2.0%** | medía sólo la subida del precio |
+| Tarjeta «Realizado · ventas y cobros» | **$400** | sumaba `pnl`, un campo escrito a mano |
+| Cabecera del listado de operaciones | **$400** | lo mismo, sobre las filas visibles |
+
+La tarjeta es el caso más instructivo. Nadie escribe a mano la ganancia de una
+venta: se deduce del coste medio. Así que el campo `pnl` sólo lo rellenan los
+cobros, y una tarjeta rotulada «ventas y cobros cerrados» enseñaba únicamente
+los cobros. Con una venta de VOO de **+$108.57** dentro, la cartera decía $400
+donde había $508.57.
+
+El arreglo no es cuatro arreglos: es **una sola fuente**. El gráfico y la
+tarjeta pasan por `posPerf`, los mismos lotes que la fila. La cartera marca las
+operaciones que una posición derivada ya contó, y sólo las huérfanas caen al
+campo escrito a mano — así nada se cuenta dos veces.
+
+El listado de operaciones es la excepción honesta: suma **filas**, no
+posiciones, y puede estar filtrado por estrategia, así que no puede derivar
+ventas sin mentir sobre el filtro. Se le cambió el rótulo a lo que de verdad
+suma («anotado») y avisa de cuántas ventas no lo están, señalando al sitio
+donde el realizado sí está completo.
+
+`test/inv2.mjs` cierra las dos puertas: las cinco piezas cuadran al céntimo, y
+**la cartera y la posición no pueden discrepar** — el realizado de la cartera
+tiene que ser la suma del realizado de cada posición, y el porcentaje del
+gráfico el mismo que el de la tabla. Si vuelven a separarse, falla ahí y no en
+una captura de pantalla.
+
 ## Cómo fluye un dato
 
 No hay framework: una colección en memoria es la única fuente y todo lo demás
