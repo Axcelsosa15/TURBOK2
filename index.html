@@ -777,7 +777,45 @@
   .pdops { margin-top: var(--s3); }
   .pdops table.t th { font-size: 9.5px; }
 
-  /* ── PALETA DE COMANDOS ────────────────────────────────────────────
+  
+/* ── TESIS · una por jugada ───────────────────────────────────── */
+.navsep { display:inline-block; width:1px; align-self:stretch; margin:4px var(--s2); background:var(--line-strong); }
+.ednota { grid-column:1/-1; margin:0 0 var(--s2); padding:var(--s2) var(--s3); font-size:var(--t-meta);
+  line-height:1.5; color:var(--muted); border-left:2px solid var(--accent); background:var(--surface-2);
+  border-radius:0 var(--r-sm) var(--r-sm) 0; }
+.tsderiv { grid-column:1/-1; margin-top:var(--s2); }
+.tsgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:var(--s2);
+  padding:var(--s3); border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface-2); }
+.tsc { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.tsc .lab { font-size:var(--t-meta); letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
+.tsc b { font-family:var(--mono); font-size:var(--t-body); font-variant-numeric:tabular-nums; color:var(--text); }
+.tsc b.pos, .tsc b.good { color:var(--positive); }
+.tsc b.neg, .tsc b.bad { color:var(--negative); }
+.tsc b.warn { color:var(--warning); }
+.tsc b.dim { color:var(--dim); }
+.tsc i { font-style:normal; font-size:var(--t-meta); color:var(--muted); line-height:1.35; }
+.tswarn { grid-column:1/-1; margin:var(--s2) 0 0; padding:var(--s2) var(--s3); font-size:var(--t-meta);
+  color:var(--negative); border:1px solid var(--negative-soft); border-radius:var(--r-sm); background:var(--negative-soft); }
+.tshint { grid-column:1/-1; margin:var(--s2) 0 0; font-size:var(--t-meta); color:var(--muted); }
+.tsprog { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; margin-top:var(--s2); }
+.tsprog > .lab { font-size:var(--t-meta); letter-spacing:.06em; text-transform:uppercase; color:var(--dim); }
+.tssecs { display:flex; gap:3px; flex-wrap:wrap; }
+.tssec { width:22px; height:22px; padding:0; font-family:var(--mono); font-size:10px; cursor:pointer;
+  color:var(--dim); background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm);
+  transition:background var(--mo-fast) var(--ease), color var(--mo-fast) var(--ease), border-color var(--mo-fast) var(--ease); }
+.tssec:hover { color:var(--text); border-color:var(--line-strong); }
+.tssec.ok { color:var(--positive); border-color:var(--positive-soft); background:var(--positive-soft); }
+.tsdiario { margin-top:var(--s2); }
+.tsd { display:flex; align-items:baseline; gap:var(--s2); flex-wrap:wrap; padding:var(--s2) 0;
+  font-size:var(--t-meta); border-top:1px solid var(--line); }
+.tsd .f { font-family:var(--mono); color:var(--dim); white-space:nowrap; }
+.tsd .o { flex:1 1 180px; color:var(--text); min-width:0; }
+.tsd .a { color:var(--muted); }
+.tsd .e { font-family:var(--mono); color:var(--dim); }
+.tsd .e.neg { color:var(--warning); }
+.card.ts .kv b { text-transform:none; }
+
+/* ── PALETA DE COMANDOS ────────────────────────────────────────────
      Superficie elevada sobre un velo, no un panel más de la página: aquí sí
      se gana la sombra, porque flota de verdad sobre el resto. */
   .cmd-ov { align-items: flex-start; padding-top: min(14vh, 140px); }
@@ -2156,7 +2194,7 @@
     };
     colls[name] = c; return c;
   }
-  const COLLS = ["trades", "playbooks", "ideas", "markets", "watch", "positions", "scenarios", "risk"];
+  const COLLS = ["trades", "playbooks", "ideas", "markets", "watch", "positions", "scenarios", "risk", "tesis"];
 
   const RULE_NUM = ["maxLoss", "maxGain", "maxContracts", "maxLosses", "minDays", "payoutBuffer"];
   function normRules(r) {
@@ -2293,6 +2331,7 @@
     $("edFields").innerHTML = cfg.fields.map(f => {
       const v = cfg.values[f.key];
       const w = f.w ? " w" + f.w : "";
+      if (f.type === "nota") return `<p class="ednota${w}">${esc(f.label)}</p>`;
       if (f.type === "checkbox") return `<div class="fld chk${w}"><input type="checkbox" id="ef_${f.key}" ${v ? "checked" : ""}><label for="ef_${f.key}">${esc(f.label)}</label></div>`;
       let ctl;
       if (f.type === "select") ctl = `<select id="ef_${f.key}">${f.options.map(o => `<option value="${esc(o[0])}" ${String(v ?? "") === String(o[0]) ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>`;
@@ -7747,6 +7786,211 @@
     const btn = e.target.closest("button[data-act='edit']"); if (!btn) return; const t = coll("trades").get(btn.closest("tr").dataset.id); if (t) openTrade(t);
   });
 
+
+  /* ══════════════════ TESIS · UNA POR JUGADA ══════════════════
+     Una entrada del playbook es una ESTRATEGIA: reutilizable, sin ticker, sin
+     precio de entrada («Setup C · PDL Sweep Long»). Una tesis es una JUGADA
+     concreta: este activo, este precio, esta ventana, este post-mortem. Son
+     entidades distintas y meterlas en la misma ficha rompe las dos — cada
+     estrategia pasaría a tener un solo trade, y el journal perdería el enlace.
+
+     Así que la tesis vive aparte y APUNTA a una estrategia.
+
+     Lo segundo: la plantilla pide a mano «Capital total», «Riesgo $», «Tamaño
+     recomendado», «R:R ≥ 2:1» y «R (+2.3R)». Cabina sabe calcular los cinco. Un
+     número escrito a mano al lado de uno calculado es la misma avería que
+     acabamos de arreglar tres veces en Inversiones: dos fuentes para una cifra,
+     y la escrita nunca se actualiza. Aquí se ESCRIBE el precio y se DERIVA el
+     resto. */
+  const TS_ESTADOS = [["watchlist", "en watchlist"], ["planificada", "planificada"], ["ejecucion", "en ejecución"], ["cerrada", "cerrada"], ["cancelada", "cancelada"]];
+  const TS_EST_CLS = { watchlist: "dim", planificada: "warn", ejecucion: "good", cerrada: "", cancelada: "dim" };
+  const TS_TIPOS = [["accion", "Acción"], ["etf", "ETF"], ["crypto", "Crypto"], ["fx", "FX"], ["commodity", "Commodities"], ["bono", "Bono"], ["futuro", "Futuro"]];
+  const TS_ESTILOS = [["swing", "Swing"], ["position", "Position"], ["largo", "Long-term"], ["evento", "Event-driven"]];
+  const TS_SESGOS = [["long", "Long"], ["short", "Short"]];
+  const TS_HORIZ = [["dias", "días"], ["semanas", "semanas"], ["meses", "meses"], ["anios", "años"]];
+  const TS_RESULT = [["", "sin cerrar"], ["ganancia", "ganancia"], ["perdida", "pérdida"], ["scratch", "scratch"]];
+
+  /* Un solo sitio donde se calculan los números de una tesis. */
+  function tesisCalc(t) {
+    const n = v => { if (v == null || v === "") return null; const x = Number(v); return Number.isFinite(x) ? x : null; };
+    const corto = t.bias === "short";
+    const e = n(t.entrada), st = n(t.stop);
+    /* Riesgo por unidad en unidades de PRECIO. Un stop del lado equivocado da
+       un número negativo, y eso no es «poco riesgo»: es un plan roto. */
+    const porUnidad = e != null && st != null ? (corto ? st - e : e - st) : null;
+    const stopAlReves = porUnidad != null && porUnidad <= 0;
+    const valido = porUnidad != null && porUnidad > 0;
+    const rr = tp => { const x = n(tp); return !valido || x == null ? null : (corto ? e - x : x - e) / porUnidad; };
+    const rr1 = rr(t.tp1), rr2 = rr(t.tp2), rr3 = rr(t.tp3);
+    const cap = n(t.capital), pc = n(t.riesgoPct);
+    const riesgo = cap != null && pc != null ? cap * pc / 100 : null;
+    const distPct = valido && e ? porUnidad / Math.abs(e) : null;
+    /* En un futuro el riesgo por unidad son PUNTOS, no dólares: sin multiplicar
+       por el contrato, el tamaño sale multiplicado por el valor del punto. */
+    const act = String(t.asset || "").trim().toUpperCase();
+    const mult = t.tipo === "futuro" ? (MULT[act] || null) : 1;
+    const porUnidadUsd = valido && mult ? porUnidad * mult : null;
+    const tam = porUnidadUsd && riesgo != null ? riesgo / porUnidadUsd : null;
+    const unidad = t.tipo === "futuro" ? "contratos" : t.tipo === "crypto" ? "unidades" : "acciones";
+    /* El R del post-mortem sale de la operación real, no de lo que recuerdes. */
+    const op = t.tradeId ? coll("trades").get(t.tradeId) : null;
+    const opc = op ? tradeCalc(Object.assign({}, op)) : null;
+    const rFinal = opc ? (opc.rReal != null ? opc.rReal : null) : null;
+    return { porUnidad, porUnidadUsd, valido, stopAlReves, rr1, rr2, rr3, riesgo, distPct, tam, unidad,
+             mult, multDesconocido: t.tipo === "futuro" && act !== "" && !mult,
+             op, rFinal, pnlFinal: opc ? opc.pnlEff : null };
+  }
+
+  /* Las once secciones de la plantilla. Se editan de UNA EN UNA: la plantilla
+     misma dice «completa secciones en orden», y un formulario de ochenta campos
+     en una sola ventana no se termina nunca. Cada sección sabe además si está
+     lista, para que la ficha diga qué falta en vez de fingir que está completa. */
+  function tsSecciones() {
+    const f = (key, label, o) => Object.assign({ key, label }, o || {});
+    const ta = (key, label, o) => f(key, label, Object.assign({ type: "textarea", w: 6, rows: 2 }, o || {}));
+    return [
+      { id: "ficha", n: "", label: "Ficha rápida", listo: t => !!(t.asset && t.bias),
+        campos: () => [
+          f("name", "Nombre de la jugada", { w: 4, ph: "NVDA · ruptura post-earnings" }),
+          f("status", "Estado", { type: "select", options: TS_ESTADOS }),
+          f("asset", "Ticker / Activo", { w: 2, ph: "NVDA, BTC, MNQ" }),
+          f("tipo", "Tipo", { type: "select", w: 2, options: TS_TIPOS }),
+          f("mercado", "Mercado / Exchange", { w: 2, ph: "NASDAQ, Binance, CME" }),
+          f("horizonte", "Horizonte", { type: "select", w: 2, options: TS_HORIZ }),
+          f("estilo", "Estilo", { type: "select", w: 2, options: TS_ESTILOS }),
+          f("bias", "Sesgo", { type: "select", w: 2, options: TS_SESGOS }),
+          f("setupId", "Estrategia del playbook", { type: "select", w: 6,
+            options: [["", "sin estrategia"]].concat(coll("playbooks").items.map(x => [x.id, x.name])),
+            help: "la jugada es de una estrategia; las estadísticas de la estrategia salen del journal" }),
+        ] },
+      { id: "resumen", n: "1", label: "Resumen ejecutivo", listo: t => !!(t.tesis && t.invalida),
+        ayuda: "Cinco líneas. Si no te salen claras, la idea no está lista — lo dice tu propia plantilla.",
+        campos: () => [
+          ta("tesis", "Tesis central"),
+          ta("queFunciona", "Qué tiene que pasar para que funcione"),
+          ta("invalida", "Qué invalidaría la tesis"),
+          f("catalizador", "Catalizador principal", { w: 4, ph: "earnings, aprobación, halving" }),
+          f("catalizadorFecha", "Ventana", { type: "date", w: 2 }),
+          ta("riesgoClave", "Riesgo clave"),
+        ] },
+      { id: "contexto", n: "2", label: "Contexto y narrativa", listo: t => !!(t.macro || t.negocio),
+        campos: () => [
+          ta("macro", "Macro · inflación, tasas, USD, commodities"),
+          ta("sectorTend", "Tendencia del sector / rotaciones"),
+          ta("negocio", "Qué hace y cómo gana dinero (o qué impulsa el precio)"),
+          ta("ventaja", "Ventaja competitiva / posicionamiento"),
+          ta("ingresos", "Estructura de ingresos"),
+        ] },
+      { id: "fundamental", n: "3", label: "Análisis fundamental", listo: t => !!(t.valMetodo && t.valBase),
+        campos: () => [
+          f("chkMoat", "Moat / diferenciación clara", { type: "checkbox", w: 3 }),
+          f("chkDemanda", "Demanda sostenible", { type: "checkbox", w: 3 }),
+          f("chkPricing", "Pricing power / unit economics sanos", { type: "checkbox", w: 3 }),
+          f("chkEquipo", "Equipo / ejecución", { type: "checkbox", w: 3 }),
+          f("chkRegul", "Riesgos regulatorios entendidos", { type: "checkbox", w: 3 }),
+          f("mIngresos", "Ingresos (YoY)", { w: 2, ph: "+38%" }),
+          f("mMargen", "Margen bruto / operativo", { w: 2, ph: "74% / 52%" }),
+          f("mGuia", "Crecimiento vs. guía", { w: 2, ph: "por encima" }),
+          f("mFcf", "Flujo de caja / FCF", { w: 2 }),
+          f("mDeuda", "Deuda / liquidez", { w: 2 }),
+          f("mRoic", "ROIC / ROE", { w: 2 }),
+          f("valMetodo", "Método de valuación", { w: 3, ph: "Múltiplos / DCF / SOTP / Comparables / NVT" }),
+          f("valBase", "Valor razonable (base)", { w: 3, ph: "$180" }),
+          ta("valSupuestos", "Supuestos críticos"),
+          f("valBull", "Bull case", { w: 3 }),
+          f("valBear", "Bear case", { w: 3 }),
+          ta("catalizadores", "Catalizadores fundamentales · evento, fecha, señales previas", { rows: 3 }),
+        ] },
+      { id: "tecnico", n: "4", label: "Análisis técnico", listo: t => !!(t.nivelInval && t.patron),
+        campos: () => [
+          f("tfPrimario", "Timeframe primario", { w: 3, ph: "D / 4H / 1H / W" }),
+          f("tfConfirma", "Confirmación", { w: 3, ph: "1H" }),
+          ta("estructura", "Estructura de mercado · HH/HL, LH/LL"),
+          f("nivelInval", "Nivel clave de ruptura / invalidación", { w: 6, ph: "cierre diario bajo 168.40" }),
+          f("soportes", "Soportes", { w: 3 }),
+          f("resistencias", "Resistencias", { w: 3 }),
+          f("zonas", "Zonas de demanda / oferta", { w: 3 }),
+          f("poc", "POC / VWAP / value area", { w: 3 }),
+          ta("indicadores", "Indicadores · sólo si aportan, y qué condición quieres ver"),
+          f("patron", "Patrón", { w: 3, ph: "breakout, pullback, range, mean reversion" }),
+          ta("patronA", "Qué lo hace «A+»", { w: 3 }),
+        ] },
+      { id: "hipotesis", n: "5", label: "Hipótesis y entrada", listo: t => !!t.hipotesis,
+        ayuda: "Si ocurre X, el precio debería hacer Y porque Z. El R:R de la lista lo calcula la sección 6 — no se escribe.",
+        campos: () => [
+          ta("hipotesis", "Si ocurre X, entonces el precio debería hacer Y porque Z", { rows: 3 }),
+          f("ckFund", "Fundamental apoya la dirección", { type: "checkbox", w: 3 }),
+          f("ckCatal", "Catalizador identificado", { type: "checkbox", w: 3 }),
+          f("ckTec", "Técnica alineada · estructura + nivel", { type: "checkbox", w: 3 }),
+          f("ckVol", "Volumen confirma", { type: "checkbox", w: 3 }),
+          f("ckLiq", "Liquidez suficiente · spread / volumen", { type: "checkbox", w: 3 }),
+        ] },
+      { id: "plan", n: "6", label: "Plan de trade", listo: t => tesisCalc(t).valido,
+        ayuda: "Escribe precios. El R:R, la distancia al stop, el riesgo en dólares y el tamaño se calculan solos y se actualizan mientras escribes.",
+        campos: () => [
+          f("ordenTipo", "Tipo de orden", { type: "select", w: 2, options: [["limit", "Limit"], ["stop", "Stop"], ["market", "Market"]] }),
+          f("entrada", "Entrada ideal", { type: "number", step: "any", w: 2 }),
+          f("entradaAlt", "Entrada alternativa", { type: "number", step: "any", w: 2 }),
+          ta("disparo", "Condición de disparo"),
+          f("stop", "Stop (precio)", { type: "number", step: "any", w: 2 }),
+          ta("stopRazon", "Razón del stop · una línea", { w: 4, rows: 1 }),
+          ta("stopSenal", "Qué tiene que verse para aceptar que estoy equivocado"),
+          f("tp1", "TP1", { type: "number", step: "any", w: 2 }),
+          f("tp2", "TP2", { type: "number", step: "any", w: 2 }),
+          f("tp3", "TP3 / runner", { type: "number", step: "any", w: 2 }),
+          ta("trailing", "Trailing stop / break-even", { w: 3 }),
+          ta("salidaTiempo", "Salida por tiempo si no se mueve", { w: 3 }),
+          f("capital", "Capital total ($)", { type: "number", step: "any", w: 3 }),
+          f("riesgoPct", "Riesgo por operación (%)", { type: "number", step: "0.1", w: 3 }),
+        ] },
+      { id: "escenarios", n: "7", label: "Escenarios", listo: t => !!(t.escBaseAccion && t.escBearAccion),
+        ayuda: "Lo que importa de un escenario no es la probabilidad: es qué haces. Las tres acciones son obligatorias.",
+        campos: () => ["Base", "Bull", "Bear"].flatMap(k => {
+          const b = "esc" + k;
+          return [
+            f(b + "Prob", k + " · probabilidad (%)", { type: "number", step: "5", w: 1 }),
+            f(b + "Drivers", k + " · drivers", { w: 2 }),
+            f(b + "Precio", k + " · precio / acción esperada", { w: 1 }),
+            f(b + "Accion", k + " · QUÉ HAGO", { w: 2 }),
+          ];
+        }) },
+      { id: "riesgos", n: "8", label: "Riesgos · pre-mortem", listo: t => !!t.alertas,
+        campos: () => [
+          f("rgCompetencia", "Competencia", { w: 3 }),
+          f("rgRegulatorio", "Regulatorio", { w: 3 }),
+          f("rgMacro", "Macro", { w: 3 }),
+          f("rgEjecucion", "Ejecución / producto", { w: 3 }),
+          f("rgFakeout", "Fakeout / liquidity sweep", { w: 3 }),
+          f("rgGap", "Gap risk / noticias", { w: 3 }),
+          ta("alertas", "Señales de alerta temprana · qué me haría reducir o salir", { rows: 3 }),
+        ] },
+      { id: "fuentes", n: "9", label: "Fuentes y evidencias", listo: t => !!t.fuentes,
+        campos: () => [
+          ta("fuentes", "Links a reportes, filings, posts, notas, charts", { rows: 4 }),
+          f("datosFecha", "Fecha de los datos usados", { type: "date", w: 3 }),
+        ] },
+      { id: "diario", n: "10", label: "Diario de seguimiento", listo: t => tsDiario(t).length > 0, diario: true,
+        ayuda: "Una entrada por revisión. La nota emocional no es decoración: sirve para ver si las decisiones malas caen siempre en los días tensos.",
+        campos: () => [] },
+      { id: "postmortem", n: "11", label: "Cierre · post-mortem", listo: t => !!t.leccion,
+        ayuda: "La R no se escribe: sale de la operación enlazada. Si no hay operación, no hay R.",
+        campos: () => [
+          f("resultado", "Resultado", { type: "select", w: 2, options: TS_RESULT }),
+          f("tradeId", "Operación en el journal", { type: "select", w: 4,
+            options: [["", "sin enlazar"]].concat(coll("trades").items.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 60)
+              .map(x => [x.id, `${dmy(x.date)} · ${x.symbol || x.asset || "—"} · ${x.dir || x.op || ""}`])),
+            help: "de aquí sale la R real y el P&L; escribirlos a mano crearía una segunda verdad" }),
+          f("ejecutoPlan", "¿Se ejecutó el plan?", { type: "checkbox", w: 3 }),
+          ta("salioBien", "Qué salió bien", { w: 3 }),
+          ta("salioMal", "Qué salió mal", { w: 3 }),
+          ta("leccion", "Lección · una frase"),
+          ta("reglaNueva", "Regla nueva / ajuste al proceso"),
+        ] },
+    ];
+  }
+  function tsSeccion(id) { return tsSecciones().find(x => x.id === id); }
+  function tsDiario(t) { return Array.isArray(t.diario) ? t.diario : []; }
+
   /* =============================== PLAYBOOK =============================== */
   const pb = { view: "futuros", q: "", status: "", assets: null };
   const PB_STATUS = [["activo", "activo"], ["prueba", "en prueba"], ["retirado", "retirado / archivado"]];
@@ -7776,7 +8020,16 @@
     if (/accion|acción|acciones|etf|índice|indice|stock|vti|voo|spy|qqq|schd|dca/.test(m)) return "acciones";
     return "otros";
   }
-  $("pbNav").addEventListener("click", e => { const b = e.target.closest(".tabbtn"); if (!b) return; pb.view = b.dataset.v; renderPlaybook(); });
+  $("pbNav").addEventListener("click", e => { const b = e.target.closest(".tabbtn"); if (!b) return; pb.view = b.dataset.v; pb.status = ""; pintaPbEstados(); renderPlaybook(); });
+  /* Los estados de una estrategia (activo/prueba/retirado) y los de una tesis
+     (watchlist/planificada/…) no son los mismos. Con el selector fijo, filtrar
+     por «activos» en Tesis escondía todo y parecía que no había nada. */
+  function pintaPbEstados() {
+    const sel = $("pbStatus"); if (!sel) return;
+    const opts = pb.view === "tesis" ? TS_ESTADOS : PB_STATUS;
+    sel.innerHTML = `<option value="">todos</option>` + opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+    sel.value = pb.status || "";
+  }
   $("pbSearch").addEventListener("input", e => { pb.q = e.target.value.trim().toLowerCase(); renderPlaybook(); });
   $("pbStatus").addEventListener("change", e => { pb.status = e.target.value; renderPlaybook(); });
 
@@ -7864,6 +8117,36 @@
       { key: "notes", label: "Notas", type: "textarea", w: 6, rows: 2 },
     ]);
   }
+
+  function tsAccion(act, id, btn) {
+    const t = coll("tesis").get(id); if (!t) return;
+    if (act === "tssec") { const sec = tsSeccion(btn.dataset.sec); if (sec && sec.diario) tsAccion("tsnota", id, btn); else abreSeccion(t, btn.dataset.sec); }
+    else if (act === "tsdel") { if (!armed(btn)) return; coll("tesis").remove(t.id); }
+    else if (act === "tsdup") {
+      const c = Object.assign({}, t, { id: uid("ts"), name: (t.name || t.asset || "tesis") + " (copia)", status: "watchlist",
+        createdAt: Date.now(), updatedAt: Date.now(), diario: [], tradeId: "", resultado: "", leccion: "" });
+      coll("tesis").set(c.id, c);
+    } else if (act === "tsdnota") {
+      const i = Number(btn.dataset.i);
+      const orden = tsDiario(t).slice().sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
+      const q = orden[i]; if (!q) return; if (!armed(btn)) return;
+      coll("tesis").set(t.id, Object.assign({}, t, { diario: tsDiario(t).filter(x => x !== q), updatedAt: Date.now() }));
+    } else if (act === "tsnota") {
+      openEditor({ title: "Seguimiento · " + (t.name || t.asset),
+        fields: [
+          { key: "fecha", label: "Fecha", type: "date", w: 2 },
+          { key: "emocion", label: "Nota emocional (0–10)", type: "number", step: "1", w: 2, help: "10 es máxima tensión; sirve para ver si decides bajo presión" },
+          { key: "obs", label: "Observación", type: "textarea", w: 6, rows: 2 },
+          { key: "accion", label: "Acción tomada", type: "textarea", w: 6, rows: 2 },
+        ],
+        values: { fecha: state.today, emocion: "", obs: "", accion: "" },
+        validate: v => String(v.obs || "").trim() ? null : "Escribe qué observaste",
+        onSave: v => coll("tesis").set(t.id, Object.assign({}, t, {
+          diario: tsDiario(t).concat([{ fecha: v.fecha || state.today, obs: v.obs, accion: v.accion, emocion: v.emocion }]),
+          updatedAt: Date.now() })) });
+    }
+  }
+
   function pbConditions(p) { return String(p && p.conditions || "").split("\n").map(x => x.trim()).filter(Boolean); }
   function openPlaybook(p, seed) {
     const kind = p ? pbKindOf(p) : (seed && seed.kind) || pb.view; const isNew = !p;
@@ -7883,8 +8166,9 @@
     });
     void fam;
   }
-  $("pbNew").addEventListener("click", () => openPlaybook(null));
+  $("pbNew").addEventListener("click", () => { if (pb.view === "tesis") tsNuevo(); else openPlaybook(null); });
   $("pbTemplate").addEventListener("click", () => {
+    if (pb.view === "tesis") { tsNuevo(); return; }
     const list = PB_TEMPLATES[pb.view] || [];
     if (!list.length) { flash(`Todavía no hay plantillas para ${kindDef(pb.view).label}. Crea la primera a mano.`); openPlaybook(null); return; }
     openEditor({ title: "Plantilla de " + kindDef(pb.view).label, fields: [{ key: "t", label: "Plantilla", type: "select", w: 6, options: list.map((t, i) => [String(i), t.name]) }], values: { t: "0" },
@@ -7901,6 +8185,158 @@
       onSave: v => { const a = JSON.parse(v.j); let n = 0; for (const q of a) { if (!q || !q.name) continue; const id = coll("playbooks").get(q.id) ? uid("p") : (q.id || uid("p")); const k = PB_KINDS.some(x => x.id === q.kind) ? q.kind : pbKindOf(q); coll("playbooks").set(id, Object.assign({}, q, { id, kind: k, type: familyOf(k), createdAt: Date.now(), order: Date.now() + n })); n++; } flash(`${n} importados`); } });
     $("edSave").textContent = "Importar"; const obs = new MutationObserver(() => { if (!ov.classList.contains("open")) { $("edSave").textContent = "Guardar"; obs.disconnect(); } }); obs.observe(ov, { attributes: true, attributeFilter: ["class"] });
   });
+
+  /* ───────── tesis · edición por secciones y ficha ───────── */
+  function tsNuevo() {
+    const t = { id: uid("ts"), status: "watchlist", tipo: "accion", bias: "long", estilo: "swing",
+                horizonte: "semanas", ordenTipo: "limit", createdAt: Date.now(), updatedAt: Date.now() };
+    abreSeccion(t, "ficha", true);
+  }
+  function abreSeccion(t, secId, esNueva) {
+    const sec = tsSeccion(secId); if (!sec) return;
+    openEditor({
+      title: (esNueva ? "Nueva tesis · " : "") + (sec.n ? sec.n + ") " : "") + sec.label,
+      fields: (sec.ayuda ? [{ key: "_ayuda", label: sec.ayuda, type: "nota", w: 6 }] : []).concat(sec.campos()),
+      values: Object.assign({}, t),
+      validate: v => secId === "ficha" && !String(v.asset || "").trim() ? "Falta el ticker o activo" : null,
+      onSave: v => {
+        const rec = Object.assign({}, t, v, { id: t.id, createdAt: t.createdAt || Date.now(), updatedAt: Date.now() });
+        if (!String(rec.name || "").trim()) rec.name = String(rec.asset || "").toUpperCase();
+        coll("tesis").set(rec.id, rec);
+        if (pb.view !== "tesis") { pb.view = "tesis"; renderPlaybook(); }
+      },
+      onDelete: esNueva ? null : () => coll("tesis").remove(t.id),
+      /* El plan enseña sus cuentas MIENTRAS escribes. Un R:R que aparece
+         después de guardar llega tarde: la decisión ya se tomó. */
+      after: secId !== "plan" ? null : (el, vals) => {
+        const caja = document.createElement("div");
+        caja.className = "tsderiv"; caja.id = "tsDeriv"; el.appendChild(caja);
+        const pinta = () => {
+          const v = Object.assign({}, vals);
+          ["entrada", "stop", "tp1", "tp2", "tp3", "capital", "riesgoPct"].forEach(k => {
+            const c = $("ef_" + k); if (c) v[k] = c.value;
+          });
+          caja.innerHTML = tsDerivHtml(v);
+        };
+        ["entrada", "stop", "tp1", "tp2", "tp3", "capital", "riesgoPct"].forEach(k => {
+          const c = $("ef_" + k); if (c) c.addEventListener("input", pinta);
+        });
+        pinta();
+      },
+    });
+  }
+  function tsDerivHtml(t) {
+    const c = tesisCalc(t);
+    const nR = x => x == null ? "—" : (x >= 0 ? "" : "−") + Math.abs(x).toFixed(2) + "R";
+    if (c.stopAlReves) return `<p class="tswarn">El stop está del lado equivocado para un ${t.bias === "short" ? "corto" : "largo"}. Con ese par de precios no hay riesgo que medir, y todo lo de abajo saldría al revés.</p>`;
+    if (!c.valido) return `<p class="tshint">Escribe entrada y stop y aquí salen el R:R, la distancia, el riesgo en dólares y el tamaño. Ninguno de los cuatro se escribe a mano.</p>`;
+    const malRR = c.rr1 != null && c.rr1 < 2;
+    return `<div class="tsgrid">
+      ${tsCel("R:R a TP1", nR(c.rr1), malRR ? "neg" : "pos", malRR ? "por debajo de 2:1 — tu propia lista lo prohíbe" : "cumple tu mínimo de 2:1")}
+      ${c.rr2 != null ? tsCel("a TP2", nR(c.rr2), "", "segundo objetivo") : ""}
+      ${c.rr3 != null ? tsCel("a TP3", nR(c.rr3), "", "runner") : ""}
+      ${tsCel("Distancia al stop", c.distPct == null ? "—" : (c.distPct * 100).toFixed(2) + "%", "", `${c.porUnidad.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")} por unidad`)}
+      ${tsCel("Riesgo", c.riesgo == null ? "—" : money(c.riesgo, 2), c.riesgo == null ? "dim" : "warn", c.riesgo == null ? "falta capital o riesgo %" : "lo que pierdes si salta el stop")}
+      ${tsCel("Tamaño", c.tam == null ? "—" : (c.tam >= 10 ? Math.floor(c.tam) : c.tam.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")), c.tam == null ? "dim" : "", c.multDesconocido ? "contrato desconocido: sin multiplicador no hay tamaño" : c.tam == null ? "falta capital o riesgo %" : c.unidad + (c.mult > 1 ? ` · ×${c.mult} por punto` : ""))}
+    </div>`;
+  }
+  function tsCel(lab, val, cls, sub) {
+    return `<div class="tsc"><span class="lab">${esc(lab)}</span><b class="${cls || ""}">${esc(val)}</b><i>${esc(sub || "")}</i></div>`;
+  }
+  function tsProgreso(t) {
+    const secs = tsSecciones();
+    const hechas = secs.filter(x => { try { return x.listo(t); } catch (e) { return false; } });
+    return { hechas: hechas.length, total: secs.length, faltan: secs.filter(x => !hechas.includes(x)) };
+  }
+  function renderTesis() {
+    $("pbKindNote").textContent = "Una tesis por jugada: este activo, este precio, esta ventana, este post-mortem. Una estrategia del playbook se reutiliza; una tesis se cierra. Las secciones se completan en orden, y el R:R, el riesgo, el tamaño y la R final se calculan — no se escriben.";
+    $("pbNew").textContent = "+ Nueva tesis";
+    let items = coll("tesis").items.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    if (pb.status) items = items.filter(t => t.status === pb.status);
+    if (pb.q) items = items.filter(t => JSON.stringify([t.name, t.asset, t.tesis, t.hipotesis, t.leccion]).toLowerCase().includes(pb.q));
+    const el = $("pbCards");
+    if (!items.length) {
+      el.innerHTML = `<p class="empty">${coll("tesis").items.length ? "Nada con ese filtro." : "Sin tesis todavía. Pulsa <code>+ Nueva tesis</code>: se empieza por la ficha y el resumen en cinco líneas, y si no te salen claras la idea no está lista."}</p>`;
+      return;
+    }
+    el.innerHTML = items.map(t => {
+      const c = tesisCalc(t), pr = tsProgreso(t), secs = tsSecciones();
+      const est = TS_ESTADOS.find(x => x[0] === t.status) || TS_ESTADOS[0];
+      const nR = x => x == null ? "—" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2) + "R";
+      const cerrada = t.status === "cerrada";
+      const kpis = [];
+      if (c.valido) {
+        kpis.push(kpi("R:R a TP1", c.rr1 == null ? "—" : c.rr1.toFixed(2) + "R", c.rr1 == null ? "dim" : c.rr1 >= 2 ? "good" : "bad", c.rr1 != null && c.rr1 < 2 ? "por debajo de 2:1" : "planeado"));
+        kpis.push(kpi("Riesgo", c.riesgo == null ? "—" : money(c.riesgo, 2), c.riesgo == null ? "dim" : "warn", c.distPct == null ? "" : (c.distPct * 100).toFixed(2) + "% al stop"));
+        kpis.push(kpi("Tamaño", c.tam == null ? "—" : (c.tam >= 10 ? String(Math.floor(c.tam)) : c.tam.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")), c.tam == null ? "dim" : "", c.tam == null ? "falta capital" : c.unidad));
+      }
+      if (cerrada || c.op) kpis.push(kpi("R real", nR(c.rFinal), c.rFinal == null ? "dim" : c.rFinal > 0 ? "good" : c.rFinal < 0 ? "bad" : "", c.op ? "de la operación enlazada" : "sin operación enlazada"));
+      const falta = pr.faltan.filter(x => x.id !== "postmortem" || cerrada);
+      return `<div class="card ts ${t.status === "cancelada" ? "retired" : ""}" data-id="${t.id}">
+        <div class="ch"><h3>${esc(t.name || t.asset || "sin nombre")}</h3>
+          <select class="pbst" data-act="tsst" aria-label="Estado" style="font-size:11px;padding:2px 22px 2px 6px">${TS_ESTADOS.map(([v, l]) => `<option value="${v}" ${t.status === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div class="chips"><span class="chip ${TS_EST_CLS[t.status] === "good" ? "good" : TS_EST_CLS[t.status] === "warn" ? "warn" : ""}">${esc(est[1])}</span>
+          ${t.asset ? `<span class="chip">${esc(String(t.asset).toUpperCase())}</span>` : ""}
+          ${t.tipo ? `<span class="chip">${esc((TS_TIPOS.find(x => x[0] === t.tipo) || ["", t.tipo])[1])}</span>` : ""}
+          <span class="chip ${t.bias === "short" ? "warn" : "inv"}">${t.bias === "short" ? "Short" : "Long"}</span>
+          ${t.estilo ? `<span class="chip">${esc((TS_ESTILOS.find(x => x[0] === t.estilo) || ["", t.estilo])[1])}</span>` : ""}
+          ${t.mercado ? `<span class="chip">${esc(t.mercado)}</span>` : ""}
+          ${t.setupId && coll("playbooks").get(t.setupId) ? `<span class="chip">${esc(coll("playbooks").get(t.setupId).name)}</span>` : ""}</div>
+        ${kpis.length ? `<div class="kpis">${kpis.join("")}</div>` : ""}
+        ${c.stopAlReves ? `<p class="tswarn">El stop está del lado equivocado para un ${t.bias === "short" ? "corto" : "largo"}.</p>` : ""}
+        ${t.tesis ? `<div class="kv"><b>tesis</b><span>${esc(t.tesis)}</span>${t.invalida ? `<b>invalida</b><span>${esc(t.invalida)}</span>` : ""}${t.catalizador ? `<b>catalizador</b><span>${esc(t.catalizador)}${t.catalizadorFecha ? " · " + esc(dmy(t.catalizadorFecha)) : ""}</span>` : ""}${t.leccion ? `<b>lección</b><span>${esc(t.leccion)}</span>` : ""}</div>` : ""}
+        <div class="tsprog"><span class="lab">Secciones</span>
+          <div class="tssecs">${secs.map(x => { const ok = (() => { try { return x.listo(t); } catch (e) { return false; } })();
+            return `<button type="button" class="tssec ${ok ? "ok" : ""}" data-act="tssec" data-sec="${x.id}" title="${esc(x.label)}">${x.n || "·"}</button>`; }).join("")}</div>
+          <span class="stale">${pr.hechas}/${pr.total}${falta.length ? ` · sigue: ${esc((falta[0].n ? falta[0].n + ") " : "") + falta[0].label.toLowerCase())}` : " · completa"}</span></div>
+        ${tsDiarioHtml(t)}
+        <div class="cf" style="justify-content:space-between;flex-wrap:wrap;gap:4px">
+          <div class="tools"><button type="button" class="icon del" data-act="tsdel" title="Borrar">×</button></div>
+          <div class="tools"><button type="button" class="btn sm ghost" data-act="tsnota">+ Seguimiento</button><button type="button" class="btn sm ghost" data-act="tsdup">Duplicar</button><button type="button" class="btn sm" data-act="tssec" data-sec="ficha">Editar</button></div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  function tsDiarioHtml(t) {
+    const d = tsDiario(t); if (!d.length) return "";
+    return `<div class="tsdiario"><b class="lab" style="margin:0 0 3px">Seguimiento (${d.length})</b>${d.slice().sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || ""))).map((x, i) =>
+      `<div class="tsd"><span class="f">${esc(dmy(x.fecha))}</span><span class="o">${esc(x.obs || "")}</span>${x.accion ? `<span class="a">${esc(x.accion)}</span>` : ""}${x.emocion != null && x.emocion !== "" ? `<span class="e ${Number(x.emocion) >= 7 ? "neg" : ""}">ánimo ${esc(String(x.emocion))}/10</span>` : ""}<button type="button" class="icon del" data-act="tsdnota" data-i="${i}" title="Quitar">×</button></div>`).join("")}</div>`;
+  }
+
+
+  /* ───────── TES · la puerta única de las tesis ─────────
+     Mismo patrón que FUT y que INV: una sola superficie por la que entran y
+     salen los datos, para que nadie toque `coll("tesis")` por su cuenta ni
+     recalcule fuera de `tesisCalc`. */
+  const TES = {
+    all() { return coll("tesis").items.slice(); },
+    get(id) { return coll("tesis").get(id) || null; },
+    sections() { return tsSecciones().map(x => ({ id: x.id, n: x.n, label: x.label })); },
+    create(t) {
+      const rec = Object.assign({ status: "watchlist", tipo: "accion", bias: "long", estilo: "swing",
+        horizonte: "semanas", ordenTipo: "limit" }, t || {},
+        { id: (t && t.id) || uid("ts"), createdAt: Date.now(), updatedAt: Date.now() });
+      if (!String(rec.name || "").trim()) rec.name = String(rec.asset || "").toUpperCase();
+      coll("tesis").set(rec.id, rec); return rec;
+    },
+    update(id, patch) {
+      const t = coll("tesis").get(id); if (!t) return null;
+      const rec = Object.assign({}, t, patch || {}, { id: t.id, createdAt: t.createdAt, updatedAt: Date.now() });
+      coll("tesis").set(id, rec); return rec;
+    },
+    remove(id) { coll("tesis").remove(id); },
+    addNote(id, nota) {
+      const t = coll("tesis").get(id); if (!t) return null;
+      return TES.update(id, { diario: tsDiario(t).concat([Object.assign({ fecha: state.today }, nota || {})]) });
+    },
+    /* Acepta un id o el objeto entero: al editar se necesita calcular sobre
+       valores que aún no se han guardado. */
+    calc(x) { const t = typeof x === "string" ? coll("tesis").get(x) : x; return t ? tesisCalc(t) : null; },
+    progress(id) { const t = coll("tesis").get(id); if (!t) return null; const pr = tsProgreso(t);
+      return { hechas: pr.hechas, total: pr.total, faltan: pr.faltan.map(z => ({ id: z.id, n: z.n, label: z.label })) }; },
+  };
+  window.TES = TES;
+
   function pbSorted(kind) { return coll("playbooks").items.filter(p => pbKindOf(p) === kind).sort((a, b) => (a.status === "retirado") - (b.status === "retirado") || (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0)); }
   const LIQ_LABEL = { inmediata: "inmediata", dias: "días", semanas: "semanas", meses: "meses", anios: "años" };
   function pbMetricsHtml(p, kind) {
@@ -7922,10 +8358,18 @@
     }
     return cells.length ? `<div class="kpis">${cells.join("")}</div>` : "";
   }
+  function pintaPbNav() {
+    /* Las secciones de PB_KINDS son clases de activo. «Tesis» no lo es —es otra
+       entidad— así que va separada, no como una novena clase. */
+    const nt = coll("tesis").items.length;
+    $("pbNav").innerHTML = PB_KINDS.map(k => { const n = coll("playbooks").items.filter(x => pbKindOf(x) === k.id).length; return `<button type="button" class="tabbtn ${k.id === pb.view ? "active" : ""}" data-v="${k.id}">${esc(k.label)}${n ? `<span class="n">${n}</span>` : ""}</button>`; }).join("")
+      + `<span class="navsep" aria-hidden="true"></span><button type="button" class="tabbtn ${pb.view === "tesis" ? "active" : ""}" data-v="tesis" title="Una por jugada">Tesis${nt ? `<span class="n">${nt}</span>` : ""}</button>`;
+  }
   function renderPlaybook() {
+    if (pb.view === "tesis") { pintaPbNav(); renderTesis(); return; }
     if (!PB_KINDS.some(k => k.id === pb.view)) pb.view = "futuros";
     const kind = pb.view, def = kindDef(kind), fam = def.family, inv = fam === "inversion";
-    $("pbNav").innerHTML = PB_KINDS.map(k => { const n = coll("playbooks").items.filter(x => pbKindOf(x) === k.id).length; return `<button type="button" class="tabbtn ${k.id === kind ? "active" : ""}" data-v="${k.id}">${esc(k.label)}${n ? `<span class="n">${n}</span>` : ""}</button>`; }).join("");
+    pintaPbNav();
     $("pbKindNote").textContent = def.note;
     $("pbNew").textContent = "+ Nuevo en " + def.label;
     let items = pbSorted(kind);
@@ -7958,12 +8402,17 @@
       </div>`;
     }).join("");
   }
-  $("pbCards").addEventListener("change", e => { const sel = e.target.closest("select[data-act='status']"); if (!sel) return; const p = coll("playbooks").get(sel.closest(".card").dataset.id); if (p) coll("playbooks").set(p.id, Object.assign({}, p, { status: sel.value })); });
+  $("pbCards").addEventListener("change", e => {
+    const ts = e.target.closest("select[data-act='tsst']");
+    if (ts) { const t = coll("tesis").get(ts.closest(".card").dataset.id); if (t) coll("tesis").set(t.id, Object.assign({}, t, { status: ts.value, updatedAt: Date.now() })); return; }
+    const sel = e.target.closest("select[data-act='status']"); if (!sel) return; const p = coll("playbooks").get(sel.closest(".card").dataset.id); if (p) coll("playbooks").set(p.id, Object.assign({}, p, { status: sel.value })); });
   $("pbCards").addEventListener("click", async e => {
     const btn = e.target.closest("button[data-act]"); const fig = e.target.closest("figure.pbimg");
     if (!btn && fig && !e.target.closest("button")) { const img = fig.querySelector("img"); openLightbox(img.src, img.alt); return; }
     if (!btn) return;
-    const card = btn.closest(".card"); const p = coll("playbooks").get(card.dataset.id); if (!p) return; const act = btn.dataset.act;
+    const card = btn.closest(".card"); const act = btn.dataset.act;
+    if (act.startsWith("ts")) { tsAccion(act, card.dataset.id, btn); return; }
+    const p = coll("playbooks").get(card.dataset.id); if (!p) return;
     if (act === "edit") openPlaybook(p);
     else if (act === "dup") { const c = Object.assign({}, p, { id: uid("p"), name: p.name + " (copia)", createdAt: Date.now(), order: (p.order ?? Date.now()) + 1, status: "prueba" }); delete c.images; coll("playbooks").set(c.id, c); }
     else if (act === "ver") { const nv = Object.assign({}, p, { id: uid("p"), version: (p.version || 1) + 1, parentId: p.id, createdAt: Date.now(), order: (p.order ?? Date.now()) + 1, status: "prueba", changelog: "" }); coll("playbooks").set(p.id, Object.assign({}, p, { status: "retirado" })); coll("playbooks").set(nv.id, nv); setTimeout(() => openPlaybook(nv), 100); }
@@ -9089,6 +9538,9 @@
     ["markets", "mercado propio", "mercados propios"],
     ["scenarios", "escenario", "escenarios"],
     ["risk", "escenario de riesgo", "escenarios de riesgo"],
+    /* Sin esta línea el respaldo no se lleva las tesis: exportar diría «todo» y
+       dejaría fuera el trabajo de investigación, que es lo más caro de rehacer. */
+    ["tesis", "tesis", "tesis"],
   ];
 
   /* CATÁLOGO DE ZONAS. Cada zona es un trozo de pantalla con nombre y la función
@@ -9174,6 +9626,7 @@
   coll("markets").subscribe(() => fanout([Z.invest, Z.destinos]));
   coll("positions").subscribe(() => fanout([Z.invest, Z.contadores]));
   coll("watch").subscribe(() => fanout([Z.invest]));
+  coll("tesis").subscribe(() => fanout([Z.playbook, Z.contadores]));
   coll("scenarios").subscribe(() => fanout([Z.escenarios]));
   coll("risk").subscribe(() => fanout([Z.riesgosGuardados]));
 

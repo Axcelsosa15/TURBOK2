@@ -1099,6 +1099,77 @@ venta tiene que restar, y la cartera tiene que marcar lo que una posición
 derivada ya contó. Comprobado además que el guardián **falla** cuando se
 reintroduce el defecto: uno que no puede ponerse rojo no vigila nada.
 
+## Tesis: una por jugada, y las cifras que no se escriben
+
+La plantilla de la que sale esta sección empieza así: *«Crea una copia por cada
+jugada»*. Eso choca de frente con lo que el Playbook ya guardaba.
+
+Una entrada del Playbook es una **estrategia**: reutilizable, sin ticker y sin
+precio de entrada («Setup C · PDL Sweep Long»). Sus estadísticas salen de todas
+las operaciones que la usaron. Una **tesis** es una jugada concreta: este
+activo, este precio, esta ventana, este post-mortem. Meter las dos en la misma
+ficha rompe las dos — cada estrategia pasaría a tener un solo trade, y el
+journal perdería el enlace `setupId` del que salen su WR, su R medio y su PF.
+
+Así que la tesis vive aparte, en su propia colección, y **apunta** a una
+estrategia. En el Playbook aparece detrás de un separador, no como una novena
+clase de activo, porque no lo es.
+
+### Cinco cifras que la plantilla pedía a mano
+
+La plantilla pide escribir «Capital total», «Riesgo $», «Tamaño recomendado»,
+«R:R ≥ 2:1» y «R (+2.3R)». Cabina sabe calcular las cinco. Un número escrito a
+mano al lado de uno calculado es exactamente la avería que esta misma sesión
+arregló tres veces en Inversiones: dos fuentes para una cifra, y la escrita no
+se actualiza nunca.
+
+Aquí se **escribe el precio** y se **deriva el resto**, en vivo, mientras
+escribes — un R:R que aparece después de guardar llega tarde, porque la decisión
+ya se tomó:
+
+| Se escribe | Se deriva |
+|---|---|
+| entrada, stop, TP1/2/3 | R:R de cada objetivo, distancia al stop en % |
+| capital, riesgo por operación (%) | riesgo en dólares, tamaño de la posición |
+| operación enlazada del journal | R real y P&L del post-mortem |
+
+Tres detalles que decidían si el número era correcto o sólo plausible:
+
+- **Un stop del lado equivocado no es «poco riesgo».** Con un largo cuyo stop
+  está por encima de la entrada, la resta da negativo y todo lo demás saldría al
+  revés. La ficha lo dice y **esconde** las cifras derivadas en vez de mentir con
+  ellas.
+- **En un futuro el riesgo por unidad son puntos, no dólares.** Sin multiplicar
+  por el contrato —el multiplicador sale de `QE.CONTRACTS`, no de una tabla
+  nueva— el tamaño sale multiplicado por el valor del punto: 10 contratos de MNQ
+  donde caben 5.
+- **La R del post-mortem sale de la operación enlazada.** Sin operación, no hay
+  R: no se inventa una.
+
+Y el R:R por debajo de 2:1 se marca en rojo, porque lo prohíbe la lista de
+entrada de la propia plantilla y su lista de errores comunes dice, textualmente,
+«no medir R/R antes de entrar».
+
+### Once secciones, de una en una
+
+La plantilla dice *«completa secciones en orden»* y *«si algo no puedes
+escribirlo en 2–3 líneas claras, probablemente la idea no está lista»*. Un
+formulario de ochenta campos en una sola ventana contradice las dos cosas: no se
+termina nunca y no obliga a nada.
+
+Cada sección se edita por separado, la ficha enseña doce puntos —uno por
+sección, verde cuando está lista— y el pie nombra **la siguiente**, no todas.
+La sección 10 es el diario de seguimiento, con su nota emocional de 0 a 10, que
+no es decoración: sirve para ver si las decisiones malas caen siempre en los
+días tensos.
+
+`TES` es su puerta única, igual que `FUT` para futuros e `INV` para inversiones.
+`test/tesis.mjs` comprueba las 29 afirmaciones de arriba, incluida la que casi
+se me escapa: el bundle de respaldo ya se llevaba las tesis (`buildBundle`
+recorre `COLLS`), pero el panel las contaba con una lista aparte que no las
+incluía. El resumen decía «1 operación» y no mencionaba la investigación, que es
+lo más caro de rehacer.
+
 ## Cómo fluye un dato
 
 No hay framework: una colección en memoria es la única fuente y todo lo demás
