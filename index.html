@@ -8411,22 +8411,44 @@
     const income = cobros;
     const realized = ventas + cobros;
     const contributed = ops.filter(t => t.op === "compra" || t.op === "aporte").reduce((s, t) => s + (t.qty || 0) * (t.price || 0) + (t.fees || 0), 0);
-    const totalRet = cost ? (unreal + realized) / cost : null;
     /* (valor − coste) / coste es retorno simple sobre coste total, y con aportes
        repartidos en el tiempo NO es tu rentabilidad: el dólar de enero trabajó
        doce meses y el de diciembre cero. Medido con un DCA de $200/mes sobre un
        activo que sube 10%, esta fórmula dice 5,34% cuando el IRR real es 10%.
        Casi la mitad — y el error empuja a abandonar una estrategia que funciona.
        El IRR sí es exacto: sólo necesita flujos fechados y el valor de hoy. */
-    const flujosCartera = ops.map(t => ({
-      fecha: t.date,
-      tipo: t.op === "venta" ? "venta" : t.op === "dividendo" ? "dividendo" : t.op === "costo" ? "costo" : "compra",
-      monto: (Number(t.qty) || 0) * (Number(t.price) || 0) + (Number(t.fees) || 0),
-    })).filter(f => f.monto && f.fecha);
+    /* El importe de un flujo depende del tipo, y esa línea lo ignoraba.
+       Un dividendo NO tiene cantidad ni precio — su importe vive en `pnl` — así
+       que `qty × price + fees` daba cero y el `.filter(f => f.monto)` lo tiraba
+       antes de llegar al motor. Resultado: el IRR de la cartera, que es el
+       titular de toda la pestaña, se calculaba sin un solo dividendo. Con $400
+       cobrados, la cartera decía 2.34% anual en vez de lo que de verdad rindió.
+
+       Y las comisiones iban SUMADAS en los dos sentidos: en una compra
+       encarecen (correcto), pero en una venta reducen lo que recuperas, no lo
+       aumentan. */
+    const flujosCartera = ops.map(t => {
+      const bruto = (Number(t.qty) || 0) * (Number(t.price) || 0), fe = Number(t.fees) || 0;
+      if (t.op === "dividendo") return { fecha: t.date, tipo: "dividendo", monto: (Number(t.pnl) || 0) - fe };
+      if (t.op === "venta")     return { fecha: t.date, tipo: "venta",     monto: bruto - fe };
+      if (t.op === "costo")     return { fecha: t.date, tipo: "costo",     monto: bruto + fe };
+      return { fecha: t.date, tipo: "compra", monto: bruto + fe };
+    }).filter(f => f.monto > 0 && f.fecha);
     const carteraR = flujosCartera.length && cur >= 0
       ? QE.analizarCartera({ ops: flujosCartera, valorActual: cur, hasta: state.today })
       : null;
     const cartera = carteraR && carteraR.ok ? carteraR.value : null;
+    /* Había DOS retornos simples: éste, sobre el coste de lo que sigue abierto,
+       y el del motor, sobre todo lo aportado. La tarjeta enseñaba el primero y
+       la nota «difieren N pts» medía contra el segundo: 7.3% al lado de una
+       brecha de 1,4 pts que en realidad era de 4,9. El mismo defecto que tenía
+       el rendimiento por posición, en la tarjeta de al lado.
+
+       Manda el del motor, que es el que mide sobre lo que de verdad pusiste.
+       El de la app queda sólo para cuando no hay flujos que analizar. */
+    const totalRet = cartera && cartera.retornoSimple != null
+      ? cartera.retornoSimple
+      : (cost ? (unreal + realized) / cost : null);
     const sorted = rows.slice().sort((a, b) => b.val - a.val);
     const concentration = cur > 0 && sorted.length ? sorted[0].val / cur : null;
     const noPlan = ps.filter(p => !String(p.exitPlan || "").trim()).length;
@@ -8451,10 +8473,25 @@
         <div class="v ${s.totalRet == null ? "" : s.totalRet > 0 ? "good" : s.totalRet < 0 ? "bad" : ""}">${pctSigno(s.totalRet)}</div>
         <div class="s">${c && c.irrError ? esc(c.irrError.message) : "sobre el coste · sin fechas suficientes para anualizar"}</div></div>`;
     }
-    const brecha = c.brecha != null && Math.abs(c.brecha) > 0.005;
+    /* «Difieren 2,5 pts» no dice nada si no dice hacia dónde ni por qué, y las
+       dos cifras no se separan siempre por el mismo motivo:
+
+       · IRR POR ENCIMA del simple → aportes repartidos. El simple divide entre
+         todo el dinero metido, incluido el de la semana pasada, que no tuvo
+         tiempo de trabajar.
+       · IRR POR DEBAJO del simple → el simple es TOTAL, no anual. Un 6,7% en
+         año y medio es un 4,3% al año, y ninguno de los dos está mal.
+
+       Sin esa frase, quien ve 4,26% al lado de 6,73% piensa que uno de los dos
+       está roto. */
+    const d = c.brecha != null && Math.abs(c.brecha) > 0.005 ? c.brecha : null;
+    const pts = d == null ? "" : Math.abs(d * 100).toFixed(1) + " pts";
+    const porque = d == null ? ""
+      : d > 0 ? ` · <span class="dim">${pts} menos: el simple reparte entre todo lo aportado, también lo de ayer</span>`
+      : ` · <span class="dim">${pts} más, pero es total y no anual${c.anios ? ` — llevas ${c.anios.toFixed(1)} años` : ""}</span>`;
     return `<div class="tile"><span class="lab">Rentabilidad anual (IRR)</span>
       <div class="v ${irr > 0 ? "good" : irr < 0 ? "bad" : ""}">${pctSigno(irr)}</div>
-      <div class="s">simple sobre coste ${pctSigno(s.totalRet)}${brecha ? ` · <span class="dim">difieren ${Math.abs(c.brecha * 100).toFixed(1)} pts</span>` : ""}</div></div>`;
+      <div class="s">simple sobre lo aportado ${pctSigno(s.totalRet)}${porque}</div></div>`;
   }
 
   function sig2(v) { return (v >= 0 ? "+" : "") + money(v, 2); }

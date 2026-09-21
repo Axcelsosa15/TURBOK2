@@ -974,9 +974,10 @@ rindió un **6%**, no un 2%. Cabina enseñaba el 2%.
 
 El motivo era un filtro de una línea: `posLotes` recorría las operaciones de
 un activo quedándose con `compra | aporte | venta`. Los dividendos quedaban
-fuera. Sumaban en el IRR de la cartera — ahí sí entraban como flujo — pero no
-en la posición que los había pagado. El dato faltante no deja hueco: la fila
-enseñaba un número entero, creíble y falso.
+fuera. Escribí aquí que «al menos sumaban en el IRR de la cartera». **No era
+cierto**, y lo cuento porque el error es instructivo: lo di por hecho en vez de
+medirlo. Los dividendos tampoco llegaban al IRR — ver más abajo. El dato
+faltante no deja hueco: la fila enseñaba un número entero, creíble y falso.
 
 Ahora el rendimiento de una inversión son **cinco piezas que suman exactamente**:
 
@@ -1036,6 +1037,67 @@ donde el realizado sí está completo.
 tiene que ser la suma del realizado de cada posición, y el porcentaje del
 gráfico el mismo que el de la tabla. Si vuelven a separarse, falla ahí y no en
 una captura de pantalla.
+
+## El titular de la pestaña se calculaba sin los dividendos
+
+El número más grande de Inversiones es el IRR de la cartera. Se calculaba con
+los flujos que la app le pasa al motor, y el importe de cada flujo salía de
+una línea:
+
+```js
+monto: (Number(t.qty) || 0) * (Number(t.price) || 0) + (Number(t.fees) || 0)
+```
+
+**Un dividendo no tiene cantidad ni precio.** Su importe vive en `pnl`. Así que
+`monto` daba cero, el `.filter(f => f.monto)` de la línea siguiente lo tiraba, y
+el dividendo no llegaba al motor. El motor los trata bien — `dividendo` está en
+su tabla de signos desde el primer día. Nunca le llegaron.
+
+Con $400 cobrados sobre una cartera de $12.850, la diferencia:
+
+| | antes | después |
+|---|---|---|
+| Recuperado | $1.090 | **$1.490** |
+| Ganancia | $504 | **$904** |
+| **IRR anual** | **+2,34%** | **+4,26%** |
+
+Casi dos puntos de rentabilidad anual, desaparecidos por un `qty` que no
+existe. De paso: las comisiones iban **sumadas en los dos sentidos**. En una
+compra encarecen, correcto; en una venta reducen lo que recuperas, no lo
+aumentan.
+
+### Y un retorno simple, no dos
+
+La misma tarjeta enseñaba `simple sobre coste +7,3%` junto a `difieren 1,4 pts`.
+Los dos números eran reales y no se referían al mismo cálculo: el 7,3% era el
+retorno simple de la app (sobre el coste de lo que sigue abierto), y la brecha
+la medía el motor contra **su** retorno simple (sobre todo lo aportado, 3,75%).
+La distancia de verdad entre lo que se veía y el IRR era de 4,9 puntos.
+
+Manda el del motor, que mide sobre lo que de verdad pusiste — el de la app
+queda sólo para cuando no hay flujos que analizar. Y la nota dice hacia dónde y
+por qué, porque las dos cifras no se separan siempre por el mismo motivo:
+
+- **IRR por encima** → aportes repartidos: el simple divide entre todo el dinero
+  metido, incluido el de la semana pasada, que no tuvo tiempo de trabajar.
+- **IRR por debajo** → el simple es *total*, no anual: un 6,7% en año y medio es
+  un 4,3% al año, y ninguno de los dos está mal.
+
+Sin esa frase, quien ve 4,26% al lado de 6,73% piensa que uno está roto.
+
+### El guardián no miraba aquí
+
+Tres defectos seguidos de la misma familia —un número con dos
+implementaciones— y los tres los encontró una **captura de pantalla**, no la
+suite. `capa2.mjs` vigilaba eso desde hacía sesiones… sólo para futuros.
+
+Ahora tiene una sección 6 que exige que cada vista del rendimiento pase por la
+misma puerta: `tablaPosiciones` y `renderIvPerf` tienen que llamar a `posPerf`,
+`investStats` no puede volver a calcular su propio retorno simple, los
+dividendos tienen que entrar en los flujos con su `pnl`, la comisión de una
+venta tiene que restar, y la cartera tiene que marcar lo que una posición
+derivada ya contó. Comprobado además que el guardián **falla** cuando se
+reintroduce el defecto: uno que no puede ponerse rojo no vigila nada.
 
 ## Cómo fluye un dato
 

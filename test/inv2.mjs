@@ -113,6 +113,34 @@ ok(meta.includes((schd.retorno * 100).toFixed(1) + '%'),
    'el gráfico enseña el neto de SCHD, no sólo la subida del precio',
    `«${meta.trim()}» vs tabla ${(schd.retorno * 100).toFixed(1)}%`);
 
+console.log('\n═══ el IRR de la cartera ve los dividendos ═══');
+/* Los flujos que la app mandaba al motor calculaban el importe como
+   qty × price + fees. Un dividendo no tiene cantidad ni precio — su importe
+   vive en `pnl` — así que salía cero y el filtro lo tiraba antes de llegar al
+   motor. El titular de toda la pestaña se calculaba sin un solo dividendo. */
+const c2 = (await p.evaluate(() => INV.portfolio())).cartera;
+const divsTotales = todas.reduce((a, x) => a + x.dividendos, 0);
+ok(c2 && c2.recuperado != null, 'el motor devuelve flujos analizables', c2 && c2.recuperado);
+const ventasBrutas = await p.evaluate(() => INV.transactions().filter(t => t.op === 'venta')
+  .reduce((a, t) => a + (t.qty || 0) * (t.price || 0) - (t.fees || 0), 0));
+ok(cerca(c2.recuperado, ventasBrutas + divsTotales, 0.02),
+   'lo recuperado = ventas netas de comisión + dividendos',
+   `motor ${c2.recuperado} · ventas ${ventasBrutas.toFixed(2)} + cobros ${divsTotales.toFixed(2)}`);
+ok(c2.recuperado > ventasBrutas + 0.01,
+   'y pesa de verdad: sin el arreglo lo recuperado eran sólo las ventas',
+   `${(c2.recuperado - ventasBrutas).toFixed(2)} que antes se perdían`);
+
+/* Un solo retorno simple. La tarjeta enseñaba el de la app (sobre el coste de
+   lo que sigue abierto) y la nota «difieren N pts» medía contra el del motor
+   (sobre todo lo aportado): dos bases distintas, una sola frase. */
+const port = await p.evaluate(() => INV.portfolio());
+ok(cerca(port.totalRet, port.cartera.retornoSimple, 1e-9),
+   'el retorno simple de la cartera es UNO, el del motor',
+   `app ${port.totalRet} · motor ${port.cartera.retornoSimple}`);
+ok(cerca(port.cartera.brecha, port.cartera.irrAnual - port.totalRet, 1e-6),
+   'y la brecha mide contra ESE, no contra otro',
+   `brecha ${port.cartera.brecha}`);
+
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
 console.log('  errores JS:', errs.length, errs.length ? '\n   ' + errs.join('\n   ') : '');

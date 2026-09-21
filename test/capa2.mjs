@@ -105,6 +105,44 @@ const fuera = leidos.filter(f => !huella.includes('a.' + f));
 ok(fuera.length === 0, 'la huella cubre todo lo que acctAgg lee de la cuenta',
    fuera.length ? 'fuera de la huella: ' + fuera.join(', ') : leidos.join(', '));
 
+console.log('\n═══ 6 · inversiones: un rendimiento, una fuente ═══');
+/* Esta sección existe porque el guardián no la tenía y el defecto salió en una
+   captura de pantalla, dos veces. La misma SCHD aparecía al 6,0% en la tabla y
+   al 2,0% en el gráfico de al lado; la tarjeta «Realizado» enseñaba $400 donde
+   había $508.57; y la tarjeta del IRR ponía un retorno simple junto a una
+   brecha medida contra OTRO retorno simple.
+
+   Todos son el mismo error: un número con dos implementaciones. Lo que sigue
+   comprueba que cada vista del rendimiento pase por la misma puerta. */
+ok(defs('posPerf') === 1, 'posPerf'.padEnd(22), defs('posPerf') === 1 ? '' : defs('posPerf') + ' definiciones');
+
+for (const [quien, que] of [
+  ['tablaPosiciones', 'la fila de cada posición'],
+  ['renderIvPerf',    'el gráfico de rendimiento por posición'],
+]) {
+  const c = cuerpoDe(quien);
+  ok(c !== '' && /posPerf\(/.test(c), `${quien} mide con posPerf`,
+     c === '' ? 'no existe' : /posPerf\(/.test(c) ? '' : `${que} calcula por su cuenta`);
+}
+
+const iv = cuerpoDe('investStats');
+ok(/cartera\s*&&\s*cartera\.retornoSimple/.test(iv),
+   'el retorno simple de la cartera es el del motor',
+   /retornoSimple/.test(iv) ? '' : 'investStats volvió a calcular el suyo');
+ok(/tipo:\s*"dividendo",\s*monto:\s*\(Number\(t\.pnl\)/.test(iv),
+   'los dividendos entran en los flujos con su importe (t.pnl)',
+   /t\.pnl/.test(iv) ? '' : 'un dividendo sin qty ni price da monto 0 y se pierde');
+ok(/tipo:\s*"venta",\s*monto:\s*bruto\s*-\s*fe/.test(iv),
+   'la comisión de una venta resta, no suma');
+ok(/l\.ops\.forEach\(t => contadas\.add/.test(iv),
+   'la cartera marca lo que ya contó una posición derivada',
+   'sin esa marca, una venta se cuenta dos veces');
+
+const INVF = ['positions', 'position', 'transactions', 'markets', 'createTransaction', 'updateTransaction',
+  'deleteTransaction', 'createPosition', 'updatePosition', 'deletePosition', 'performance', 'portfolio'];
+const sinInv = INVF.filter(f => !new RegExp('^    ' + f + '\\(|^    ' + f + ':', 'm').test(src));
+ok(sinInv.length === 0, `las ${INVF.length} funciones de INV`, sinInv.length ? 'faltan: ' + sinInv.join(', ') : '');
+
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
 process.exit(fallos.length ? 1 : 0);
