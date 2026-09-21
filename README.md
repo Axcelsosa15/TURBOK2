@@ -1193,6 +1193,54 @@ En la baldosa, lo planeado y lo conseguido van **juntos** («3.00R planeado ·
 buscarlos; juntos se leen de un vistazo, que es lo único que hace que la próxima
 vez se planee distinto.
 
+### Nueve activos, nueve aritméticas
+
+No todos los activos se operan igual, y la diferencia **no es cosmética: es la
+fórmula del riesgo**. Hasta esta versión, los nueve tipos usaban la de la
+acción.
+
+| Tipo | Lo que cuesta una unidad si sale mal | Unidades |
+|---|---|---|
+| Acción / ETF | entrada − stop | enteras |
+| Futuro / materia prima | **ticks** × valor del tick | enteras |
+| Opción comprada | **la prima entera** × acciones por contrato | enteras |
+| Opción vendida cubierta | ancho del spread − crédito | enteras |
+| FX | **pips** × valor del pip por lote | 0,01 lotes |
+| Bono | puntos sobre el **nominal** (1 pto de $1.000 = $10) | enteras |
+| Cripto / perpetuo | entrada − stop | **fraccionadas** |
+
+Cuatro consecuencias que cambian el número en pantalla:
+
+- **Un futuro no se dimensiona en puntos, se dimensiona en ticks**, y el motor
+  ya sabía hacerlo. `QE.dimensionar` trabaja en la rejilla del contrato, en
+  céntimos enteros, trunca contratos, avisa si el stop no da ni para uno y dice
+  cuánto riesgo queda **sin usar** por no poder partir un contrato. Yo había
+  escrito `riesgo / (puntos × multiplicador)` — una segunda implementación del
+  mismo número, y encima ciega al tick. Ahora delega, y de paso resuelve los
+  códigos de mes: `MNQZ5` es `MNQ`.
+- **Una opción comprada arriesga la prima, no (entrada − stop).** Es un techo,
+  no una estimación, y no necesita stop para conocerse. Su R:R tampoco sale de
+  precios del subyacente: pagas 3,50 y sales en 7,00, eso es 1R. Por eso su
+  plan pide prima y prima objetivo, y **no** pide stop ni TP.
+- **Una opción vendida sin pata compradora no tiene pérdida máxima**, así que no
+  recibe un tamaño. La ficha lo dice y pide el ancho del spread, en vez de
+  calcular un número que sería mentira.
+- **Cripto y FX se fraccionan; acciones y contratos no.** 0,083333 BTC es un
+  tamaño real; medio contrato no existe. Cada tipo declara sus decimales, así
+  que `0.08333333333333333` —ruido de coma flotante— no llega a pantalla.
+
+Bajo el riesgo, la ficha dice siempre **de dónde sale el número**: «100 ticks ×
+$0.50 el tick», «20 pips × $10.00 el pip», «la prima entera: $3.50 × 100»,
+«puntos sobre $1.000 de nominal». Sin esa línea el número es un oráculo.
+
+Y cada tipo trae **sus** parámetros, sólo los suyos: una opción pide strike,
+vencimiento, DTE, delta e IV; FX pide swap y tamaño del lote; un perpetuo pide
+funding y precio de liquidación (*si está más cerca que tu stop, el stop no
+existe*); una acción pide la fecha de resultados (*un hueco por earnings salta
+por encima del stop*); un bono pide duración, cupón y rating; un futuro pide mes
+de contrato y rollover. Poner los campos de los nueve a la vez sería un
+formulario que nadie mira.
+
 ### Un `var(--x)` que no existe no falla: se queda transparente
 
 Escribí `--positive-soft`, `--negative-soft` y `--warning-soft`. Los tokens se

@@ -163,8 +163,27 @@ ok(/f\("capital"/.test(secs) && /f\("riesgoPct"/.test(secs),
    'sí se escriben capital y riesgo %, que son decisiones, no cálculos');
 
 const tc = cuerpoDe('tesisCalc');
-ok(/MULT\[act\]/.test(tc), 'el multiplicador de un futuro sale de MULT, no de una tabla nueva',
-   /MULT/.test(tc) ? '' : 'tesisCalc se inventó sus propios contratos');
+/* El motor YA dimensiona futuros, y mejor: en la rejilla de ticks, en céntimos
+   enteros, truncando contratos y diciendo cuánto riesgo queda sin usar. Yo
+   había escrito riesgo / (puntos × multiplicador), que es una segunda
+   implementación del mismo número y encima ignora el tick. */
+ok(/QE\.dimensionar\(/.test(tc), 'un futuro se dimensiona con QE.dimensionar, no a mano',
+   /QE\.dimensionar/.test(tc) ? '' : 'tesisCalc volvió a dimensionar por su cuenta');
+ok(/QE\.rootOf\(/.test(tc), 'y el símbolo se resuelve con QE.rootOf (códigos de mes incluidos)');
+ok(!/MULT\[act\]/.test(tc), 'sin leer MULT a pelo: el contrato entero viene del motor');
+
+/* Nueve tipos, nueve aritméticas. Que ninguna se pierda. */
+const TIPOS = ['accion', 'etf', 'crypto', 'perpetuo', 'fx', 'futuro', 'opcion', 'bono', 'commodity'];
+const tabla = (codigo.match(/const TS_TIPO_DEF = \{[\s\S]*?\n  \};/) || [''])[0];
+const faltanT = TIPOS.filter(t => !new RegExp('^\\s*' + t + ':', 'm').test(tabla));
+ok(faltanT.length === 0, `los ${TIPOS.length} tipos tienen aritmética propia`,
+   faltanT.length ? 'faltan: ' + faltanT.join(', ') : '');
+for (const base of ['ticks', 'prima', 'pips', 'par'])
+  ok(new RegExp('def\\.base === "' + base + '"').test(tc), `tesisCalc distingue la base «${base}»`);
+ok(/opDir === "vendida"/.test(tc) && /sinTecho/.test(tc),
+   'una opción vendida sin cobertura no recibe un tamaño inventado');
+ok(/def\.entera \? Math\.floor/.test(tc),
+   'el tamaño se trunca sólo en los tipos enteros; cripto y FX se fraccionan');
 ok(/coll\("trades"\)\.get\(t\.tradeId\)/.test(tc) && /tradeCalc\(/.test(tc),
    'la R del post-mortem sale de la operación vía tradeCalc');
 ok(/stopAlReves/.test(tc) && /porUnidad <= 0/.test(tc),
@@ -176,10 +195,13 @@ ok(sinTes.length === 0, `las ${TESF.length} funciones de TES`, sinTes.length ? '
 
 /* El puente no puede redondear por su cuenta el tamaño de un futuro: medio
    contrato no existe, y un Math.round dejaría el riesgo por encima del planeado. */
+/* El truncado vive en tesisCalc, que es quien sabe si el tipo fracciona. El
+   puente sólo pasa el número: redondear otra vez aquí sería una segunda regla
+   de tamaño, y al alza pondría más riesgo del que autorizaste. */
 const puente = cuerpoDe('tsAbrirOperacion');
-ok(/Math\.floor/.test(puente) && !/Math\.round/.test(puente),
-   'el tamaño de un futuro se trunca, nunca se redondea hacia arriba',
-   'redondear al alza pone más riesgo del que autorizaste');
+ok(!/Math\.(floor|round|ceil)/.test(puente),
+   'el puente NO redondea: el tamaño ya viene decidido por el tipo',
+   /Math\./.test(puente) ? 'volvió a redondear por su cuenta' : '');
 
 console.log('\n═══ 8 · ningún var(--x) que no exista ═══');
 /* Un token de color mal escrito NO falla: `background: var(--warning-soft)` con

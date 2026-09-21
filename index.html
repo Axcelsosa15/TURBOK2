@@ -7814,7 +7814,32 @@
      resto. */
   const TS_ESTADOS = [["watchlist", "en watchlist"], ["planificada", "planificada"], ["ejecucion", "en ejecución"], ["cerrada", "cerrada"], ["cancelada", "cancelada"]];
   const TS_EST_CLS = { watchlist: "dim", planificada: "warn", ejecucion: "good", cerrada: "", cancelada: "dim" };
-  const TS_TIPOS = [["accion", "Acción"], ["etf", "ETF"], ["crypto", "Crypto"], ["fx", "FX"], ["commodity", "Commodities"], ["bono", "Bono"], ["futuro", "Futuro"]];
+  /* ══ CADA ACTIVO SE OPERA DISTINTO, Y LA DIFERENCIA ESTÁ EN LA ARITMÉTICA ══
+     No es cosmética. Una acción arriesga (entrada − stop) por acción; un futuro
+     arriesga TICKS × valor del tick; una opción comprada arriesga la PRIMA y el
+     stop no manda; en FX el riesgo son pips × valor del pip por lote; un bono
+     cotiza en porcentaje del nominal, así que un punto de precio son $10 sobre
+     un nominal de $1.000, no $1.
+
+     Aplicar la fórmula de la acción a las cinco es lo que hacía este archivo
+     hasta ahora. `entera` decide además si el tamaño se trunca (medio contrato
+     no existe) o se fracciona (0,0137 BTC sí existe). */
+  const TS_TIPOS = [["accion", "Acción"], ["etf", "ETF"], ["crypto", "Cripto al contado"], ["perpetuo", "Perpetuo"],
+    ["fx", "FX"], ["futuro", "Futuro"], ["opcion", "Opción"], ["bono", "Bono"], ["commodity", "Materia prima"]];
+  const TS_TIPO_DEF = {
+    accion:    { unidad: "acciones",        entera: true,  dec: 0, base: "precio" },
+    etf:       { unidad: "participaciones", entera: true,  dec: 0, base: "precio" },
+    crypto:    { unidad: "unidades",        entera: false, dec: 6, base: "precio" },
+    perpetuo:  { unidad: "contratos",       entera: false, dec: 3, base: "precio" },
+    fx:        { unidad: "lotes",           entera: false, dec: 2, base: "pips"   },
+    futuro:    { unidad: "contratos",       entera: true,  dec: 0, base: "ticks"  },
+    commodity: { unidad: "contratos",       entera: true,  dec: 0, base: "ticks"  },
+    opcion:    { unidad: "contratos",       entera: true,  dec: 0, base: "prima"  },
+    bono:      { unidad: "títulos",         entera: true,  dec: 0, base: "par"    },
+  };
+  function tipoDef(t) { return TS_TIPO_DEF[(t && t.tipo) || "accion"] || TS_TIPO_DEF.accion; }
+  /* En un par con yen el pip es 0,01; en el resto 0,0001. */
+  function pipSize(par) { return /JPY/i.test(String(par || "")) ? 0.01 : 0.0001; }
   const TS_ESTILOS = [["swing", "Swing"], ["position", "Position"], ["largo", "Long-term"], ["evento", "Event-driven"]];
   const TS_SESGOS = [["long", "Long"], ["short", "Short"]];
   const TS_HORIZ = [["dias", "días"], ["semanas", "semanas"], ["meses", "meses"], ["anios", "años"]];
@@ -7831,17 +7856,99 @@
     const stopAlReves = porUnidad != null && porUnidad <= 0;
     const valido = porUnidad != null && porUnidad > 0;
     const rr = tp => { const x = n(tp); return !valido || x == null ? null : (corto ? e - x : x - e) / porUnidad; };
-    const rr1 = rr(t.tp1), rr2 = rr(t.tp2), rr3 = rr(t.tp3);
+    let rr1 = rr(t.tp1), rr2 = rr(t.tp2), rr3 = rr(t.tp3);
+    /* En una opción comprada el R:R no sale de precios del subyacente: sale de
+       la prima. Pagas 3,50 y sales en 7,00 → 1R de riesgo, 1R de ganancia. */
+    if (t.tipo === "opcion" && t.opDir !== "vendida") {
+      const pr = n(t.prima), ob = n(t.primaObjetivo);
+      rr1 = pr != null && pr > 0 && ob != null ? (ob - pr) / pr : null;
+      rr2 = rr3 = null;
+    }
     const cap = n(t.capital), pc = n(t.riesgoPct);
     const riesgo = cap != null && pc != null ? cap * pc / 100 : null;
     const distPct = valido && e ? porUnidad / Math.abs(e) : null;
-    /* En un futuro el riesgo por unidad son PUNTOS, no dólares: sin multiplicar
-       por el contrato, el tamaño sale multiplicado por el valor del punto. */
     const act = String(t.asset || "").trim().toUpperCase();
-    const mult = t.tipo === "futuro" ? (MULT[act] || null) : 1;
-    const porUnidadUsd = valido && mult ? porUnidad * mult : null;
-    const tam = porUnidadUsd && riesgo != null ? riesgo / porUnidadUsd : null;
-    const unidad = t.tipo === "futuro" ? "contratos" : t.tipo === "crypto" ? "unidades" : "acciones";
+    const def = tipoDef(t);
+    const unidad = def.unidad;
+
+    /* ── lo que cuesta UNA unidad si salta el stop, según el activo ──
+       Cinco aritméticas distintas. La de la acción es la única en la que el
+       riesgo por unidad es la resta de precios a secas. */
+    let porUnidadUsd = null, mult = 1, multDesconocido = false, dim = null, aviso = null, extra = null;
+
+    if (def.base === "ticks") {
+      /* Un futuro NO se dimensiona con puntos crudos: se dimensiona en TICKS.
+         Y el motor ya sabe hacerlo — en céntimos enteros, truncando contratos,
+         avisando si el stop no da ni para uno y diciendo cuánto riesgo dejas
+         sin usar por no poder partir un contrato. Escribirlo otra vez aquí era
+         una segunda implementación del mismo número. */
+      const raiz = QE.rootOf(act);
+      if (!raiz) { multDesconocido = true; }
+      else if (valido && cap != null && pc != null) {
+        const r = QE.dimensionar({ simbolo: raiz, balance: cap, entrada: e, stop: st, riesgoPct: pc });
+        if (r && r.ok) {
+          dim = r.value; mult = dim.contrato.multiplier;
+          porUnidadUsd = dim.riesgoPorContrato;
+          extra = { ticks: dim.ticksRiesgo, desaprovechado: dim.desaprovechado, riesgoReal: dim.riesgoReal,
+                    tickSize: dim.contrato.tickSize, tickValue: dim.contrato.tickValue, contrato: dim.contrato.name };
+          if (dim.contratos < 1) aviso = `Con ${pc}% de ${money(cap)} no llega ni para un contrato: el stop son ${dim.ticksRiesgo} ticks, o sea ${money(dim.riesgoPorContrato, 2)} por contrato.`;
+          if (r.warnings) r.warnings.forEach(w => { if (w.code === "RIESGO_ALTO") aviso = w.message; });
+        } else if (r && r.error) aviso = r.error.message;
+      } else if (valido) {
+        const c = QE.CONTRACTS[raiz];
+        if (c) { mult = c.multiplier; porUnidadUsd = Math.abs(Math.round(e / c.tickSize) - Math.round(st / c.tickSize)) * c.tickValue; }
+      }
+    } else if (def.base === "prima") {
+      /* Una opción COMPRADA no arriesga (entrada − stop): arriesga la prima
+         entera, y eso es un techo, no una estimación. Vendida, la pérdida no
+         tiene techo salvo que haya una pata compradora — y entonces el riesgo
+         es la anchura del spread menos el crédito, no la prima. */
+      const prima = n(t.prima), cmult = n(t.contratoMult) ?? 100;
+      mult = cmult;
+      if (t.opDir === "vendida") {
+        const ancho = n(t.anchoSpread);
+        if (ancho != null && prima != null) { porUnidadUsd = (ancho - prima) * cmult; extra = { defendida: true }; }
+        else { aviso = "Una opción vendida sin pata compradora no tiene pérdida máxima: no hay tamaño que calcular sin inventarlo. Escribe el ancho del spread si la tienes cubierta."; extra = { sinTecho: true }; }
+      } else if (prima != null && prima > 0) {
+        porUnidadUsd = prima * cmult;
+        extra = { primaEsElRiesgo: true, prima, cmult };
+      }
+    } else if (def.base === "pips") {
+      /* En FX el riesgo son pips por el valor del pip del lote, no dólares de
+         precio. El valor del pip se escribe: calcularlo en un cruce sin USD
+         exige una cotización en vivo que esta cabina no tiene, y estimarlo
+         sería inventar el número que decide tu tamaño. */
+      const vp = n(t.pipValue) ?? 10, ps = pipSize(act);
+      if (valido) { const pips = QE.roundTo(porUnidad / ps, 1); porUnidadUsd = pips * vp; extra = { pips, pipValue: vp, pipSize: ps }; }
+    } else if (def.base === "par") {
+      /* Un bono cotiza en porcentaje del nominal: un punto sobre $1.000 de
+         nominal son $10, no $1. */
+      const nom = n(t.nominal) ?? 1000;
+      mult = nom / 100;
+      if (valido) { porUnidadUsd = porUnidad * mult; extra = { nominal: nom }; }
+    } else if (valido) {
+      porUnidadUsd = porUnidad;
+    }
+
+    let tam = porUnidadUsd && riesgo != null ? riesgo / porUnidadUsd : null;
+    if (dim) tam = dim.contratos;
+    else if (tam != null) {
+      /* 0.08333333333333333 unidades no es más preciso que 0.083333: es ruido
+         de coma flotante saliendo a pantalla. Cada tipo dice sus decimales. */
+      tam = def.entera ? Math.floor(tam) : QE.roundTo(tam, def.dec);
+    }
+    /* Que no dé ni para una unidad le pasa a cualquier tipo entero, no sólo a
+       los futuros: una prima de $3,50 son $350 por contrato, y con $250 de
+       riesgo el tamaño es cero. Sin decirlo, la ficha enseña «0» sin más. */
+    if (!aviso && tam === 0 && def.entera && porUnidadUsd != null && riesgo != null) {
+      /* A una opción comprada no se le puede pedir «un stop más corto»: no
+         tiene stop, tiene prima. Cada tipo tiene su palanca. */
+      const palanca = def.base === "prima"
+        ? (extra && extra.defendida ? "un spread más estrecho" : "una prima más barata")
+        : "un stop más corto";
+      const uno = def.unidad === "contratos" ? "un contrato" : def.unidad === "títulos" ? "un título" : "una unidad";
+      aviso = `Con ${money(riesgo, 2)} de riesgo no llega ni para ${uno}: ${money(porUnidadUsd, 2)} cada uno. O más capital, o ${palanca}.`;
+    }
     /* El R del post-mortem sale de la operación real, no de lo que recuerdes. */
     const op = t.tradeId ? coll("trades").get(t.tradeId) : null;
     const opc = op ? tradeCalc(Object.assign({}, op)) : null;
@@ -7852,8 +7959,13 @@
        que sobrevive a la jugada. */
     const opCerrada = !!(op && op.exit != null && op.exit !== "");
     const debePostmortem = opCerrada && t.status !== "cerrada" && t.status !== "cancelada" && !String(t.leccion || "").trim();
-    return { porUnidad, porUnidadUsd, valido, stopAlReves, rr1, rr2, rr3, riesgo, distPct, tam, unidad,
-             mult, multDesconocido: t.tipo === "futuro" && act !== "" && !mult,
+    /* El riesgo REAL es el del tamaño que cabe, no el autorizado: truncar a 4
+       contratos de 4,7 deja dinero sin usar, y eso se dice en vez de fingir que
+       arriesgas el 1% exacto. */
+    const riesgoReal = tam != null && porUnidadUsd != null ? tam * porUnidadUsd : null;
+    return { porUnidad, porUnidadUsd, valido, stopAlReves, rr1, rr2, rr3, riesgo, riesgoReal, distPct, tam, unidad,
+             def, mult, extra, aviso, dim,
+             multDesconocido: multDesconocido || (def.base === "ticks" && act !== "" && porUnidadUsd == null && valido),
              op, opCerrada, debePostmortem, rFinal, pnlFinal: opc ? opc.pnlEff : null };
   }
 
@@ -7861,7 +7973,104 @@
      misma dice «completa secciones en orden», y un formulario de ochenta campos
      en una sola ventana no se termina nunca. Cada sección sabe además si está
      lista, para que la ficha diga qué falta en vez de fingir que está completa. */
-  function tsSecciones() {
+
+  /* Lo que hay que saber de un activo depende del activo. Una opción sin strike
+     ni vencimiento no es una opción; una acción sin la fecha de resultados no
+     te avisa del hueco; un perpetuo sin funding se muere solo aunque la
+     dirección sea correcta. Poner los campos de los nueve tipos a la vez sería
+     un formulario que nadie mira. */
+
+  /* Los campos SIN los que no se puede calcular el tamaño de este tipo. Viven
+     en el Plan, al lado de capital y riesgo %, porque son parte de la misma
+     decisión — no del retrato del activo. */
+  const SOLO_PRECIO = { opcion: true };
+  function tsCamposTamano(tipo, f) {
+    if (tipo === "opcion") return [
+      f("prima", "Prima pagada / cobrada", { type: "number", step: "0.01", w: 2,
+        help: "comprada, ésta ES tu pérdida máxima por contrato × las acciones del contrato" }),
+      f("primaObjetivo", "Prima objetivo", { type: "number", step: "0.01", w: 2,
+        help: "de aquí sale el R:R: pagas 3,50 y sales en 7,00 son 1R" }),
+      f("anchoSpread", "Ancho del spread", { type: "number", step: "0.5", w: 2,
+        help: "sólo si es vendida y está cubierta; sin él una vendida no tiene pérdida máxima" }),
+      f("contratoMult", "Acciones por contrato", { type: "number", step: "1", w: 2, ph: "100",
+        help: "100 salvo ajuste por split o dividendo especial" }),
+    ];
+    if (tipo === "fx") return [f("pipValue", "Valor del pip por lote ($)", { type: "number", step: "0.01", w: 3, ph: "10",
+      help: "$10 en un lote estándar contra USD. En un cruce sin USD hace falta la cotización del día — se escribe, no se estima" })];
+    if (tipo === "bono") return [f("nominal", "Nominal por título ($)", { type: "number", step: "100", w: 3, ph: "1000",
+      help: "el precio va en % del nominal: un punto sobre $1.000 de nominal son $10, no $1" })];
+    return [];
+  }
+
+  function tsCamposActivo(tipo, f, ta) {
+    const V = { vencimiento: f("vencimiento", "Vencimiento", { type: "date", w: 2 }) };
+    switch (tipo) {
+      case "opcion": return [
+        f("opDir", "Comprada o vendida", { type: "select", w: 2, options: [["comprada", "comprada (pago prima)"], ["vendida", "vendida (cobro prima)"]],
+          help: "comprada: la prima es tu pérdida máxima · vendida sin cobertura: no hay máxima" }),
+        f("opTipo", "Call o put", { type: "select", w: 2, options: [["call", "Call"], ["put", "Put"]] }),
+        f("strike", "Strike", { type: "number", step: "any", w: 2 }),
+        V.vencimiento,
+        f("dte", "Días al vencimiento", { type: "number", step: "1", w: 2 }),
+        f("delta", "Delta", { type: "number", step: "0.01", w: 2, ph: "0.30" }),
+        f("iv", "Volatilidad implícita (%)", { type: "number", step: "1", w: 2, help: "alta se vende, baja se compra — o al revés te come la theta" }),
+        ta("asignacion", "Qué haces si te asignan", { w: 6 }),
+      ];
+      case "fx": return [
+        f("loteTipo", "Tamaño del lote", { type: "select", w: 2, options: [["estandar", "estándar · 100.000"], ["mini", "mini · 10.000"], ["micro", "micro · 1.000"]] }),
+        f("apalancamiento", "Apalancamiento", { w: 2, ph: "20:1" }),
+        ta("swap", "Swap / rollover", { w: 3, rows: 1, ph: "coste o cobro por noche; en una posición de semanas decide el resultado" }),
+        ta("sesionFx", "Sesión en la que se opera", { w: 3, rows: 1, ph: "solape Londres–NY" }),
+      ];
+      case "perpetuo": return [
+        f("exchange", "Exchange", { w: 2, ph: "Binance, Bybit, Hyperliquid" }),
+        f("apalancamiento", "Apalancamiento", { w: 2, ph: "3x aislado" }),
+        f("liquidacion", "Precio de liquidación", { type: "number", step: "any", w: 2,
+          help: "si está más cerca que tu stop, el stop no existe: te saca el exchange" }),
+        ta("funding", "Regla de funding", { w: 6, rows: 2, ph: "sólo si está por debajo de 0.01% cada 8 h; salir tras dos cobros en contra" }),
+      ];
+      case "crypto": return [
+        f("exchange", "Exchange", { w: 2, ph: "Kraken, Coinbase" }),
+        f("custodia", "Custodia", { type: "select", w: 2, options: [["", "sin definir"], ["exchange", "en el exchange"], ["propia", "propia (hardware)"], ["mixta", "mixta"]] }),
+        ta("cicloNota", "Regla de ciclo", { w: 6, rows: 2, ph: "doblar aporte si cae 40% desde máximos; reducir 25% al doblar" }),
+      ];
+      case "accion": return [
+        f("earnings", "Próximos resultados", { type: "date", w: 2, help: "un hueco por earnings salta por encima del stop: o sales antes, o el stop es un deseo" }),
+        f("sector", "Sector", { w: 2, ph: "semis, energía" }),
+        f("borrow", "Coste del préstamo (corto)", { w: 2, ph: "2% anual · hard to borrow" }),
+        f("dividendo", "Fecha ex-dividendo", { type: "date", w: 2 }),
+        f("adv", "Volumen medio diario", { w: 2, ph: "40M · ¿cabe tu tamaño?" }),
+      ];
+      case "etf": return [
+        f("ter", "Gasto anual del fondo (%)", { type: "number", step: "0.01", w: 2, ph: "0.09" }),
+        f("indice", "Índice que replica", { w: 2, ph: "S&P 500" }),
+        f("yieldPct", "Distribución (%)", { type: "number", step: "0.1", w: 2 }),
+        f("apalancado", "Apalancado o inverso", { type: "checkbox", w: 3, help: "decaen con el tiempo: no se mantienen semanas" }),
+      ];
+      case "bono": return [
+        f("cupon", "Cupón (%)", { type: "number", step: "0.125", w: 2 }),
+        f("ytm", "Yield to maturity (%)", { type: "number", step: "0.01", w: 2 }),
+        f("duracion", "Duración (años)", { type: "number", step: "0.1", w: 2,
+          help: "cuánto cae el precio por cada punto que suben las tasas" }),
+        V.vencimiento,
+        f("rating", "Rating", { w: 2, ph: "AA · BBB · sin grado" }),
+      ];
+      case "futuro":
+      case "commodity": return [
+        f("mesContrato", "Mes del contrato", { w: 2, ph: "Z5 · dic 2025" }),
+        f("rollover", "Fecha de rollover", { type: "date", w: 2,
+          help: "una posición que cruza el rollover cambia de contrato y de precio" }),
+        f("margen", "Margen intradía ($)", { type: "number", step: "50", w: 2 }),
+        ta("estacional", "Estacionalidad / contango", { w: 3, rows: 1, ph: "sólo si aplica: crudo, gas, granos" }),
+        ta("sesionFut", "Ventana horaria", { w: 3, rows: 1, ph: "8:30–11:00 AM ET" }),
+      ];
+      default: return [];
+    }
+  }
+
+  function tsSecciones(t0) {
+    const T = t0 || {};
+    const tipo = T.tipo || "accion";
     const f = (key, label, o) => Object.assign({ key, label }, o || {});
     const ta = (key, label, o) => f(key, label, Object.assign({ type: "textarea", w: 6, rows: 2 }, o || {}));
     return [
@@ -7879,6 +8088,10 @@
             options: [["", "sin estrategia"]].concat(coll("playbooks").items.map(x => [x.id, x.name])),
             help: "la jugada es de una estrategia; las estadísticas de la estrategia salen del journal" }),
         ] },
+      { id: "activo", n: "A", label: "Parámetros del activo",
+        ayuda: "Lo que cambia de un activo a otro. Sólo salen los del tipo que elegiste en la ficha.",
+        listo: t => { const c = tsCamposActivo(t.tipo || "accion", f, ta); return c.length === 0 || c.some(x => { const v = t[x.key]; return v != null && v !== "" && v !== false; }); },
+        campos: () => tsCamposActivo(tipo, f, ta) },
       { id: "resumen", n: "1", label: "Resumen ejecutivo", listo: t => !!(t.tesis && t.invalida),
         ayuda: "Cinco líneas. Si no te salen claras, la idea no está lista — lo dice tu propia plantilla.",
         campos: () => [
@@ -7958,7 +8171,8 @@
           ta("salidaTiempo", "Salida por tiempo si no se mueve", { w: 3 }),
           f("capital", "Capital total ($)", { type: "number", step: "any", w: 3 }),
           f("riesgoPct", "Riesgo por operación (%)", { type: "number", step: "0.1", w: 3 }),
-        ] },
+        ].filter(x => !SOLO_PRECIO[tipo] || !["entrada", "entradaAlt", "stop", "tp1", "tp2", "tp3", "stopRazon", "stopSenal"].includes(x.key))
+         .concat(tsCamposTamano(tipo, f)) },
       { id: "escenarios", n: "7", label: "Escenarios", listo: t => !!(t.escBaseAccion && t.escBearAccion),
         ayuda: "Lo que importa de un escenario no es la probabilidad: es qué haces. Las tres acciones son obligatorias.",
         campos: () => ["Base", "Bull", "Bear"].flatMap(k => {
@@ -8004,7 +8218,7 @@
         ] },
     ];
   }
-  function tsSeccion(id) { return tsSecciones().find(x => x.id === id); }
+  function tsSeccion(id, t) { return tsSecciones(t).find(x => x.id === id); }
   function tsDiario(t) { return Array.isArray(t.diario) ? t.diario : []; }
 
   /* =============================== PLAYBOOK =============================== */
@@ -8146,7 +8360,9 @@
   function tsAbrirOperacion(t) {
     const c = tesisCalc(t);
     const fut = t.tipo === "futuro";
-    const cant = c.tam == null ? null : (fut ? Math.max(1, Math.floor(c.tam)) : Number(c.tam.toFixed(4)));
+    /* tesisCalc ya truncó o redondeó según el tipo: aquí sólo se pasa. Volver a
+       redondear sería una segunda regla de tamaño, y para eso está tipoDef. */
+    const cant = c.tam == null || c.tam === 0 ? null : c.tam;
     const enlaza = rec => {
       TES.update(t.id, { tradeId: rec.id, status: t.status === "cerrada" ? t.status : "ejecucion" });
       flash("operación enlazada a la tesis · su R saldrá de aquí");
@@ -8161,10 +8377,13 @@
       }, enlaza);
     } else {
       showTab("invest");
+      /* En una opción el precio de la operación es la PRIMA, no un precio de
+         entrada del subyacente: ese campo no existe en esta tesis. */
+      const precio = t.tipo === "opcion" ? (t.prima ?? "") : (t.entrada ?? "");
       openTrade(null, "inversion", {
         asset: String(t.asset || "").toUpperCase(),
         op: t.bias === "short" ? "venta" : "compra",
-        price: t.entrada ?? "", qty: cant ?? "",
+        price: precio, qty: cant ?? "",
         setupId: t.setupId || "", note: t.tesis || "",
       }, enlaza);
     }
@@ -8172,7 +8391,7 @@
 
   function tsAccion(act, id, btn) {
     const t = coll("tesis").get(id); if (!t) return;
-    if (act === "tssec") { const sec = tsSeccion(btn.dataset.sec); if (sec && sec.diario) tsAccion("tsnota", id, btn); else abreSeccion(t, btn.dataset.sec); }
+    if (act === "tssec") { const sec = tsSeccion(btn.dataset.sec, t); if (sec && sec.diario) tsAccion("tsnota", id, btn); else abreSeccion(t, btn.dataset.sec); }
     else if (act === "tsop") tsAbrirOperacion(t);
     else if (act === "tsver") { const op = t.tradeId ? coll("trades").get(t.tradeId) : null;
       if (!op) { flash("esa operación ya no está en el journal"); return; }
@@ -8249,7 +8468,7 @@
     abreSeccion(t, "ficha", true);
   }
   function abreSeccion(t, secId, esNueva) {
-    const sec = tsSeccion(secId); if (!sec) return;
+    const sec = tsSeccion(secId, t); if (!sec) return;
     openEditor({
       title: (esNueva ? "Nueva tesis · " : "") + (sec.n ? sec.n + ") " : "") + sec.label,
       fields: (sec.ayuda ? [{ key: "_ayuda", label: sec.ayuda, type: "nota", w: 6 }] : []).concat(sec.campos()),
@@ -8281,26 +8500,49 @@
       },
     });
   }
+  /* Cómo se dice el tamaño depende del tipo: 5 contratos, 0,083333 BTC o 1,25
+     lotes. Y «0» sin unidad no significa nada. */
+  function tsTam(c) {
+    if (c.tam == null) return "—";
+    return c.def.entera ? String(c.tam) : String(c.tam);
+  }
+  /* La línea bajo el riesgo explica DE DÓNDE sale, y eso cambia con el activo:
+     ticks × valor del tick, pips × valor del pip, la prima entera, puntos sobre
+     el nominal. Sin esa línea el número es un oráculo. */
+  function tsComoSale(c) {
+    const x = c.extra || {};
+    if (c.def.base === "ticks" && x.ticks != null) return `${x.ticks} ticks × ${money(x.tickValue, 2)} el tick`;
+    if (c.def.base === "pips" && x.pips != null) return `${x.pips} pips × ${money(x.pipValue, 2)} el pip`;
+    if (c.def.base === "prima" && x.primaEsElRiesgo) return `la prima entera: ${money(x.prima, 2)} × ${x.cmult}`;
+    if (c.def.base === "prima" && x.defendida) return "ancho del spread menos el crédito";
+    if (c.def.base === "par" && x.nominal != null) return `puntos sobre ${money(x.nominal)} de nominal`;
+    return "por " + c.def.unidad.replace(/e?s$/, "");
+  }
   function tsDerivHtml(t) {
     const c = tesisCalc(t);
     const nR = x => x == null ? "—" : (x >= 0 ? "" : "−") + Math.abs(x).toFixed(2) + "R";
     if (c.stopAlReves) return `<p class="tswarn">El stop está del lado equivocado para un ${t.bias === "short" ? "corto" : "largo"}. Con ese par de precios no hay riesgo que medir, y todo lo de abajo saldría al revés.</p>`;
-    if (!c.valido) return `<p class="tshint">Escribe entrada y stop y aquí salen el R:R, la distancia, el riesgo en dólares y el tamaño. Ninguno de los cuatro se escribe a mano.</p>`;
+    if (c.extra && c.extra.sinTecho) return `<p class="tswarn">${esc(c.aviso)}</p>`;
+    if (c.porUnidadUsd == null) return `<p class="tshint">${c.def.base === "prima"
+      ? "Escribe la prima y aquí salen el riesgo máximo, el R:R y cuántos contratos caben. En una opción comprada la prima ES la pérdida máxima — no hace falta stop para conocerla."
+      : "Escribe entrada y stop y aquí salen el R:R, la distancia, el riesgo en dólares y el tamaño. Ninguno de los cuatro se escribe a mano."}</p>`;
     const malRR = c.rr1 != null && c.rr1 < 2;
+    const sobra = c.extra && c.extra.desaprovechado > 0.005;
     return `<div class="tsgrid">
-      ${tsCel("R:R a TP1", nR(c.rr1), malRR ? "neg" : "pos", malRR ? "por debajo de 2:1 — tu propia lista lo prohíbe" : "cumple tu mínimo de 2:1")}
+      ${c.rr1 == null ? "" : tsCel("R:R" + (c.def.base === "prima" ? "" : " a TP1"), nR(c.rr1), malRR ? "neg" : "pos", malRR ? "por debajo de 2:1 — tu propia lista lo prohíbe" : "cumple tu mínimo de 2:1")}
       ${c.rr2 != null ? tsCel("a TP2", nR(c.rr2), "", "segundo objetivo") : ""}
       ${c.rr3 != null ? tsCel("a TP3", nR(c.rr3), "", "runner") : ""}
-      ${tsCel("Distancia al stop", c.distPct == null ? "—" : (c.distPct * 100).toFixed(2) + "%", "", `${c.porUnidad.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")} por unidad`)}
-      ${tsCel("Riesgo", c.riesgo == null ? "—" : money(c.riesgo, 2), c.riesgo == null ? "dim" : "warn", c.riesgo == null ? "falta capital o riesgo %" : "lo que pierdes si salta el stop")}
-      ${tsCel("Tamaño", c.tam == null ? "—" : (c.tam >= 10 ? Math.floor(c.tam) : c.tam.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")), c.tam == null ? "dim" : "", c.multDesconocido ? "contrato desconocido: sin multiplicador no hay tamaño" : c.tam == null ? "falta capital o riesgo %" : c.unidad + (c.mult > 1 ? ` · ×${c.mult} por punto` : ""))}
-    </div>`;
+      ${!c.valido ? "" : tsCel("Distancia al stop", c.distPct == null ? "—" : (c.distPct * 100).toFixed(2) + "%", "", `${QE.roundTo(c.porUnidad, 6)} por unidad`)}
+      ${tsCel("Por " + c.def.unidad.replace(/e?s$/, ""), money(c.porUnidadUsd, 2), "warn", tsComoSale(c))}
+      ${tsCel("Riesgo", c.riesgo == null ? "—" : money(c.riesgo, 2), c.riesgo == null ? "dim" : "warn", c.riesgo == null ? "falta capital o riesgo %" : sobra ? `del que usas ${money(c.riesgoReal, 2)} · ${money(c.extra.desaprovechado, 2)} sin usar` : "lo que pierdes si sale mal")}
+      ${tsCel("Tamaño", tsTam(c), c.tam === 0 ? "neg" : c.tam == null ? "dim" : "", c.multDesconocido ? "contrato desconocido: sin tick no hay tamaño" : c.tam == null ? "falta capital o riesgo %" : c.unidad)}
+    </div>${c.aviso ? `<p class="tswarn">${esc(c.aviso)}</p>` : ""}`;
   }
   function tsCel(lab, val, cls, sub) {
     return `<div class="tsc"><span class="lab">${esc(lab)}</span><b class="${cls || ""}">${esc(val)}</b><i>${esc(sub || "")}</i></div>`;
   }
   function tsProgreso(t) {
-    const secs = tsSecciones();
+    const secs = tsSecciones(t);
     const hechas = secs.filter(x => { try { return x.listo(t); } catch (e) { return false; } });
     return { hechas: hechas.length, total: secs.length, faltan: secs.filter(x => !hechas.includes(x)) };
   }
@@ -8316,21 +8558,21 @@
       return;
     }
     el.innerHTML = items.map(t => {
-      const c = tesisCalc(t), pr = tsProgreso(t), secs = tsSecciones();
+      const c = tesisCalc(t), pr = tsProgreso(t), secs = tsSecciones(t);
       const est = TS_ESTADOS.find(x => x[0] === t.status) || TS_ESTADOS[0];
       const nR = x => x == null ? "—" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2) + "R";
       const cerrada = t.status === "cerrada";
       const kpis = [];
-      if (c.valido) {
+      if (c.porUnidadUsd != null) {
         /* El R planeado y el conseguido son una COMPARACIÓN. En baldosas
            separadas hay que buscarlos; juntos se leen de un vistazo, que es lo
            único que hace que la próxima vez se planee distinto. */
         const sub = c.rFinal != null
           ? `planeado · <span class="${c.rFinal >= c.rr1 ? "pos" : "neg"}">${nR(c.rFinal)} real</span>`
           : (c.rr1 != null && c.rr1 < 2 ? "por debajo de 2:1" : "planeado");
-        kpis.push(kpi("R:R a TP1", c.rr1 == null ? "—" : c.rr1.toFixed(2) + "R", c.rr1 == null ? "dim" : c.rr1 >= 2 ? "good" : "bad", sub));
-        kpis.push(kpi("Riesgo", c.riesgo == null ? "—" : money(c.riesgo, 2), c.riesgo == null ? "dim" : "warn", c.distPct == null ? "" : (c.distPct * 100).toFixed(2) + "% al stop"));
-        kpis.push(kpi("Tamaño", c.tam == null ? "—" : (c.tam >= 10 ? String(Math.floor(c.tam)) : c.tam.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")), c.tam == null ? "dim" : "", c.tam == null ? "falta capital" : c.unidad));
+        kpis.push(kpi(c.def.base === "prima" ? "R:R de la prima" : "R:R a TP1", c.rr1 == null ? "—" : c.rr1.toFixed(2) + "R", c.rr1 == null ? "dim" : c.rr1 >= 2 ? "good" : "bad", sub));
+        kpis.push(kpi("Riesgo", c.riesgo == null ? "—" : money(c.riesgo, 2), c.riesgo == null ? "dim" : "warn", tsComoSale(c)));
+        kpis.push(kpi("Tamaño", tsTam(c), c.tam === 0 ? "bad" : c.tam == null ? "dim" : "", c.tam == null ? "falta capital" : c.unidad));
       }
       /* Sin plan que comparar (faltan precios) la R real sí necesita su sitio. */
       if ((cerrada || c.op) && !c.valido) kpis.push(kpi("R real", nR(c.rFinal), c.rFinal == null ? "dim" : c.rFinal > 0 ? "good" : c.rFinal < 0 ? "bad" : "", c.op ? "de la operación enlazada" : "sin operación enlazada"));
@@ -8347,6 +8589,7 @@
           ${t.setupId && coll("playbooks").get(t.setupId) ? `<span class="chip">${esc(coll("playbooks").get(t.setupId).name)}</span>` : ""}</div>
         ${kpis.length ? `<div class="kpis">${kpis.join("")}</div>` : ""}
         ${c.stopAlReves ? `<p class="tswarn">El stop está del lado equivocado para un ${t.bias === "short" ? "corto" : "largo"}.</p>` : ""}
+        ${c.aviso && !c.stopAlReves ? `<p class="tswarn">${esc(c.aviso)}</p>` : ""}
         ${c.debePostmortem ? `<p class="tsnudge">${c.valido && c.rFinal != null ? "La operación ya cerró" : `La operación ya cerró${c.rFinal == null ? "" : ` en <b>${nR(c.rFinal)}</b>`}`}. Falta la lección — es lo único de esta jugada que te sirve en la siguiente. <button type="button" class="lnk" data-act="tssec" data-sec="postmortem">Escribirla</button></p>` : ""}
         ${t.tesis ? `<div class="kv"><b>tesis</b><span>${esc(t.tesis)}</span>${t.invalida ? `<b>invalida</b><span>${esc(t.invalida)}</span>` : ""}${t.catalizador ? `<b>catalizador</b><span>${esc(t.catalizador)}${t.catalizadorFecha ? " · " + esc(dmy(t.catalizadorFecha)) : ""}</span>` : ""}${t.leccion ? `<b>lección</b><span>${esc(t.leccion)}</span>` : ""}</div>` : ""}
         <div class="tsprog"><span class="lab">Secciones</span>
@@ -8356,7 +8599,7 @@
         ${tsDiarioHtml(t)}
         <div class="cf" style="justify-content:space-between;flex-wrap:wrap;gap:4px">
           <div class="tools"><button type="button" class="icon del" data-act="tsdel" title="Borrar">×</button></div>
-          <div class="tools">${c.valido && !t.tradeId ? `<button type="button" class="btn sm ghost" data-act="tsop" title="Abre el journal con la entrada, el stop y el tamaño ya puestos">Abrir operación</button>` : ""}${t.tradeId ? `<button type="button" class="btn sm ghost" data-act="tsver" title="Ver la operación en el journal">Ver operación</button>` : ""}<button type="button" class="btn sm ghost" data-act="tsnota">+ Seguimiento</button><button type="button" class="btn sm ghost" data-act="tsdup">Duplicar</button><button type="button" class="btn sm" data-act="tssec" data-sec="ficha">Editar</button></div>
+          <div class="tools">${c.tam > 0 && !t.tradeId ? `<button type="button" class="btn sm ghost" data-act="tsop" title="Abre el journal con la entrada, el stop y el tamaño ya puestos">Abrir operación</button>` : ""}${t.tradeId ? `<button type="button" class="btn sm ghost" data-act="tsver" title="Ver la operación en el journal">Ver operación</button>` : ""}<button type="button" class="btn sm ghost" data-act="tsnota">+ Seguimiento</button><button type="button" class="btn sm ghost" data-act="tsdup">Duplicar</button><button type="button" class="btn sm" data-act="tssec" data-sec="ficha">Editar</button></div>
         </div>
       </div>`;
     }).join("");
@@ -8375,7 +8618,7 @@
   const TES = {
     all() { return coll("tesis").items.slice(); },
     get(id) { return coll("tesis").get(id) || null; },
-    sections() { return tsSecciones().map(x => ({ id: x.id, n: x.n, label: x.label })); },
+    sections(t) { return tsSecciones(t).map(x => ({ id: x.id, n: x.n, label: x.label })); },
     create(t) {
       const rec = Object.assign({ status: "watchlist", tipo: "accion", bias: "long", estilo: "swing",
         horizonte: "semanas", ordenTipo: "limit" }, t || {},
@@ -9690,7 +9933,9 @@
   coll("markets").subscribe(() => fanout([Z.invest, Z.destinos]));
   coll("positions").subscribe(() => fanout([Z.invest, Z.contadores]));
   coll("watch").subscribe(() => fanout([Z.invest]));
-  coll("tesis").subscribe(() => fanout([Z.playbook, Z.contadores]));
+  /* También Z.respaldo: crear una tesis cambia lo que se lleva una copia, y el
+     resumen del panel se quedaba clavado hasta que otra cosa lo repintara. */
+  coll("tesis").subscribe(() => fanout([Z.playbook, Z.contadores, Z.respaldo]));
   coll("scenarios").subscribe(() => fanout([Z.escenarios]));
   coll("risk").subscribe(() => fanout([Z.riesgosGuardados]));
 

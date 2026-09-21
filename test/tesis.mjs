@@ -105,7 +105,7 @@ ok(sinOp.rFinal === null, 'y sin operación enlazada NO se inventa una R', Strin
 console.log('\n═══ el progreso dice qué falta, en el orden de la plantilla ═══');
 await p.waitForTimeout(400);
 const prog = await txt('#pbCards .card .tsprog');
-ok(/\d+\/12/.test(prog), 'las 12 secciones se cuentan', prog.slice(0, 40));
+ok(/\d+\/13/.test(prog), 'las 13 secciones se cuentan', prog.slice(0, 40));
 ok(/sigue:/.test(prog), 'y nombra la SIGUIENTE, no todas — se completan en orden');
 
 console.log('\n═══ el diario es la sección 10, no un añadido ═══');
@@ -118,10 +118,17 @@ ok(/Aguantó el nivel/.test(di), 'la entrada de seguimiento se ve en la ficha', 
 ok(/8\/10/.test(di), 'con su nota emocional, que marca los días tensos');
 
 console.log('\n═══ sobrevive a recargar ═══');
-await p.reload(); await p.waitForTimeout(1600);
+const antesDeRecargar = await p.evaluate(() => TES.all().length);
+await p.reload();
+/* Esperar un reloj fijo tras recargar es una carrera: loadLocal() corre cuando
+   corre, y 1600 ms bastaban casi siempre. Casi siempre es flaky, y un test
+   intermitente acaba ignorado. Se espera a la CONDICIÓN. */
+await p.waitForFunction(n => typeof TES !== 'undefined' && TES.all().length >= n,
+                        antesDeRecargar, { timeout: 15000 });
 await p.click('.tabbtn[data-tab="playbook"]'); await p.waitForTimeout(300);
 await p.click('#pbNav .tabbtn[data-v="tesis"]'); await p.waitForTimeout(400);
-ok(await p.$$eval('#pbCards .card', n => n.length) >= 2, 'las tesis se guardan y vuelven');
+ok(await p.$$eval('#pbCards .card', n => n.length) >= 2,
+   `las ${antesDeRecargar} tesis se guardan y vuelven`);
 
 console.log('\n═══ el puente: plan → operación → post-mortem, sin teclear dos veces ═══');
 /* Sin puente hay que reescribir entrada, stop y tamaño en el journal. Y lo que
@@ -173,6 +180,85 @@ ok(!sinNudge, 'y el aviso desaparece al escribir la lección');
 const verOp = await p.evaluate(() => !!document.querySelector('.card[data-id="ts_p"] button[data-act="tsver"]'));
 const abrirOp = await p.evaluate(() => !!document.querySelector('.card[data-id="ts_p"] button[data-act="tsop"]'));
 ok(verOp && !abrirOp, 'con operación enlazada el botón pasa a «Ver operación»', `ver=${verOp} abrir=${abrirOp}`);
+
+console.log('\n═══ cada activo se opera distinto, y la aritmética lo sabe ═══');
+/* Aplicar la fórmula de la acción a los nueve tipos es lo que hacía este
+   archivo. Una acción arriesga (entrada − stop); un futuro arriesga TICKS × el
+   valor del tick; una opción comprada arriesga la PRIMA entera y el stop no
+   manda; en FX son pips × el valor del pip; un bono cotiza en % del nominal. */
+const T = async x => p.evaluate(v => TES.calc(v), x);
+
+const acc = await T({ tipo: 'accion', asset: 'AAPL', bias: 'long', entrada: 170, stop: 165, tp1: 182, capital: 25000, riesgoPct: 1 });
+ok(cerca(acc.porUnidadUsd, 5) && acc.tam === 50, 'acción: $5 por acción → 50 acciones', `${acc.porUnidadUsd} · ${acc.tam}`);
+
+const tFut = await T({ tipo: 'futuro', asset: 'MNQ', bias: 'long', entrada: 21000, stop: 20975, tp1: 21075, capital: 25000, riesgoPct: 1 });
+ok(tFut.extra && tFut.extra.ticks === 100, 'futuro: el stop son 100 TICKS, no 25 puntos', tFut.extra && tFut.extra.ticks);
+ok(cerca(tFut.porUnidadUsd, 50) && tFut.tam === 5, 'y 100 ticks × $0.50 = $50 → 5 contratos', `${tFut.porUnidadUsd} · ${tFut.tam}`);
+const mes = await T({ tipo: 'futuro', asset: 'MNQZ5', bias: 'long', entrada: 21000, stop: 20975, tp1: 21075, capital: 25000, riesgoPct: 1 });
+ok(mes.tam === 5, 'un código de mes (MNQZ5) se reduce a su raíz', mes.tam);
+const ancho = await T({ tipo: 'futuro', asset: 'MNQ', bias: 'long', entrada: 21000, stop: 20000, tp1: 23000, capital: 25000, riesgoPct: 1 });
+ok(ancho.tam === 0 && /no llega ni para un contrato/.test(ancho.aviso || ''),
+   'con un stop de 4000 ticks lo dice, no enseña un 0 mudo', (ancho.aviso || '').slice(0, 60));
+
+const opc = await T({ tipo: 'opcion', asset: 'NVDA', bias: 'long', opDir: 'comprada', prima: 3.5, primaObjetivo: 7, capital: 100000, riesgoPct: 2 });
+ok(cerca(opc.porUnidadUsd, 350), 'opción comprada: el riesgo es la PRIMA × 100, no entrada − stop', opc.porUnidadUsd);
+ok(opc.tam === 5, 'y $2,000 de riesgo caben 5 contratos', opc.tam);
+ok(cerca(opc.rr1, 1), 'su R:R sale de la prima: 3.50 → 7.00 es 1.00R', opc.rr1);
+const desnuda = await T({ tipo: 'opcion', asset: 'NVDA', bias: 'short', opDir: 'vendida', prima: 3.5, capital: 100000, riesgoPct: 2 });
+ok(desnuda.tam == null && /no tiene pérdida máxima/.test(desnuda.aviso || ''),
+   'una vendida sin cobertura NO recibe un tamaño inventado', (desnuda.aviso || '').slice(0, 60));
+const spread = await T({ tipo: 'opcion', asset: 'NVDA', bias: 'short', opDir: 'vendida', prima: 1.5, anchoSpread: 5, capital: 100000, riesgoPct: 2 });
+ok(cerca(spread.porUnidadUsd, 350), 'con pata compradora sí: (5 − 1.50) × 100 = $350', spread.porUnidadUsd);
+
+const fx = await T({ tipo: 'fx', asset: 'EURUSD', bias: 'long', entrada: 1.0850, stop: 1.0830, tp1: 1.0910, capital: 25000, riesgoPct: 1 });
+ok(fx.extra && cerca(fx.extra.pips, 20, 0.05), 'FX: 0.0020 de precio son 20 pips', fx.extra && fx.extra.pips);
+ok(cerca(fx.porUnidadUsd, 200) && cerca(fx.tam, 1.25), 'y 20 pips × $10 = $200 → 1.25 lotes', `${fx.porUnidadUsd} · ${fx.tam}`);
+const jpy = await T({ tipo: 'fx', asset: 'USDJPY', bias: 'long', entrada: 150.00, stop: 149.80, tp1: 150.60, capital: 25000, riesgoPct: 1 });
+ok(jpy.extra && cerca(jpy.extra.pips, 20, 0.05), 'en un par con yen el pip es 0.01, no 0.0001', jpy.extra && jpy.extra.pips);
+
+const bono = await T({ tipo: 'bono', asset: 'T 4.25 34', bias: 'long', entrada: 99, stop: 98, tp1: 102, capital: 25000, riesgoPct: 1 });
+ok(cerca(bono.porUnidadUsd, 10) && bono.tam === 25, 'bono: un punto sobre $1.000 de nominal son $10, no $1', `${bono.porUnidadUsd} · ${bono.tam}`);
+
+const btc = await T({ tipo: 'crypto', asset: 'BTC', bias: 'long', entrada: 60000, stop: 57000, tp1: 70000, capital: 25000, riesgoPct: 1 });
+ok(btc.tam > 0 && btc.tam < 1, 'cripto NO se trunca: 0.083333 BTC es un tamaño real', btc.tam);
+ok(String(btc.tam).length <= 10, 'y sale redondeado, sin ruido de coma flotante', btc.tam);
+ok(acc.tam === Math.floor(acc.tam) && tFut.tam === Math.floor(tFut.tam),
+   'mientras acciones y contratos sí se truncan — medio contrato no existe');
+
+console.log('\n═══ los campos son los del tipo, no los de todos ═══');
+const secsDe = async tipo => p.evaluate(t => {
+  const secs = TES.sections({ tipo: t });
+  return secs.map(x => x.id).join(',');
+}, tipo);
+ok((await secsDe('opcion')).includes('activo'), 'hay una sección de parámetros del activo');
+await p.evaluate(() => { TES.create({ id: 'x_op', asset: 'NVDA', tipo: 'opcion' }); TES.create({ id: 'x_fx', asset: 'EURUSD', tipo: 'fx' }); });
+await p.waitForTimeout(400);
+const abrir = async (id, sec) => { await p.click(`.card[data-id="${id}"] .tssec[data-sec="${sec}"]`); await p.waitForTimeout(250);
+  const r = await p.evaluate(() => Array.from(document.querySelectorAll('#edFields [id^=ef_]')).map(x => x.id.slice(3)));
+  await p.keyboard.press('Escape'); await p.waitForTimeout(200); return r; };
+const opAct = await abrir('x_op', 'activo');
+ok(opAct.includes('strike') && opAct.includes('delta') && opAct.includes('iv'),
+   'una opción pide strike, delta y volatilidad implícita', opAct.join(' '));
+const fxAct = await abrir('x_fx', 'activo');
+ok(fxAct.includes('swap') && !fxAct.includes('strike'),
+   'FX pide swap y NO pide strike', fxAct.join(' '));
+const opPlan = await abrir('x_op', 'plan');
+ok(opPlan.includes('prima') && !opPlan.includes('stop'),
+   'el plan de una opción pide prima, no stop — su riesgo no sale de un stop', opPlan.join(' '));
+const fxPlan = await abrir('x_fx', 'plan');
+ok(fxPlan.includes('pipValue') && fxPlan.includes('stop'), 'el de FX sí pide stop, y además el valor del pip');
+ok(fxPlan.filter(x => x === 'pipValue').length === 1 && !fxAct.includes('pipValue'),
+   'y cada campo vive en UNA sección, no en dos');
+
+/* El botón del puente pedía entrada y stop. Una opción no los usa —su riesgo es
+   la prima— así que se quedaba sin puente justo en el tipo donde más falta hace
+   acertar el tamaño. */
+await p.evaluate(() => TES.update('x_op', { opDir: 'comprada', prima: 3.5, primaObjetivo: 7, capital: 100000, riesgoPct: 2 }));
+await p.waitForTimeout(400);
+const opBtn = await p.evaluate(() => !!document.querySelector('.card[data-id="x_op"] button[data-act="tsop"]'));
+ok(opBtn, 'una opción con prima SÍ puede abrir operación');
+const marcas = await p.evaluate(() => Array.from(document.querySelectorAll('.card[data-id="x_op"] .tssec')).map(x => x.textContent.trim()));
+ok(new Set(marcas).size === marcas.length, 'cada sección tiene su propia marca, sin dos iguales', marcas.join(','));
 
 console.log('\n═══ el respaldo se las lleva ═══');
 /* Un export que dice «todo» y deja fuera la investigación es peor que uno que
