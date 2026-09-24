@@ -1265,6 +1265,91 @@ recorre `COLLS`), pero el panel las contaba con una lista aparte que no las
 incluía. El resumen decía «1 operación» y no mencionaba la investigación, que es
 lo más caro de rehacer.
 
+## Siete tests en verde sobre una app que ya no existía
+
+Buscando por qué la suite tardaba 8,8 minutos apareció algo que no tenía nada
+que ver con la velocidad.
+
+Siete archivos —`audit2`, `audit3`, `audit4`, `audit5`, `killzone`, `redcheck`,
+`sesnow`— no cargaban `test/preview.html`, el que se reconstruye antes de cada
+corrida. Cargaban una **ruta absoluta** a una copia suelta:
+
+```js
+const URL = 'file:///tmp/claude-0/…/scratchpad/preview.html';
+```
+
+Ese archivo existía. Por eso pasaban. Lo que no pasaba es que se regenerara:
+llevaba **seis días** congelado. 633 KB contra los 774 KB del build actual —
+141 KB, el 18% de la app, que no estaban ahí. Cero ocurrencias de `posPerf`,
+`window.INV`, `tesisCalc`, `window.TES`, `QE.dimensionar`, el arreglo del IRR.
+Es decir: todo lo construido en los últimos cuatro turnos.
+
+**Y yo anuncié «suite 42/42» cuatro veces con esos siete midiendo código
+muerto.** Uno de ellos llevaba seis días imprimiendo `cuenta en Cabina del
+journal: undefined` sin que nadie lo mirara, porque imprime en vez de afirmar.
+
+Apuntados al build real, los siete pasan igual: no ocultaban ninguna regresión.
+Eso fue suerte, no diseño. La lección no es que no hubiera daño, es que **un
+test verde sobre el archivo equivocado es peor que un test rojo** — el rojo se
+arregla.
+
+`capa2.mjs` gana una sección 9 con dos comprobaciones: ningún test puede llevar
+una ruta `file:///` fija (todos derivan de `process.cwd()`, como los otros 36),
+y `preview.html` tiene que contener los símbolos que hay en `index.html` — si
+falta alguno, es que nadie corrió `build-preview.mjs`. Verificado que se pone
+roja por los dos motivos.
+
+## El test dormía el 88% de su tiempo
+
+`vivo.mjs` era el más lento de los 44: 45,5 s. Compara 547 números en vivo
+contra los mismos tras recargar, recorriendo 6 pestañas y 20 sub-vistas. Tras
+cada clic esperaba `waitForTimeout(500)` o `(520)`.
+
+Perfilado de una pasada de su `foto()`:
+
+| | |
+|---|---|
+| espera fija | **11.840 ms** |
+| trabajo real (leer el DOM) | **40 ms** |
+
+Ratio **296:1**, y `foto()` se llama tres veces. Con el arranque y las dos
+operaciones de prueba: **40 de 45 segundos dormido, el 88%**.
+
+La espera estaba mal calibrada por construcción. Medí con un `MutationObserver`
+cuánto tarda de verdad el DOM en quedarse quieto tras cada clic: las 23 esperas
+dieron **el suelo del observador y nunca más** — el DOM ya estaba quieto antes
+de empezar a mirarlo. Cabina pinta con un coalescer de microtasks (`fanout` →
+`Promise.resolve().then()`), así que termina antes de que Playwright complete el
+viaje de vuelta. Los 500 ms no esperaban a nada.
+
+Esperar a la condición en vez de al reloj: **45,5 s → 10,8 s**. Un número fijo
+falla en los dos sentidos —de más cuesta minutos, de menos produce un test
+intermitente— y la condición no tiene ese dilema.
+
+Comprobado antes de darlo por bueno:
+
+- el test actual es determinista (547 claves idénticas en 3 corridas);
+- la versión rápida da **las mismas 547 claves y los mismos valores en las 10
+  corridas** de verificación;
+- y sigue **pudiendo fallar**: saboteando la app (quitando `Z.cuentas` del
+  fanout, para que el balance no se repinte tras una operación) las dos
+  versiones cazan lo mismo — 624 claves, 97 que faltan, 77 que sobran, 2
+  rancios, misma ruta del DOM. Un test rápido que ya no caza nada no vale nada.
+
+### Dónde NO sirve la quiescencia
+
+`test/espera.mjs` lleva el ayudante y, sobre todo, la lista de sitios donde
+**no** vale. La app difiere trabajo con `setTimeout` en cinco caminos: 40 ms al
+confirmar una importación, 60 ms al abrir una operación desde una tesis, 100 ms
+al crear una versión de estrategia, y dos de 1.200 ms (el `location.reload()`
+tras restaurar un respaldo y la migración del arranque).
+
+Si la calma es más corta que el diferido, el observador ve el DOM quieto,
+devuelve, y el repintado llega después: test intermitente. De ahí las dos
+calmas —30 ms para cambiar de vista, 150 ms para lo que difiere— y que en los
+dos de 1.200 ms no se use quiescencia sino espera a la navegación o al selector.
+Por eso `vivo.mjs` se convirtió uno a uno y verificado, y no con un `sed`.
+
 ## Cómo fluye un dato
 
 No hay framework: una colección en memoria es la única fuente y todo lo demás

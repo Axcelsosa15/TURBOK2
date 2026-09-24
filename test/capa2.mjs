@@ -224,6 +224,40 @@ const huerfanos = usados.filter(v => !definidos.has(v) && !conRespaldo.has(v) &&
 ok(huerfanos.length === 0, `los ${usados.length} tokens usados existen`,
    huerfanos.length ? 'sin definir: ' + huerfanos.join(', ') : '');
 
+console.log('\n═══ 9 · ningún test mide una copia congelada ═══');
+/* Siete tests apuntaban a una ruta ABSOLUTA de un scratchpad en vez de al
+   preview que se reconstruye. El archivo existía, así que pasaban en verde —
+   sobre una copia de la app de hacía seis días: 141 KB menos, sin posPerf, sin
+   INV, sin TES, sin QE.dimensionar, sin el arreglo del IRR. Cuatro veces
+   anuncié «suite 42/42» con siete tests midiendo código que ya no existía.
+
+   Uno de ellos llevaba seis días imprimiendo «cuenta en Cabina del journal:
+   undefined» sin que nadie lo mirara.
+
+   Un test verde sobre el archivo equivocado es peor que un test rojo: el rojo
+   se arregla. */
+import { readdirSync, readFileSync as leer } from 'node:fs';
+const dirTest = join(dirname(fileURLToPath(import.meta.url)));
+const tests = readdirSync(dirTest).filter(f => f.endsWith('.mjs') && f !== 'sync-index.mjs' && f !== 'build-preview.mjs');
+const conRutaFija = [];
+for (const f of tests) {
+  const t = leer(join(dirTest, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /* Sólo se permite derivar la ruta de dónde se corre. Cualquier absoluta que
+     no venga de process.cwd() es una copia que nadie regenera. */
+  for (const m of t.matchAll(/'file:\/\/\/[^']*'|"file:\/\/\/[^"]*"/g)) conRutaFija.push(`${f}: ${m[0].slice(0, 60)}`);
+}
+ok(conRutaFija.length === 0, `los ${tests.length} tests derivan su ruta de process.cwd()`,
+   conRutaFija.length ? conRutaFija.slice(0, 5).join(' · ') : '');
+
+/* Y que el preview contra el que corren sea el de AHORA, no uno de ayer. */
+const prev = join(dirTest, 'preview.html');
+const idx = leer(join(dirTest, '..', 'index.html'), 'utf8');
+const pv = leer(prev, 'utf8');
+const marcas = ['posPerf', 'tesisCalc', 'window.INV', 'window.TES', 'QE.dimensionar'];
+const ausentes = marcas.filter(m => idx.includes(m) && !pv.includes(m));
+ok(ausentes.length === 0, 'preview.html está reconstruido desde el index.html actual',
+   ausentes.length ? 'falta en el preview: ' + ausentes.join(', ') + ' — corre build-preview.mjs' : '');
+
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
 process.exit(fallos.length ? 1 : 0);

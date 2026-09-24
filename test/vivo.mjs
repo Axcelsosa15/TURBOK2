@@ -3,6 +3,7 @@
    Cualquier valor que difiera entre "actualizado en vivo" y "tras recargar"
    está rancio: la app te está enseñando un número viejo. */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { quieto, arrancada, trasGuardar } from './espera.mjs';
 const errs = []; const b = await chromium.launch();
 const F = new Date('2026-09-17T14:00:00Z').getTime();
 const TABS = ['cabina', 'futuros', 'playbook', 'invest', 'ideas', 'calc'];
@@ -21,17 +22,18 @@ async function nueva() {
   return p;
 }
 
+
 /* Recorre todas las pestañas y devuelve un mapa clave->valor de cada nodo de
    texto que contenga un dígito, con una clave estable por ruta en el DOM. */
 async function foto(p) {
   const mapa = {};
   for (const t of TABS) {
     await p.click(`.tabbtn[data-tab="${t}"]`).catch(()=>{});
-    await p.waitForTimeout(500);
+    await quieto(p);
     // recorre también las sub-vistas: un número rancio puede estar escondido en una
     const subs = await p.evaluate(() => [...document.querySelectorAll('button[data-v]')].filter(b=>b.offsetParent).map(b=>b.dataset.v));
     for (const sv of (subs.length ? subs : [null])) {
-      if (sv) { await p.click(`button[data-v="${sv}"]`).catch(()=>{}); await p.waitForTimeout(520); }
+      if (sv) { await p.click(`button[data-v="${sv}"]`).catch(()=>{}); await quieto(p); }
       const m = await p.evaluate((tab) => {
       const out = {};
       const ruta = (el) => {
@@ -69,18 +71,19 @@ async function sembrar(p, extra) {
 }
 
 async function meteOperacion(p, id, exit) {
-  await p.click('.tabbtn[data-tab="futuros"]'); await p.click('#ftNew'); await p.waitForTimeout(280);
+  await p.click('.tabbtn[data-tab="futuros"]'); await p.click('#ftNew');
+  await p.waitForSelector('#ef_entry', { timeout: 10000 }); await quieto(p);
   await p.fill('#ef_date', '2026-09-17'); await p.fill('#ef_time', '09:45');
   await p.fill('#ef_instrument', 'MNQ'); await p.fill('#ef_qty', '2');
   await p.selectOption('#ef_accountId', id);
   await p.fill('#ef_entry', '21000'); await p.fill('#ef_stop', '20990'); await p.fill('#ef_exit', String(exit));
-  await p.click('#edSave'); await p.waitForTimeout(700);
+  await p.click('#edSave'); await trasGuardar(p);
 }
 
 // ── 1. sesión que actualiza en vivo ──
 const p1 = await nueva();
 await sembrar(p1);
-await p1.goto('file://' + process.cwd() + '/preview.html'); await p1.waitForTimeout(1200);
+await p1.goto('file://' + process.cwd() + '/preview.html'); await arrancada(p1);
 const id = await p1.evaluate(() => document.querySelector('.acct').dataset.id);
 await meteOperacion(p1, id, 21030);          // +30 pts x 2 x $2 = +$120
 await meteOperacion(p1, id, 20990);          // -10 pts x 2 x $2 = -$40
@@ -90,7 +93,7 @@ const guardado = await p1.evaluate(() => localStorage.getItem('cabina-mnq:v1'));
 // ── 2. misma data, cargada de cero ──
 const p2 = await nueva();
 await p2.addInitScript(`try{localStorage.setItem('cabina-mnq:v1', ${JSON.stringify(guardado)});}catch(e){}`);
-await p2.goto('file://' + process.cwd() + '/preview.html'); await p2.waitForTimeout(1400);
+await p2.goto('file://' + process.cwd() + '/preview.html'); await arrancada(p2);
 const fresco = await foto(p2);
 const fresco2 = await foto(p2);               // segunda pasada: detecta lo volátil
 

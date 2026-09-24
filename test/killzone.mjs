@@ -8,7 +8,7 @@ for (const [w,label] of [[390,'iphone14'],[430,'promax'],[375,'se'],[1400,'deskt
     const p = await ctx.newPage();
     const F = new Date(iso).getTime();
     await p.addInitScript(`{const F=${F};const R=Date;class D extends R{constructor(...a){if(!a.length)super(F);else super(...a);}static now(){return F;}}window.Date=D;window.claude={use:async n=>null};}`);
-    await p.goto('file:///tmp/claude-0/-home-user-trading-journal2/98c7b14f-3728-5f9b-a633-ce8f09807ce4/scratchpad/preview.html');
+    await p.goto('file://' + process.cwd() + '/preview.html');
     await p.waitForTimeout(700);
     const o = await p.evaluate(() => {
       const pill = document.getElementById('sessionPill');

@@ -1,5 +1,10 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
-const URL = 'file:///tmp/claude-0/-home-user-trading-journal2/98c7b14f-3728-5f9b-a633-ce8f09807ce4/scratchpad/preview.html';
+/* Apuntaba a una ruta ABSOLUTA del scratchpad. Ese archivo existía, así que
+   el test pasaba en verde — midiendo una copia congelada de la app. Cuando se
+   descubrió llevaba seis días sin regenerarse: 141 KB menos, sin posPerf, sin
+   INV, sin TES, sin el arreglo del IRR. Verde sobre código que ya no existía.
+   La ruta se deriva del sitio desde el que se corre, como los otros 36. */
+const URL = 'file://' + process.cwd() + '/preview.html';
 const errs = []; const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
 page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));

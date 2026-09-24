@@ -2,7 +2,7 @@ import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1100 } });
 await p.addInitScript(()=>{window.claude={use:async n=>n==='permissions'?{state:async()=>'granted',request:async ns=>Object.fromEntries((ns||[]).map(x=>[x,'granted']))}:null};});
-await p.goto('file:///tmp/claude-0/-home-user-trading-journal2/98c7b14f-3728-5f9b-a633-ce8f09807ce4/scratchpad/preview.html');
+await p.goto('file://' + process.cwd() + '/preview.html');
 await p.waitForTimeout(600); await p.click('#demoToggle'); await p.waitForTimeout(1000);
 const scan = () => p.evaluate(() => {
   const RED = ['rgb(224, 96, 79)'];
