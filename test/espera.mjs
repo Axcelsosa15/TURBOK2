@@ -32,7 +32,21 @@ export const quieto = (pg, calma = 30, tope = 1500) => pg.evaluate(([c, t]) => n
    un hueco mayor que la calma, así que el observador se rendiría a mitad. Se
    espera a que EXISTA lo que el test va a usar, y sólo después a que se calme. */
 export const arrancada = async (pg, sel = '.acct') => {
-  await pg.waitForSelector(sel, { timeout: 15000 });
+  /* Primero el motor: `window.FUT` se asigna durante el arranque, así que su
+     existencia es la señal de que la app corrió, no de que el HTML llegó.
+
+     Esto importa: pasarle un selector del HTML ESTÁTICO —`.tabbtn`, por
+     ejemplo— hace que `waitForSelector` resuelva al instante, porque ese
+     elemento está en el documento antes de que se ejecute una sola línea de la
+     app. Me pasó escribiendo el test del borrado en masa: la barra de deshacer
+     aún no se había pintado y el test la dio por perdida. El selector tiene que
+     ser algo que RENDERICE la app. */
+  /* `polling: 100` y no el rAF por defecto: requestAnimationFrame se estrangula
+     cuando la página no está pintando, y con varios Chromium en paralelo eso
+     pasa. Cambiar un sleep fijo por una condición sondeada con rAF es cambiar
+     una fragilidad por otra — me pasó, y falló 2 de cada 6 veces. */
+  await pg.waitForFunction(() => typeof window.FUT !== 'undefined', null, { timeout: 15000, polling: 100 });
+  if (sel) await pg.waitForSelector(sel, { timeout: 15000 }).catch(() => {});
   await quieto(pg, 120, 4000);
 };
 
@@ -55,6 +69,30 @@ export const arrancada = async (pg, sel = '.acct') => {
 
    Antes de meter `quieto` en un sitio nuevo: mira si ese camino difiere algo. */
 export const trasAccion = (pg) => quieto(pg, 150, 3000);
+
+/* ── sembrar datos sin que una recarga los borre ──────────────────────────
+   El patrón obvio —`addInitScript` que escribe localStorage sólo «si está
+   vacío»— NO es fiable sobre `file://`:
+
+       addInitScript(`if(!localStorage.getItem(K)) localStorage.setItem(K, …)`)
+
+   `addInitScript` corre en CADA navegación, incluidas las recargas, y en
+   `document_start` la zona de almacenamiento de un `file://` a veces todavía no
+   está enlazada: `getItem` devuelve null aunque el dato esté escrito. Entonces
+   la semilla se reescribe y borra lo que el test acababa de guardar.
+
+   Medido en `tesis.mjs`: fallaba 2 de cada 10 corridas con las cuentas, las
+   operaciones y las tesis a cero, y el marcador confirmó que la semilla había
+   vuelto a escribir. Perseguí antes el sondeo de `waitForFunction` y el modo
+   demo; ninguno era la causa.
+
+   La solución no es adivinar mejor: es sembrar en un documento YA cargado, donde
+   localStorage responde de verdad, y recargar una vez para que la app lo lea. */
+export const siembra = async (pg, url, datos) => {
+  await pg.goto(url);
+  await pg.evaluate(t => localStorage.setItem('cabina-mnq:v1', t), JSON.stringify(datos));
+  await pg.reload();
+};
 
 /* ── esperar al DATO, no al pintado ────────────────────────────────────────
    La quiescencia mira el DOM. Hay cosas que no son DOM.

@@ -8,14 +8,19 @@
 
    Aquí se comprueba que se ESCRIBA el precio y se DERIVE el resto. */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { siembra } from './espera.mjs';
 const errs = [], fallos = [];
 const F = new Date('2026-09-18T14:00:00Z').getTime();
 const b = await chromium.launch();
 const p = await (await b.newContext({ viewport: { width: 1500, height: 1100 } })).newPage();
 p.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
 await p.addInitScript(`{const F=${F};const R=Date;class D extends R{constructor(...a){if(!a.length)super(F);else super(...a);}static now(){return F;}}window.Date=D;}`);
-await p.addInitScript(`try{if(!localStorage.getItem('cabina-mnq:v1'))localStorage.setItem('cabina-mnq:v1', JSON.stringify({settings:{meta:{},accounts:[],rules:[]}}));}catch(e){}`);
-await p.goto('file://' + process.cwd() + '/preview.html'); await p.waitForTimeout(1300);
+/* Sembrado desde un documento ya cargado, no con addInitScript: en `file://`
+   la semilla condicional se reescribía al recargar y borraba lo guardado.
+   El detalle, en espera.mjs. */
+const URL = 'file://' + process.cwd() + '/preview.html';
+await siembra(p, URL, { settings: { meta: {}, accounts: [], rules: [] } });
+await p.waitForTimeout(1300);
 const ok = (c, t, d) => { console.log(`  ${c ? '✅' : '❌'} ${t}${d != null ? '   ' + d : ''}`); if (!c) fallos.push(t); };
 const cerca = (a, e, tol = 0.005) => a != null && Math.abs(a - e) <= tol;
 const txt = sel => p.textContent(sel).then(x => x.replace(/\s+/g, ' ').trim());
@@ -119,12 +124,22 @@ ok(/8\/10/.test(di), 'con su nota emocional, que marca los días tensos');
 
 console.log('\n═══ sobrevive a recargar ═══');
 const antesDeRecargar = await p.evaluate(() => TES.all().length);
+const discoAntes = await p.evaluate(() => { try { const t = localStorage.getItem('cabina-mnq:v1'); return t ? Object.keys(JSON.parse(t).tesis || {}).length : 'sin clave'; } catch (x) { return 'error'; } });
 await p.reload();
 /* Esperar un reloj fijo tras recargar es una carrera: loadLocal() corre cuando
    corre, y 1600 ms bastaban casi siempre. Casi siempre es flaky, y un test
    intermitente acaba ignorado. Se espera a la CONDICIÓN. */
 await p.waitForFunction(n => typeof TES !== 'undefined' && TES.all().length >= n,
-                        antesDeRecargar, { timeout: 15000 });
+                        antesDeRecargar, { timeout: 15000, polling: 100 })
+  .catch(async () => {
+    /* Un timeout que no dice nada es un mal test: al fallar hay que ver QUÉ
+       estado había. Así se encontró que la semilla se reescribía al recargar. */
+    const est = await p.evaluate(() => { let d = null; try { d = JSON.parse(localStorage.getItem('cabina-mnq:v1')); } catch (x) { }
+      return { TES: typeof TES !== 'undefined' ? TES.all().length : 'no definido',
+               enDisco: d ? Object.keys(d.tesis || {}).length : 'sin clave',
+               cuentas: d ? (d.settings.accounts || []).length : '—' }; }).catch(() => ({}));
+    throw new Error(`esperaba >= ${antesDeRecargar} tesis · antes de recargar el disco tenía ${discoAntes} · ahora ${JSON.stringify(est)}`);
+  });
 await p.click('.tabbtn[data-tab="playbook"]'); await p.waitForTimeout(300);
 await p.click('#pbNav .tabbtn[data-v="tesis"]'); await p.waitForTimeout(400);
 ok(await p.$$eval('#pbCards .card', n => n.length) >= 2,

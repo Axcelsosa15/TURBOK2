@@ -30,7 +30,7 @@ await p.fill('#ef_entry','21000'); await p.fill('#ef_stop','20990'); await p.fil
    imprimía «total 0 ms», que es peor que no medir. */
 const t0 = Date.now();
 await p.click('#edSave');
-await p.waitForFunction(() => !document.querySelector('.ov.open'), null, { timeout: 20000 }).catch(() => {});
+await p.waitForFunction(() => !document.querySelector('.ov.open'), null, { timeout: 20000, polling: 100 }).catch(() => {});
 await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 const pared = Date.now() - t0;
 await p.waitForTimeout(1200);

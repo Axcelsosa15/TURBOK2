@@ -822,6 +822,35 @@
 .tsd .e.neg { color:var(--warning); }
 .card.ts .kv b { text-transform:none; }
 
+
+/* ── BORRADO EN MASA ──────────────────────────────────────────────
+   El modo selección no cambia el HTML de ninguna fila: sólo les pone una
+   marca. Por eso ninguna función de render tuvo que tocarse, y una fila que
+   se vuelve a dibujar recupera su estado desde el conjunto. */
+.selbtn.active { color:var(--accent); border-color:var(--accent); background:var(--accent-soft); }
+.selbar { display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; margin:0 0 var(--s2);
+  padding:var(--s2) var(--s3); font-size:var(--t-meta); color:var(--text);
+  border:1px solid var(--accent); border-radius:var(--r-md); background:var(--accent-soft); }
+.selbar b { font-family:var(--font-mono); }
+.selbar .sp { flex:1 1 auto; }
+.selq { flex:1 1 320px; line-height:1.5; }
+.selmodo tr[data-id], .selmodo tr[data-date], .selmodo .card[data-id] { cursor:pointer; }
+.selmodo tr[data-id]:hover, .selmodo tr[data-date]:hover { background:var(--surface-2); }
+.selmodo tr.sel, .selmodo tr.sel:hover { background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
+.selmodo .card[data-id] { transition:box-shadow var(--mo-fast) var(--ease), background var(--mo-fast) var(--ease); }
+.selmodo .card.sel { background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent); }
+/* En modo selección los botones de la fila no deben poder pulsarse: el clic
+   es para seleccionar, y mezclar los dos gestos es como se borra de más. */
+.selmodo tr[data-id] button, .selmodo tr[data-date] button,
+.selmodo .card[data-id] button, .selmodo .card[data-id] select { pointer-events:none; opacity:.4; }
+.papelera { position:fixed; left:50%; bottom:var(--s4); z-index:60; transform:translateX(-50%);
+  display:flex; align-items:center; gap:var(--s3); max-width:calc(100vw - 2*var(--gut));
+  padding:var(--s2) var(--s3); font-size:var(--t-meta); color:var(--text);
+  border:1px solid var(--line-strong); border-radius:var(--r-pill);
+  background:var(--surface-3, var(--surface-2)); box-shadow:var(--sh-2); }
+.papelera b { font-family:var(--font-mono); }
+@media (max-width: 560px) { .selbar { font-size:var(--t-meta); } .papelera { left:var(--gut); right:var(--gut); transform:none; border-radius:var(--r-md); } }
+
 /* ── PALETA DE COMANDOS ────────────────────────────────────────────
      Superficie elevada sobre un velo, no un panel más de la página: aquí sí
      se gana la sombra, porque flota de verdad sobre el resto. */
@@ -1505,7 +1534,8 @@
       </div>
     </section>
     <section class="panel" id="panelHist">
-      <header><h2>Últimas 14 sesiones</h2><span class="meta" id="histMeta"></span></header>
+      <header><h2>Últimas 14 sesiones</h2><span class="meta" id="histMeta"></span>
+        <button type="button" class="btn ghost sm selbtn" id="selbtn-histWrap" title="Selecciona varias sesiones y bórralas de una vez">Seleccionar</button></header>
       <div class="tiles" id="tiles"></div>
       <div class="body"><div class="twrap" id="histWrap"></div></div>
     </section>
@@ -1573,6 +1603,7 @@
     <select id="ftSetup" aria-label="Filtrar por setup"><option value="">todos los setups</option></select>
     <select id="ftInstr" aria-label="Instrumento"><option value="">todos los instrumentos</option></select>
     <select id="ftSes" aria-label="Sesión"><option value="">todas las sesiones</option></select>
+    <button type="button" class="btn ghost sm selbtn" id="selbtn-jrTable" title="Selecciona varias operaciones y bórralas de una vez">Seleccionar</button>
     <button type="button" class="btn primary" id="ftNew">+ Nueva operación</button>
   </div>
   <div class="ftfilt" id="ftFilters" hidden></div>
@@ -1726,6 +1757,7 @@
     <button type="button" class="btn ghost sm" id="pbExport" title="Copia los setups de esta vista como JSON">Exportar</button>
     <button type="button" class="btn ghost sm" id="pbImport" title="Pega un JSON exportado">Importar</button>
     <button type="button" class="btn" id="pbTemplate">Desde plantilla</button>
+    <button type="button" class="btn ghost sm selbtn" id="selbtn-pbCards" title="Selecciona varias y bórralas de una vez">Seleccionar</button>
     <button type="button" class="btn primary" id="pbNew">+ Nuevo setup</button>
   </div>
   <input type="file" id="pbFile" accept="image/*" hidden>
@@ -1740,6 +1772,7 @@
     <select id="idCat" aria-label="Categoría"><option value="">todas las categorías</option></select>
     <select id="idStatus" aria-label="Estado"><option value="">todos los estados</option></select>
     <span class="sp"></span>
+    <button type="button" class="btn ghost sm selbtn" id="selbtn-idCards" title="Selecciona varias y bórralas de una vez">Seleccionar</button>
     <button type="button" class="btn primary" id="idNew">+ Nueva forma</button>
   </div>
   <p class="note-p">Repositorio de formas de hacer dinero en los mercados. Cada una con capital, tiempo, riesgo y por qué funcionaría. Una idea sin "próximo paso" es un deseo, no una idea.</p>
@@ -1751,6 +1784,7 @@
   <div class="toolbar">
     <select id="ivSetup" aria-label="Filtrar por estrategia"><option value="">todas las estrategias</option></select>
     <span class="sp"></span>
+    <button type="button" class="btn ghost sm selbtn" id="selbtn-ivOps" title="Selecciona varias operaciones y bórralas de una vez">Seleccionar</button>
     <button type="button" class="btn primary" id="ivNew">+ Nueva operación de inversión</button>
   </div>
   <section class="panel" style="margin-bottom:24px">
@@ -9824,6 +9858,239 @@
     if (bar) bar.hidden = !state.demo;
   }
 
+
+  /* ══════════════ BORRADO EN MASA, CON VUELTA ATRÁS ══════════════
+     Es la función más destructiva de la app y aquí no hay servidor: los datos
+     viven en este navegador. Borrar cuarenta operaciones por error no se
+     recupera, y además mueve el balance, el drawdown y la consistencia de la
+     cuenta. Así que hay tres decisiones dentro:
+
+     1. UN SOLO MECANISMO. Cinco listas en cinco pestañas, un registro. Escribir
+        un selector por pestaña sería tener en tres turnos cinco borrados que se
+        comportan distinto — el mismo defecto que este repositorio persigue en
+        los números.
+     2. LA CONFIRMACIÓN DICE QUÉ CAMBIA, no cuántas filas. «Borrar 12» no es
+        información; «−$340 del balance de Apex» sí.
+     3. PAPELERA CON DESHACER, y persistida. Un «¿estás seguro?» no es una red:
+        es un badén que se aprende a saltar. Lo borrado se guarda entero y vuelve
+        con un botón, incluso después de recargar. */
+  const PAPELERA = LS_KEY + ":papelera";
+  const sel = { lista: null, ids: new Set(), confirmando: false };
+
+  /* Cada entrada dice dónde vive la lista, cómo se llama una fila, y —lo que de
+     verdad importa— qué se pierde al borrarla. */
+  function borrables() {
+    return [
+      { id: "jrTable", tab: "futuros", host: "jrTable", fila: "tr[data-id]", col: "trades",
+        uno: "operación", varios: "operaciones",
+        resumen: ids => {
+          const ts = ids.map(i => coll("trades").get(i)).filter(Boolean).map(t => tradeCalc(Object.assign({}, t)));
+          const pnl = ts.reduce((a, t) => a + (Number(t.pnlEff) || 0), 0);
+          const cuentas = [...new Set(ts.map(t => t.accountId).filter(Boolean))].map(a => { const c = (state.settings.accounts || []).find(x => x.id === a); return c ? c.name : a; });
+          return (pnl ? `${sig2(pnl)} de resultado` : "sin resultado registrado") + (cuentas.length ? ` · afecta a ${cuentas.join(", ")}` : "");
+        } },
+      { id: "ivOps", tab: "invest", host: "ivOps", fila: "tr[data-id]", col: "trades",
+        uno: "operación de inversión", varios: "operaciones de inversión",
+        resumen: ids => {
+          const ts = ids.map(i => coll("trades").get(i)).filter(Boolean);
+          const puesto = ts.filter(t => t.op === "compra" || t.op === "aporte").reduce((a, t) => a + (Number(t.qty) || 0) * (Number(t.price) || 0), 0);
+          const cobrado = ts.filter(t => t.op === "dividendo").reduce((a, t) => a + (Number(t.pnl) || 0), 0);
+          const act = [...new Set(ts.map(t => t.asset).filter(Boolean))];
+          return [puesto ? `${money(puesto)} desplegados` : "", cobrado ? `${money(cobrado)} cobrados` : "", act.length ? act.slice(0, 4).join(", ") : ""].filter(Boolean).join(" · ") || "sin importes";
+        } },
+      { id: "pbCards", tab: "playbook", host: "pbCards", fila: ".card[data-id]",
+        col: () => pb.view === "tesis" ? "tesis" : "playbooks",
+        uno: () => pb.view === "tesis" ? "tesis" : "estrategia",
+        varios: () => pb.view === "tesis" ? "tesis" : "estrategias",
+        resumen: ids => {
+          if (pb.view === "tesis") return `${ids.length} de ${coll("tesis").items.length} · el trabajo de investigación no se recupera solo`;
+          /* Una estrategia borrada deja huérfanas las operaciones que la citan:
+             siguen en el journal, pero pierden su setup y sus estadísticas. */
+          const ops = tradesOf("futuros").concat(tradesOf("inversion")).filter(t => ids.includes(t.setupId)).length;
+          return ops ? `${plu(ops, "operación queda", "operaciones quedan")} sin estrategia` : "ninguna operación las cita";
+        } },
+      { id: "idCards", tab: "ideas", host: "idCards", fila: ".card[data-id]", col: "ideas",
+        uno: "forma de hacer dinero", varios: "formas de hacer dinero",
+        resumen: ids => `${ids.length} de ${coll("ideas").items.length}` },
+      /* Los días no son una colección: viven en `days` dentro del mismo
+         almacén, y una sesión sintética la genera el journal — no se borra. */
+      { id: "histWrap", tab: "cabina", host: "histWrap", fila: "tr[data-date]:not(.sintetica)", clave: "date", dias: true,
+        uno: "sesión", varios: "sesiones",
+        resumen: ids => {
+          const d = lsRead().days || {};
+          const r = ids.map(k => d[k]).filter(Boolean);
+          const tot = r.reduce((a, x) => a + (Number(x.result) || 0), 0);
+          const pres = r.filter(x => x.pres && Object.keys(x.pres).length).length;
+          return (tot ? `${sig2(tot)} en resultados` : "sin resultados") + (pres ? ` · ${plu(pres, "pre-sesión escrita", "pre-sesiones escritas")}` : "");
+        } },
+    ];
+  }
+  function listaDe(id) { return borrables().find(x => x.id === id); }
+  const val = v => typeof v === "function" ? v() : v;
+
+  function selAbre(id) {
+    const L = listaDe(id); if (!L) return;
+    sel.lista = id; sel.ids = new Set(); sel.confirmando = false; pintaSel();
+  }
+  function selCierra() { sel.lista = null; sel.ids = new Set(); sel.confirmando = false; pintaSel(); }
+
+  /* Sólo cuentan las filas VISIBLES. El journal de futuros vive en la
+     sub-vista «Diario», así que sus filas existen en el DOM mientras miras
+     «Resumen»: sin este filtro el botón se ofrecía sobre una tabla que no
+     está en pantalla, y «Todo» habría seleccionado seis operaciones que el
+     usuario no está viendo. En masa sólo se borra lo que se ve. */
+  function selFilas(L) {
+    const host = $(L.host); if (!host) return [];
+    return [...host.querySelectorAll(L.fila)].filter(el => el.offsetParent !== null);
+  }
+  function claveDe(L, el) { return L.clave === "date" ? el.dataset.date : el.dataset.id; }
+
+  /* Se repinta desde cero tras cada render de la lista: el modo selección no
+     toca el HTML de las filas, sólo les pone una marca. Así ninguna función de
+     render tuvo que cambiar, y una fila que vuelve a dibujarse recupera su
+     estado desde el conjunto. */
+  function pintaSel() {
+    /* Cambiar de pestaña o de sub-vista con la selección abierta dejaba la
+       barra viva sobre una lista invisible, y el siguiente «Borrar» actuaba
+       sobre filas que ya no estaban en pantalla. */
+    if (sel.lista) { const A = listaDe(sel.lista); if (A && !selFilas(A).length) { sel.lista = null; sel.ids = new Set(); sel.confirmando = false; } }
+    for (const L of borrables()) {
+      const host = $(L.host); if (!host) continue;
+      const activa = sel.lista === L.id;
+      host.classList.toggle("selmodo", activa);
+      selFilas(L).forEach(el => el.classList.toggle("sel", activa && sel.ids.has(claveDe(L, el))));
+      const barra = document.getElementById("selbar-" + L.id);
+      if (!activa) { if (barra) barra.remove(); continue; }
+      const n = sel.ids.size, total = selFilas(L).length;
+      const nom = n === 1 ? val(L.uno) : val(L.varios);
+      const html = sel.confirmando
+        /* La frase importa. «No se puede deshacer desde otro dispositivo» se
+           lee como «esto es irreversible», que es justo lo contrario de lo que
+           pasa: hay deshacer, y decir lo contrario asusta sin informar. */
+        ? `<span class="selq">Borrar <b>${n}</b> ${esc(nom)}: ${esc(L.resumen([...sel.ids]))}. <span class="dim">Vuelve con «Deshacer», sólo en este navegador.</span></span>
+           <span class="sp"></span>
+           <button type="button" class="btn sm del" data-sel="si">Sí, borrar ${n}</button>
+           <button type="button" class="btn sm ghost" data-sel="no">No</button>`
+        : `<span><b>${n}</b> de ${total} ${esc(val(L.varios))}</span>
+           <span class="sp"></span>
+           <button type="button" class="btn sm ghost" data-sel="todo">Todo</button>
+           <button type="button" class="btn sm ghost" data-sel="nada" ${n ? "" : "disabled"}>Ninguna</button>
+           <button type="button" class="btn sm del" data-sel="borrar" ${n ? "" : "disabled"}>Borrar ${n || ""}</button>
+           <button type="button" class="btn sm ghost" data-sel="salir">Cancelar</button>`;
+      if (barra) barra.innerHTML = html;
+      else {
+        const b = document.createElement("div");
+        b.className = "selbar"; b.id = "selbar-" + L.id; b.innerHTML = html;
+        host.parentNode.insertBefore(b, host);
+      }
+    }
+    pintaBotonesSel();
+  }
+  function pintaBotonesSel() {
+    for (const L of borrables()) {
+      const btn = document.getElementById("selbtn-" + L.id); if (!btn) continue;
+      const hay = selFilas(L).length;
+      btn.disabled = !hay;
+      btn.classList.toggle("active", sel.lista === L.id);
+      btn.textContent = sel.lista === L.id ? "Salir de selección" : "Seleccionar";
+      btn.title = hay
+        ? `Selecciona varias y bórralas de una vez (${hay} a la vista)`
+        : (L.id === "jrTable" ? "El journal está en la sub-vista Diario" : "No hay nada que seleccionar aquí");
+    }
+  }
+
+  function selBorra() {
+    const L = listaDe(sel.lista); if (!L) return;
+    const ids = [...sel.ids]; if (!ids.length) return;
+    /* Se guarda ENTERO antes de tocar nada, para poder devolverlo tal cual. */
+    const regs = L.dias
+      ? ids.map(k => (lsRead().days || {})[k]).filter(Boolean)
+      : ids.map(i => coll(val(L.col)).get(i)).filter(Boolean).map(x => clone(x));
+    guardaPapelera({ lista: L.id, col: L.dias ? "days" : val(L.col), dias: !!L.dias, regs, cuando: Date.now() });
+    if (L.dias) lsPatch(d => { if (d.days) ids.forEach(k => delete d.days[k]); });
+    else ids.forEach(i => coll(val(L.col)).remove(i));
+    if (L.dias) { renderHistoryFromLocal(); if (ids.includes(state.today)) { state.day = newDay(state.today); renderChecklist(); renderJournalDay(); } }
+    selCierra();
+    avisaPapelera();
+  }
+
+  function guardaPapelera(p) { try { localStorage.setItem(PAPELERA, JSON.stringify(p)); } catch (e) { } }
+  function leePapelera() { try { const t = localStorage.getItem(PAPELERA); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+  function vaciaPapelera() { try { localStorage.removeItem(PAPELERA); } catch (e) { } avisaPapelera(); }
+
+  function deshaceBorrado() {
+    const p = leePapelera(); if (!p || !p.regs || !p.regs.length) return;
+    if (p.dias) lsPatch(d => { d.days = d.days || {}; p.regs.forEach(r => { if (r && r.date) d.days[r.date] = r; }); });
+    else p.regs.forEach(r => { if (r && r.id) coll(p.col).set(r.id, r); });
+    if (p.dias) renderHistoryFromLocal();
+    vaciaPapelera();
+    flash(plu(p.regs.length, "elemento devuelto", "elementos devueltos"));
+  }
+
+  /* La barra de deshacer NO desaparece sola. Un aviso que se va en diez
+     segundos convierte «me equivoqué» en «ya no hay nada que hacer»: se queda
+     hasta que la descartes o borres otra cosa. */
+  function avisaPapelera() {
+    let el = document.getElementById("papelera");
+    const p = leePapelera();
+    if (!p || !p.regs || !p.regs.length) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement("div"); el.id = "papelera"; el.className = "papelera"; document.body.appendChild(el); }
+    const L = listaDe(p.lista);
+    const nom = p.regs.length === 1 ? (L ? val(L.uno) : "elemento") : (L ? val(L.varios) : "elementos");
+    el.innerHTML = `<span><b>${p.regs.length}</b> ${esc(nom)} ${p.regs.length === 1 ? "borrada" : "borradas"}</span>
+      <button type="button" class="btn sm" data-pap="undo">Deshacer</button>
+      <button type="button" class="icon" data-pap="ok" title="Descartar">×</button>`;
+  }
+  /* El estado del botón depende de lo que hay EN PANTALLA, y eso cambia al
+     saltar de pestaña o de sub-vista — no sólo al cambiar los datos. Sin esto,
+     el botón del journal se quedaba deshabilitado después de entrar en
+     «Diario», diciendo que el journal estaba en otra sub-vista mientras lo
+     estabas mirando. */
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".tabbtn, .seg button, #pbNav button, .mkt, [data-v]")) return;
+    /* `Promise.resolve().then()` NO sirve aquí, y me costó una depuración.
+       Este escuchador corre en fase de CAPTURA, antes que el de la app; su
+       microtask se ejecuta antes que el `fanout` que repinta la sub-vista, así
+       que medía la visibilidad de una lista que todavía no se había pintado y
+       el botón se quedaba deshabilitado diciendo que mirases otra sub-vista
+       mientras la estabas mirando.
+
+       Un `setTimeout(…, 0)` es una macrotarea: corre DESPUÉS de todos los
+       microtasks, incluido el repintado. */
+    setTimeout(() => { try { pintaSel(); } catch (x) { console.warn("pintaSel:", x); } }, 0);
+  }, true);
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-pap]"); if (!b) return;
+    if (b.dataset.pap === "undo") deshaceBorrado(); else vaciaPapelera();
+  });
+
+  /* Un solo escuchador para las cinco listas. */
+  document.addEventListener("click", e => {
+    const bt = e.target.closest("button[id^='selbtn-']");
+    if (bt) { const id = bt.id.slice(7); if (sel.lista === id) selCierra(); else selAbre(id); return; }
+    const acc = e.target.closest("[data-sel]");
+    if (acc) {
+      const L = listaDe(sel.lista); if (!L) return;
+      const q = acc.dataset.sel;
+      if (q === "todo") selFilas(L).forEach(el => sel.ids.add(claveDe(L, el)));
+      else if (q === "nada") sel.ids.clear();
+      else if (q === "borrar") sel.confirmando = true;
+      else if (q === "no") sel.confirmando = false;
+      else if (q === "si") { selBorra(); return; }
+      else if (q === "salir") { selCierra(); return; }
+      pintaSel(); return;
+    }
+    if (!sel.lista) return;
+    const L = listaDe(sel.lista); const host = $(L.host); if (!host || !host.contains(e.target)) return;
+    const fila = e.target.closest(L.fila); if (!fila) return;
+    /* En modo selección el clic selecciona: no abre el editor ni borra una
+       sola. Mezclar los dos gestos es como se borra lo que no se quería. */
+    e.preventDefault(); e.stopPropagation();
+    const k = claveDe(L, fila);
+    if (sel.ids.has(k)) sel.ids.delete(k); else sel.ids.add(k);
+    sel.confirmando = false; pintaSel();
+  }, true);
+
   /* =============================== WIRING =============================== */
   function counts() { $("nFut").textContent = coll("trades").items.filter(t => t.type === "futuros").length || ""; $("nPlaybook").textContent = coll("playbooks").items.length || ""; $("nIdeas").textContent = coll("ideas").items.length || ""; $("nInvest").textContent = coll("positions").items.length || ""; }
   /* Antes esto era `try { renderHistory(); renderAccounts(); renderRules(); } catch {}`.
@@ -9936,6 +10203,9 @@
   /* También Z.respaldo: crear una tesis cambia lo que se lleva una copia, y el
      resumen del panel se quedaba clavado hasta que otra cosa lo repintara. */
   coll("tesis").subscribe(() => fanout([Z.playbook, Z.contadores, Z.respaldo]));
+  /* Las marcas de selección se repintan DESPUÉS de cada repintado de lista: si
+     no, una fila redibujada perdería su marca y el usuario borraría otra cosa. */
+  ["trades", "playbooks", "ideas", "tesis"].forEach(n => coll(n).subscribe(() => Promise.resolve().then(pintaSel)));
   coll("scenarios").subscribe(() => fanout([Z.escenarios]));
   coll("risk").subscribe(() => fanout([Z.riesgosGuardados]));
 
@@ -10066,6 +10336,7 @@
 
   try { localStorage.getItem(LS_KEY); state.store = "local"; } catch { state.store = "memory"; }
   loadLocal();
+  try { avisaPapelera(); pintaSel(); } catch (e) { }
   /* La cuenta seleccionada es parte del estado, no del momento: si ayer cerraste
      mirando la LucidFlex, hoy abres mirando la LucidFlex. Se valida contra las
      cuentas que existen para que borrar una no deje la app filtrando por un

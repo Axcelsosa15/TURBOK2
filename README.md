@@ -1436,6 +1436,88 @@ calmas —30 ms para cambiar de vista, 150 ms para lo que difiere— y que en lo
 dos de 1.200 ms no se use quiescencia sino espera a la navegación o al selector.
 Por eso `vivo.mjs` se convirtió uno a uno y verificado, y no con un `sed`.
 
+## Borrar en masa, y poder arrepentirse
+
+Seleccionar varias cosas y borrarlas de una vez es la función más destructiva
+que tiene esta app, y detrás no hay servidor: los datos viven en un navegador.
+Borrar cuarenta operaciones por error no se recupera, y además mueve el balance,
+el drawdown y la consistencia de la cuenta. De ahí tres decisiones.
+
+**Un solo mecanismo para las cinco listas.** Journal de futuros, operaciones de
+inversión, estrategias y tesis del playbook, formas de hacer dinero, y sesiones
+del historial. Escribir un selector por pestaña sería tener en tres turnos cinco
+borrados que se comportan distinto — el mismo defecto que este repositorio
+persigue en los números, trasladado a la interfaz. Hay un registro con lo que
+cada lista es, y una sola implementación.
+
+**La confirmación dice qué cambia, no cuántas filas.** «Borrar 12» no es
+información:
+
+| lista | lo que dice antes de borrar |
+|---|---|
+| Journal | `Borrar 2 operaciones: +$40.00 de resultado · afecta a Apex` |
+| Inversiones | `$1,920 desplegados · $60 cobrados · VOO` |
+| Playbook | `1 operación queda sin estrategia` |
+| Sesiones | `+$80.00 en resultados · 2 pre-sesiones escritas` |
+
+**Papelera con deshacer, y persistida.** Un «¿estás seguro?» no es una red de
+seguridad: es un badén que se aprende a saltar. Lo borrado se guarda entero y
+vuelve con un botón, **incluso después de recargar**, y la barra no desaparece
+sola — un aviso que se va a los diez segundos convierte «me equivoqué» en «ya no
+hay nada que hacer».
+
+Dos detalles de comportamiento que valen más que el botón:
+
+- **En masa sólo se borra lo que se ve.** El journal vive en la sub-vista
+  «Diario»; mientras miras «Resumen» sus filas existen en el DOM pero no en
+  pantalla, y un «Todo» habría marcado seis operaciones que no estás viendo. El
+  botón se apaga y dice por qué.
+- **En modo selección el clic sólo selecciona.** No abre el editor y no dispara
+  la × de borrar una sola; los botones de la fila quedan inertes. Mezclar los dos
+  gestos es exactamente como se borra lo que no se quería.
+
+El modo selección no cambia el HTML de ninguna fila: sólo les pone una marca.
+Por eso ninguna función de render tuvo que tocarse, y una fila que se vuelve a
+dibujar recupera su estado desde el conjunto.
+
+### Dos trampas de temporización, y una que me costó tres diagnósticos
+
+Construyéndolo aparecieron dos errores propios que merecen quedar escritos.
+
+El primero: el botón de selección se quedaba deshabilitado después de entrar en
+«Diario», diciendo que mirases otra sub-vista mientras la estabas mirando. La
+causa era usar `Promise.resolve().then()` para repintarlo. Ese escuchador corre
+en fase de **captura**, antes que el de la app, así que su microtask se ejecuta
+**antes** que el `fanout` que pinta la sub-vista: medía la visibilidad de una
+lista que todavía no existía. Un `setTimeout(…, 0)` es una macrotarea y corre
+después de todos los microtasks, incluido el repintado.
+
+El segundo tardó tres intentos. `tesis.mjs` empezó a fallar 2 de cada 10
+corridas, con las cuentas, las operaciones y las tesis **a cero** tras recargar.
+Culpé al sondeo de `waitForFunction` (lo cambié a temporizador: siguió
+fallando), luego al modo demo (no era). El volcado de estado al fallar —que hubo
+que añadir, porque *un timeout que no dice nada es un mal test*— lo señaló:
+
+```
+esperaba >= 2 tesis · disco ANTES de recargar: 2
+estado real: {"TES":0,"enDisco":0,"cuentas":0,"semillaEscribio":true}
+```
+
+La semilla se había reescrito. El patrón era mío, de dos turnos antes:
+
+```js
+addInitScript(`if (!localStorage.getItem(K)) localStorage.setItem(K, …)`)
+```
+
+`addInitScript` corre en **cada** navegación, recargas incluidas, y en
+`document_start` sobre `file://` la zona de almacenamiento a veces todavía no
+está enlazada: `getItem` devuelve `null` aunque el dato esté escrito. Entonces la
+semilla vuelve a escribir y borra lo que el test acababa de guardar.
+
+La solución no es adivinar mejor, es no adivinar: `siembra()` escribe desde un
+documento **ya cargado**, donde localStorage responde de verdad, y recarga una
+vez para que la app lo lea. De 8/10 a **15/15**.
+
 ## Cómo fluye un dato
 
 No hay framework: una colección en memoria es la única fuente y todo lo demás
