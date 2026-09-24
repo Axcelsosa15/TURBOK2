@@ -1336,6 +1336,47 @@ Comprobado antes de darlo por bueno:
   versiones cazan lo mismo — 624 claves, 97 que faltan, 77 que sobran, 2
   rancios, misma ruta del DOM. Un test rápido que ya no caza nada no vale nada.
 
+### Treinta segundos esperando algo que no estaba, con un `.catch()` encima
+
+Perfilado el siguiente de la lista, `audit5` (43,8 s), el tiempo no estaba en
+las esperas: sus 19 `waitForTimeout` suman 8,7 s. Estaba en **una línea**.
+
+```js
+await page.locator('#histWrap tbody tr').first().locator('td').nth(3)
+          .textContent().catch(() => 'sin filas')
+```
+
+`#histWrap` existe, pero en ese punto tiene **cero filas**. Así que
+`.nth(3).textContent()` agotaba el timeout por defecto de Playwright —30 s
+clavados, medidos— y el `.catch()` convertía el plantón en un texto amable.
+
+Y lo lento era lo de menos. «sin filas» significaba a la vez **«el historial
+está vacío, que es lo normal aquí»** y **«la tabla no se pintó, que sería un
+fallo»**. Dos estados distintos con la misma cara — exactamente lo que este
+repositorio persigue dentro de la app, escondido en su propia suite.
+
+`count()` responde al instante y los separa: **43,8 s → 13,1 s**, y ahora el
+texto dice cuál de los dos estados es.
+
+Para saber si el patrón estaba en más sitios se escribió un chivato genérico —
+un `Proxy` sobre el `page` que avisa de cualquier llamada de más de 4 s, y que
+sigue las cadenas de `locator`. Validado primero sobre el caso conocido (cazó la
+línea de `audit5` a los 30.002 ms) y luego pasado por `sesiones`, `sync`, `bk` y
+`vivo2`: **ninguna llamada larga**. Su tiempo es suma de esperas fijas, que es
+el otro problema y se arregla de otra manera.
+
+### Un test que decía cosas distintas según la hora
+
+De paso: `audit5` no congelaba el reloj. La misma corrida decía «Asia · 1:10 AM»
+de madrugada y «Londres · 2:02 AM» una hora después, porque leía la sesión real.
+No llegaba a fallar —imprime en vez de afirmar— pero medía la sesión que tocara
+en vez de una concreta.
+
+De los 43 archivos, 35 congelan el reloj y 8 no; de esos ocho, sólo `audit5` y
+`bk` leen salida que depende de la hora. `audit5` ya lo congela en el mismo
+instante que el resto de la suite (10:00 AM ET, dentro de la NY AM Kill Zone) y
+dos corridas seguidas salen **idénticas byte a byte**. `bk` queda pendiente.
+
 ### Dónde NO sirve la quiescencia
 
 `test/espera.mjs` lleva el ayudante y, sobre todo, la lista de sitios donde

@@ -9,6 +9,14 @@ const errs = []; const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
 page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
 page.on('console', m => { const t = m.text(); if (m.type()==='error' && !/ERR_CONNECTION|fonts|_blob|ERR_FILE/.test(t)) errs.push('CONSOLE: '+t); });
+/* Sin congelar el reloj, este archivo leía la hora real: la misma corrida
+   decía «Asia … 1:10 AM» por la noche y «Londres … 2:02 AM» una hora después.
+   No llegaba a fallar porque imprime en vez de afirmar, pero medía la sesión
+   que tocara en vez de una sesión concreta. Se congela en el mismo instante
+   que usa el resto de la suite —10:00 AM ET, dentro de la NY AM Kill Zone— para
+   que dos corridas digan lo mismo. */
+const __F = new Date('2026-09-17T14:00:00Z').getTime();
+await page.addInitScript(`{const F=${__F};const R=Date;class D extends R{constructor(...a){if(!a.length)super(F);else super(...a);}static now(){return F;}}window.Date=D;}`);
 await page.addInitScript(() => { window.claude = { use: async n => n==='permissions' ? { state: async()=> 'granted', request: async ns => Object.fromEntries((ns||[]).map(x=>[x,'granted'])) } : null }; });
 await page.goto(URL); await page.waitForTimeout(700);
 const T = await page.evaluate(() => new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'}));
@@ -25,7 +33,19 @@ await page.click('#preSave'); await page.waitForTimeout(500);
 say('banner tras guardar:', await txt('#preBanner'));
 say('guardar oculto / reabrir visible:', (await page.locator('#preSave').isHidden()) + ' / ' + (await page.locator('#preReopen').isVisible()));
 say('checkbox bloqueado:', await boxes.nth(2).isDisabled());
-say('columna Pre en historial:', await page.locator('#histWrap tbody tr').first().locator('td').nth(3).textContent().catch(()=> 'sin filas'));
+/* Esta línea costaba 30 de los 43 segundos del archivo, y el problema de fondo
+   no era la lentitud. `#histWrap` existe pero en este punto no tiene filas, así
+   que `.nth(3).textContent()` agotaba el timeout por defecto de Playwright —30
+   s— y el `.catch(() => 'sin filas')` convertía el plantón en un texto amable.
+
+   Peor que lento: «sin filas» significaba a la vez «el historial está vacío,
+   que es lo normal aquí» y «la tabla no se pintó, que sería un fallo». Dos
+   estados distintos con la misma cara, que es justo lo que este repositorio
+   persigue en la app. `count()` responde al instante y los separa. */
+const filasHist = await page.locator('#histWrap tbody tr').count();
+say('columna Pre en historial:', filasHist
+  ? await page.locator('#histWrap tbody tr').first().locator('td').nth(3).textContent({ timeout: 5000 })
+  : 'sin filas (historial vacío, esperado aquí)');
 
 console.log('=== B. enrutado por instrumento ===');
 const route = async sym => { await page.fill('#qtSym', sym); await page.waitForTimeout(160); return [await page.inputValue('#qtDest'), await txt('#qtNote')]; };
