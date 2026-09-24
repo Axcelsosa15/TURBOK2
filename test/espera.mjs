@@ -56,6 +56,29 @@ export const arrancada = async (pg, sel = '.acct') => {
    Antes de meter `quieto` en un sitio nuevo: mira si ese camino difiere algo. */
 export const trasAccion = (pg) => quieto(pg, 150, 3000);
 
+/* ── esperar al DATO, no al pintado ────────────────────────────────────────
+   La quiescencia mira el DOM. Hay cosas que no son DOM.
+
+   `persistDay()` escribe el día a localStorage con `debounce("day", fn, 400)`:
+   400 ms después del último cambio. Un `waitForTimeout(900)` lo cubría de
+   sobra; una quiescencia de 40 ms recarga la página ANTES de que se escriba, y
+   el test pierde lo guardado sin un solo error — sale «sin filas» y
+   localStorage devuelve null.
+
+   Me pasó convirtiendo `sesiones.mjs`, y la lista de diferidos de arriba no lo
+   avisaba: la escribí buscando `setTimeout(…, N)` literales, y este pasa el 400
+   como argumento de `debounce`. La lista estaba incompleta.
+
+   Antes de recargar o de leer el disco, se espera a que el disco tenga lo que
+   se busca. `prueba` recibe el objeto ya parseado; si no hay nada guardado
+   todavía, recibe null. */
+export const enDisco = (pg, prueba, tope = 6000) =>
+  pg.waitForFunction(([src]) => {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem('cabina-mnq:v1')); } catch (e) { return false; }
+    try { return !!eval('(' + src + ')')(d); } catch (e) { return false; }
+  }, [prueba.toString()], { timeout: tope, polling: 50 });
+
 /* Tras guardar en un editor hay dos oleadas: se cierra el overlay y se repinta
    lo que dependa del dato. Más calma y más tope que un simple cambio de vista. */
 export const trasGuardar = (pg) => quieto(pg, 60, 3000);

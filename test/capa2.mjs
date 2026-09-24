@@ -258,6 +258,31 @@ const ausentes = marcas.filter(m => idx.includes(m) && !pv.includes(m));
 ok(ausentes.length === 0, 'preview.html está reconstruido desde el index.html actual',
    ausentes.length ? 'falta en el preview: ' + ausentes.join(', ') + ' — corre build-preview.mjs' : '');
 
+console.log('\n═══ 10 · nadie recarga antes de que el disco tenga el dato ═══');
+/* `persistDay()` escribe el día con `debounce("day", fn, 400)`. Un test que
+   cambia el día y recarga 400 ms después pierde lo guardado SIN un solo error:
+   sale «sin filas» y localStorage devuelve null. Me pasó convirtiendo
+   sesiones.mjs y no lo vi venir, porque busqué diferidos como `setTimeout(…,N)`
+   literales y este pasa el 400 como argumento de `debounce`.
+
+   Hoy ninguno está por debajo, pero el margen es de 100 ms sobre 400. Bajo
+   carga eso se voltea, y lo haría de forma intermitente. O se espera de sobra,
+   o se espera al DATO con `enDisco`. */
+const lineas = f => leer(join(dirTest, f), 'utf8').split('\n');
+const flojos = [];
+for (const f of tests) {
+  const ls = lineas(f);
+  let ultima = null, dondeLa = -1;
+  ls.forEach((l, i) => {
+    const m = [...l.matchAll(/waitForTimeout\((\d+)\)/g)];
+    if (m.length) { ultima = Number(m[m.length - 1][1]); dondeLa = i; }
+    if ((/\.reload\(\)/.test(l) || /localStorage\.getItem/.test(l)) && ultima !== null && i - dondeLa <= 2 && ultima < 600)
+      flojos.push(`${f}:${i + 1} (${ultima} ms)`);
+  });
+}
+ok(flojos.length === 0, 'ninguna recarga ni lectura de disco con <600 ms detrás',
+   flojos.length ? flojos.slice(0, 4).join(' · ') + ' — usa enDisco()' : `el debounce del día son 400 ms`);
+
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
 process.exit(fallos.length ? 1 : 0);

@@ -1365,6 +1365,51 @@ línea de `audit5` a los 30.002 ms) y luego pasado por `sesiones`, `sync`, `bk` 
 `vivo2`: **ninguna llamada larga**. Su tiempo es suma de esperas fijas, que es
 el otro problema y se arregla de otra manera.
 
+### La lista de peligros estaba incompleta, y me mordió
+
+`sesiones.mjs` (33,7 s) abre **ocho contextos** de navegador, cada uno con su
+`goto` y su `waitForTimeout(900)`. El conteo estático decía 11.750 ms de espera
+porque cuenta literales: los 900 de `open()` se ejecutan ocho veces, así que el
+gasto real rondaba los 21 s.
+
+Convertido a quiescencia, el test **se rompió**: perdía las pre-sesiones
+guardadas y `localStorage` devolvía `null`. La causa:
+
+```js
+function persistDay() { … debounce("day", async () => { … lsPatch(…) … }, 400); }
+```
+
+El día se escribe a disco **400 ms después** del último cambio. Un
+`waitForTimeout(900)` lo cubría de sobra; una quiescencia de 40 ms recarga la
+página antes de que se escriba, y el test pierde lo guardado **sin un solo
+error**.
+
+Lo importante no es el fallo: es que **mi propia lista de sitios donde la
+quiescencia no sirve no lo avisaba**. La escribí buscando diferidos con
+`setTimeout(…, N)` literales, y este pasa el 400 como argumento de `debounce`.
+La lista estaba incompleta y yo la había dado por buena.
+
+La quiescencia mira el DOM. Esto no es DOM. De ahí un tercer ayudante:
+
+```js
+await enDisco(p, d => d.days && Object.values(d.days).some(x => x.result === 150));
+await p.reload();
+```
+
+`enDisco` espera a que el disco tenga lo que se busca, no a que algo se pinte.
+Con él, `sesiones` pasa de **33,7 s a 17,5 s** y sale **idéntico a la base en
+las 10 corridas** de verificación.
+
+El barrido dice que hoy ningún otro test está por debajo del debounce — todos
+esperan ≥500 ms. Pero el margen son **100 ms sobre 400**, y bajo carga eso se
+voltea de forma intermitente. `capa2.mjs` gana una sección 10 que falla si
+alguien recarga o lee disco con menos de 600 ms detrás. Verificado que se pone
+roja.
+
+> Sobre los totales: el tiempo de la suite completa tiene ruido de varios
+> segundos entre corridas (44 arranques de Chromium en serie). Los números por
+> archivo, medidos diez veces cada uno, son los que valen.
+
 ### Un test que decía cosas distintas según la hora
 
 De paso: `audit5` no congelaba el reloj. La misma corrida decía «Asia · 1:10 AM»
