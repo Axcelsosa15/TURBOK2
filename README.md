@@ -1480,6 +1480,63 @@ El modo selección no cambia el HTML de ninguna fila: sólo les pone una marca.
 Por eso ninguna función de render tuvo que tocarse, y una fila que se vuelve a
 dibujar recupera su estado desde el conjunto.
 
+### Las cuentas: la única lista que arrastra algo al caer
+
+Borrar una cuenta no borra sus operaciones. Se quedan en el journal apuntando a
+un fantasma — la app aguanta bien, salen etiquetadas «sin cuenta asignada» y el
+filtro las ofrece — pero **su resultado desaparece de toda estadística de cuenta
+y nadie te lo decía**. Cuatro operaciones y $480 fuera de los números, en
+silencio.
+
+Ahora se dice, al borrar una y al borrar varias:
+
+```
+Borrar 2 cuentas: Apex, Topstep · 4 operaciones quedan sin cuenta
+(+$480.00 fuera de las estadísticas)
+```
+
+Y deshacer devuelve las cuentas **a su sitio**, no al final: el orden de las
+cuentas es una decisión del usuario, y devolverlas en otro orden no es deshacer,
+es devolver otra cosa.
+
+### Tres formas de borrar la misma cuenta
+
+Buscando dónde enchufar el borrado en masa apareció algo peor que la falta de la
+función. «Borrar una cuenta» tenía **tres implementaciones**:
+
+| ruta | qué hacía |
+|---|---|
+| `FUT.deleteAccount` | splice + limpia el filtro + `meta.acct` + fanout |
+| menú de la tarjeta | su propio splice, sin limpiar nada |
+| editor de la cuenta | su propio filter, sin limpiar nada |
+
+En la operación más destructiva de la app, dos de las tres rutas esquivaban su
+propia puerta única. Medido: por la del menú, `meta.acct` se quedaba **en disco**
+apuntando a la cuenta muerta. No llegaba a verse porque el arranque valida ese
+campo contra las cuentas que existen, pero era un dato rancio guardado y dos
+rutas que no hacían lo mismo.
+
+Las tres pasan ahora por `FUT.deleteAccount`, y `capa2.mjs` tiene una sección 11
+que falla si alguien vuelve a sacar una cuenta del array por su cuenta.
+
+Un detalle de esa regla que merece quedar escrito: su primera versión marcaba
+**cualquier** `splice` sobre `accounts` y señalaba como defecto el propio
+arreglo — deshacer usa `splice(pos, 0, copia)` para devolver una cuenta a su
+posición. Se vigilan las **retiradas** (`splice(i, 1)`), no las inserciones. Un
+guardián que marca lo correcto se acaba desactivando, que es peor que no tenerlo.
+
+La sección 11 vigila además que las seis listas estén registradas, que sólo se
+borre lo que está en pantalla, que la papelera persista, y que se guarde en ella
+**antes** de tocar nada — guardar después deja sin vuelta atrás si algo falla a
+mitad. Verificado que se pone roja por los dos motivos nuevos.
+
+> Corrección de una nota anterior: la app tiene **dos** debounces de escritura,
+> no uno. El día va a 400 ms (`persistDay`) y los ajustes a 500 ms
+> (`persistSettings`). Medí el disco antes de ese medio segundo y me creí un
+> fantasma que no estaba; con la espera, el de la fachada sale limpio y el del
+> menú no. La comprobación de `capa2.mjs` ya cubría los dos por margen, pero su
+> mensaje decía sólo el del día.
+
 ### Dos trampas de temporización, y una que me costó tres diagnósticos
 
 Construyéndolo aparecieron dos errores propios que merecen quedar escritos.

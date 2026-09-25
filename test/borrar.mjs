@@ -116,6 +116,64 @@ for (const c of casos) {
   await p.context().close();
 }
 
+console.log('\n═══ borrar una cuenta arrastra sus operaciones, y se dice ═══');
+{
+  /* Ninguna otra lista arrastra nada. Borrar una cuenta deja sueltas las
+     operaciones que la citan: siguen en el journal etiquetadas «sin cuenta
+     asignada», pero su resultado sale de toda estadística de cuenta. Callarlo
+     es la diferencia entre una limpieza y una pérdida. */
+  const p = await pagina(base({}));
+  await p.evaluate(() => {
+    FUT.createAccount({ id: 'a2', name: 'Lucid', size: 25000, dd: 1000, ddKind: 'trailing', status: 'evaluacion', ledger: [] });
+    FUT.createAccount({ id: 'a3', name: 'Topstep', size: 50000, dd: 2000, ddKind: 'estatico', status: 'pausada', ledger: [] });
+    for (let i = 0; i < 4; i++) FUT.createTrade({ id: 'x' + i, type: 'futuros', accountId: 'a1', date: '2026-09-17', instrument: 'MNQ', direction: 'long', qty: 2, entry: 21000, stop: 20980, exit: 21030 });
+  });
+  await quieto(p); await new Promise(r => setTimeout(r, 120));
+  const orden = () => p.evaluate(() => FUT.accounts().map(a => a.name).join(','));
+  const ordenAntes = await orden();
+
+  await p.click('#selbtn-accts'); await quieto(p);
+  await p.click('#accts article.acct[data-id="a1"]');
+  await p.click('#accts article.acct[data-id="a3"]'); await quieto(p);
+  await p.click('[data-sel="borrar"]'); await quieto(p);
+  const conf = await txt(p, '#selbar-accts');
+  ok(/Apex/.test(conf) && /Topstep/.test(conf), 'la confirmación nombra las cuentas', conf.slice(8, 40));
+  ok(/quedan sin cuenta/.test(conf) && /fuera de las estadísticas/.test(conf),
+     'y dice cuántas operaciones quedan sueltas y cuánto dinero sale de las estadísticas', conf.slice(30, 110));
+
+  await p.click('[data-sel="si"]'); await trasGuardar(p); await new Promise(r => setTimeout(r, 200));
+  ok((await orden()) === 'Lucid', 'borra las 2 y deja la otra');
+  ok(await p.evaluate(() => FUT.trades().filter(t => t.accountId === 'a1').length) === 4,
+     'las operaciones NO se borran con la cuenta: se quedan sueltas');
+
+  await p.click('[data-pap="undo"]'); await quieto(p); await new Promise(r => setTimeout(r, 200));
+  ok((await orden()) === ordenAntes, 'deshacer devuelve las cuentas a SU SITIO, no al final', await orden());
+  ok(await p.evaluate(() => FUT.calculateAccountStats('a1').total) === 480,
+     'y las estadísticas de la cuenta vuelven enteras');
+  await p.context().close();
+}
+
+console.log('\n═══ un solo borrado de cuenta, no tres ═══');
+{
+  /* Había tres implementaciones: la fachada, el menú de la tarjeta y el editor.
+     Dos hacían su propio `splice` sin limpiar el filtro; por la del menú,
+     `meta.acct` se quedaba en disco apuntando a la cuenta muerta. El arranque
+     lo valida, así que no se veía — pero era un dato rancio guardado, y dos
+     rutas que no hacían lo mismo. */
+  const p = await pagina(base({}));
+  await p.evaluate(() => { FUT.setSelectedAccount('a1'); for (let i = 0; i < 2; i++) FUT.createTrade({ id: 'y' + i, type: 'futuros', accountId: 'a1', date: '2026-09-17', instrument: 'MNQ', direction: 'long', qty: 1, entry: 21000, stop: 20990, exit: 21010 }); });
+  await quieto(p); await new Promise(r => setTimeout(r, 120));
+  await p.click('#accts article.acct[data-id="a1"] [data-act="menu"]'); await quieto(p);
+  await p.click('#accts article.acct[data-id="a1"] [data-act="del"]');
+  await p.click('#accts article.acct[data-id="a1"] [data-act="del"]'); await quieto(p);
+  /* persistSettings va con 500 ms de debounce: leer el disco antes miente. */
+  await new Promise(r => setTimeout(r, 900));
+  const meta = await p.evaluate(() => { const d = JSON.parse(localStorage.getItem('cabina-mnq:v1')); return (d.settings.meta || {}).acct; });
+  ok(!meta, 'borrando desde el menú de la tarjeta no queda un fantasma en disco', JSON.stringify(meta));
+  ok(await p.evaluate(() => !FUT.accounts().some(a => a.id === 'a1')), 'y la cuenta se borra de verdad');
+  await p.context().close();
+}
+
 console.log('\n═══ en modo selección el clic NO hace otra cosa ═══');
 {
   /* Mezclar «seleccionar» con «abrir el editor» o con la × de borrar una sola

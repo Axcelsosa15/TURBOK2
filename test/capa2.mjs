@@ -281,7 +281,43 @@ for (const f of tests) {
   });
 }
 ok(flojos.length === 0, 'ninguna recarga ni lectura de disco con <600 ms detrás',
-   flojos.length ? flojos.slice(0, 4).join(' · ') + ' — usa enDisco()' : `el debounce del día son 400 ms`);
+   flojos.length ? flojos.slice(0, 4).join(' · ') + ' — usa enDisco()' : `hay dos debounces: el día 400 ms, los ajustes 500 ms`);
+
+console.log('\n═══ 11 · el borrado en masa pasa por una sola puerta ═══');
+/* Borrar una cuenta tenía TRES implementaciones: la fachada FUT.deleteAccount,
+   el menú de la tarjeta y el editor. Las dos últimas hacían su propio
+   `arr.splice` sin limpiar el filtro, y por la del menú `meta.acct` se quedaba
+   en disco apuntando a la cuenta muerta. En la operación más destructiva de la
+   app, tres versiones que no hacen lo mismo. */
+/* Se vigilan las RETIRADAS, no cualquier splice: `splice(i, 1)` saca, y
+   `splice(pos, 0, copia)` mete — que es lo que hace deshacer al devolver una
+   cuenta a su sitio. La primera versión de esta regla marcaba las dos y
+   señalaba como defecto el propio arreglo. */
+const quita = (codigo.match(/state\.settings\.accounts\.splice\([^,]+,\s*1\s*\)|accounts\.filter\(x => x\.id !== /g) || []);
+ok(quita.length === 0, 'nadie saca una cuenta del array por su cuenta',
+   quita.length ? `${quita.length} fuera de FUT.deleteAccount: ${quita[0].slice(0, 50)}` : 'sólo FUT.deleteAccount');
+for (const quien of ['avisaHuerfanas', 'selBorra', 'deshaceBorrado', 'pintaSel', 'guardaPapelera'])
+  ok(defs(quien) === 1, `${quien}`.padEnd(22), defs(quien) === 1 ? '' : defs(quien) + ' definiciones');
+
+const sb = cuerpoDe('selBorra');
+ok(/FUT\.deleteAccount/.test(sb), 'el borrado en masa de cuentas pasa por la fachada, no por splice');
+/* El orden importa: guardar DESPUÉS de borrar deja sin vuelta atrás si algo
+   falla a mitad. */
+const iGuarda = sb.indexOf('guardaPapelera('), iBorra = Math.min(...['deleteAccount(', 'coll(val(L.col)).remove', 'delete d.days'].map(t => { const k = sb.indexOf(t); return k < 0 ? 1e9 : k; }));
+ok(iGuarda >= 0 && iGuarda < iBorra, 'guarda en la papelera ANTES de tocar nada',
+   iGuarda >= 0 && iGuarda < iBorra ? '' : 'guarda después: si falla el borrado no hay vuelta atrás');
+
+const bl = cuerpoDe('borrables');
+for (const lista of ['jrTable', 'ivOps', 'pbCards', 'idCards', 'histWrap', 'accts'])
+  ok(new RegExp(`id: "${lista}"`).test(bl), `la lista «${lista}» está registrada`);
+ok(/offsetParent !== null/.test(cuerpoDe('selFilas')),
+   'sólo se borra en masa lo que está EN PANTALLA',
+   'sin esto, «Todo» marca filas que el usuario no está viendo');
+
+/* La papelera es la red. Si deja de persistir, «deshacer» se convierte en un
+   botón que sólo funciona si no recargas. */
+ok(/localStorage\.setItem\(PAPELERA/.test(codigo) && /localStorage\.getItem\(PAPELERA\)/.test(codigo),
+   'la papelera se guarda en disco: deshacer sobrevive a recargar');
 
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');

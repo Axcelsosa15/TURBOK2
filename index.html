@@ -1463,7 +1463,7 @@
      Todas viven en la cuenta, así que la cuenta va primero y a lo ancho.
      La pre-sesión es un ritual de una vez al día; la cuenta se mira cada hora. -->
 <section class="panel" id="panelAccts">
-      <header><h2>Cuentas prop</h2><div class="hgroup"><select id="cabAcct" aria-label="Cuenta de trabajo"><option value="">todas las cuentas</option></select><span class="meta" id="acctsMeta"></span><button type="button" class="btn sm ghost" id="addAcct">+ Añadir cuenta</button></div></header>
+      <header><h2>Cuentas prop</h2><div class="hgroup"><select id="cabAcct" aria-label="Cuenta de trabajo"><option value="">todas las cuentas</option></select><span class="meta" id="acctsMeta"></span><button type="button" class="btn sm ghost" id="addAcct">+ Añadir cuenta</button><button type="button" class="btn ghost sm selbtn" id="selbtn-accts" title="Selecciona varias cuentas y bórralas de una vez">Seleccionar</button></div></header>
       <div class="body">
         <div class="accts" id="accts"></div>
       </div>
@@ -3596,7 +3596,10 @@
     if (act === "journal") { FUT.setSelectedAccount(a.id); showTab("futuros"); setFtView("diario"); return; }
     if (act === "playbook") { showTab("playbook"); return; }
     if (act === "risk") { loadAcctIntoRisk(a); return; }
-    if (act === "del") { if (!armed(btn)) return; arr.splice(i, 1); }
+    /* Antes esto hacía su propio `arr.splice`, sin limpiar el filtro ni avisar
+       de las huérfanas: una segunda implementación del borrado más destructivo
+       de la app. Ahora pasa por la puerta, como todo lo demás. */
+    if (act === "del") { if (!armed(btn)) return; avisaHuerfanas(FUT.deleteAccount(a.id)); return; }
     else if (!move(arr, i, act === "up" ? -1 : 1)) return;
     persistSettings(); renderAccounts();
   });
@@ -6158,12 +6161,25 @@
       const a = acctById(id); if (!a) return false;
       Object.assign(a, patch); persistSettings(); fanout(FANOUT_SEL); return true;
     },
+    /* Borrar una cuenta NO borra sus operaciones: se quedan en el journal con
+       la cuenta apuntando a un fantasma. La app aguanta —salen etiquetadas
+       «sin cuenta asignada» y el filtro las ofrece— pero su resultado
+       desaparece de toda estadística de cuenta sin que nadie lo diga. Así que
+       se devuelve qué se quedó suelto, para que quien borre lo vea. */
     deleteAccount(id) {
       const arr = state.settings.accounts, i = arr.findIndex(x => x.id === id);
       if (i < 0) return false;
+      const huerfanas = tradesOf("futuros").filter(t => t.accountId === id);
+      const suelto = huerfanas.reduce((a, t) => a + (Number(tradeCalc(Object.assign({}, t)).pnlEff) || 0), 0);
+      const nombre = arr[i].name || "la cuenta";
       arr.splice(i, 1);
-      if (ft.acct === id) { ft.acct = ""; if (state.settings.meta) state.settings.meta.acct = ""; }
-      persistSettings(); fanout(FANOUT_SEL); return true;
+      /* El fantasma tiene que morir también en disco: por la ruta de la tarjeta
+         `meta.acct` se quedaba apuntando a la cuenta muerta. El arranque lo
+         valida y no se llega a ver, pero es un dato rancio guardado. */
+      if (ft.acct === id) ft.acct = "";
+      if (state.settings.meta && state.settings.meta.acct === id) state.settings.meta.acct = "";
+      persistSettings(); fanout(FANOUT_SEL);
+      return { ok: true, nombre, huerfanas: huerfanas.length, suelto };
     },
     updateRule(id, patch) {
       const r = (state.settings.rules || []).find(x => x.id === id); if (!r) return false;
@@ -7712,7 +7728,8 @@
         if (i >= 0) arr[i] = rec; else arr.push(rec);
         persistSettings(); renderAccounts(); renderFutAccounts(); renderFutures();
       },
-      onDelete: isNew ? null : () => { state.settings.accounts = state.settings.accounts.filter(x => x.id !== a.id); persistSettings(); renderAccounts(); renderFutAccounts(); renderFutures(); },
+      /* Tercera implementación que había del mismo borrado. Ídem. */
+      onDelete: isNew ? null : () => avisaHuerfanas(FUT.deleteAccount(a.id)),
     });
   }
   function openLedgerEntry(a, entry) {
@@ -9879,6 +9896,15 @@
 
   /* Cada entrada dice dónde vive la lista, cómo se llama una fila, y —lo que de
      verdad importa— qué se pierde al borrarla. */
+  /* Un borrado que deja cuatro operaciones sueltas y $480 fuera de toda
+     estadística no puede quedarse callado. No bloquea —a veces borrar la cuenta
+     es lo correcto— pero se dice, y se dice dónde encontrarlas. */
+  function avisaHuerfanas(r) {
+    if (!r || !r.ok) return;
+    if (!r.huerfanas) { flash(`«${r.nombre}» borrada.`); return; }
+    flash(`«${r.nombre}» borrada · ${plu(r.huerfanas, "operación queda", "operaciones quedan")} sin cuenta${r.suelto ? ` (${sig2(r.suelto)})` : ""}. Siguen en el journal, filtrables por «sin cuenta asignada».`);
+  }
+
   function borrables() {
     return [
       { id: "jrTable", tab: "futuros", host: "jrTable", fila: "tr[data-id]", col: "trades",
@@ -9912,6 +9938,20 @@
       { id: "idCards", tab: "ideas", host: "idCards", fila: ".card[data-id]", col: "ideas",
         uno: "forma de hacer dinero", varios: "formas de hacer dinero",
         resumen: ids => `${ids.length} de ${coll("ideas").items.length}` },
+      /* Las cuentas NO son una colección: viven en `settings.accounts`, y
+         borrarlas arrastra algo que ninguna otra lista arrastra — las
+         operaciones que las citan se quedan sueltas. Por eso su resumen dice
+         cuántas y cuánto dinero salen de las estadísticas, y por eso borra a
+         través de FUT.deleteAccount y no por su cuenta. */
+      { id: "accts", tab: "cabina", host: "accts", fila: "article.acct[data-id]", cuentas: true,
+        uno: "cuenta", varios: "cuentas",
+        resumen: ids => {
+          const ops = tradesOf("futuros").filter(t => ids.includes(t.accountId));
+          const suelto = ops.reduce((a, t) => a + (Number(tradeCalc(Object.assign({}, t)).pnlEff) || 0), 0);
+          const nombres = ids.map(i => { const c = acctById(i); return c ? c.name : i; });
+          return nombres.slice(0, 3).join(", ") + (nombres.length > 3 ? ` y ${nombres.length - 3} más` : "")
+            + (ops.length ? ` · ${plu(ops.length, "operación queda", "operaciones quedan")} sin cuenta${suelto ? ` (${sig2(suelto)} fuera de las estadísticas)` : ""}` : " · ninguna operación las cita");
+        } },
       /* Los días no son una colección: viven en `days` dentro del mismo
          almacén, y una sesión sintética la genera el journal — no se borra. */
       { id: "histWrap", tab: "cabina", host: "histWrap", fila: "tr[data-date]:not(.sintetica)", clave: "date", dias: true,
@@ -10005,9 +10045,15 @@
     /* Se guarda ENTERO antes de tocar nada, para poder devolverlo tal cual. */
     const regs = L.dias
       ? ids.map(k => (lsRead().days || {})[k]).filter(Boolean)
+      : L.cuentas
+      /* Con el índice: el orden de las cuentas es una decisión del usuario, y
+         devolverlas al final no es deshacer, es devolver otra cosa. */
+      ? ids.map(i => { const j = state.settings.accounts.findIndex(x => x.id === i); return j < 0 ? null : Object.assign(clone(state.settings.accounts[j]), { __pos: j }); }).filter(Boolean)
       : ids.map(i => coll(val(L.col)).get(i)).filter(Boolean).map(x => clone(x));
-    guardaPapelera({ lista: L.id, col: L.dias ? "days" : val(L.col), dias: !!L.dias, regs, cuando: Date.now() });
+    guardaPapelera({ lista: L.id, col: L.dias ? "days" : L.cuentas ? "accounts" : val(L.col), dias: !!L.dias, cuentas: !!L.cuentas, regs, cuando: Date.now() });
     if (L.dias) lsPatch(d => { if (d.days) ids.forEach(k => delete d.days[k]); });
+    /* Por la puerta, no a mano: FUT.deleteAccount limpia el filtro y el meta. */
+    else if (L.cuentas) ids.forEach(i => FUT.deleteAccount(i));
     else ids.forEach(i => coll(val(L.col)).remove(i));
     if (L.dias) { renderHistoryFromLocal(); if (ids.includes(state.today)) { state.day = newDay(state.today); renderChecklist(); renderJournalDay(); } }
     selCierra();
@@ -10021,6 +10067,15 @@
   function deshaceBorrado() {
     const p = leePapelera(); if (!p || !p.regs || !p.regs.length) return;
     if (p.dias) lsPatch(d => { d.days = d.days || {}; p.regs.forEach(r => { if (r && r.date) d.days[r.date] = r; }); });
+    else if (p.cuentas) {
+      /* De menor a mayor índice, para que cada una caiga en su hueco. */
+      p.regs.slice().sort((a, b) => (a.__pos ?? 0) - (b.__pos ?? 0)).forEach(r => {
+        if (!r || !r.id || acctById(r.id)) return;
+        const pos = r.__pos; const copia = clone(r); delete copia.__pos;
+        state.settings.accounts.splice(Math.min(pos == null ? state.settings.accounts.length : pos, state.settings.accounts.length), 0, copia);
+      });
+      persistSettings(); fanout(FANOUT_SEL);
+    }
     else p.regs.forEach(r => { if (r && r.id) coll(p.col).set(r.id, r); });
     if (p.dias) renderHistoryFromLocal();
     vaciaPapelera();
