@@ -434,7 +434,9 @@ ok(sucias.length === 0, `ninguna de las ${tests.length} pruebas apunta a una rai
    regla roja -- la mencion la sostenia. El sabotaje lo enseño. */
 const ETIQUETA = /^\/\* §(\d+) — /gm;
 const secciones = new Set([...leer(join(dirTest, 'capa2.mjs'), 'utf8').matchAll(ETIQUETA)].map(m => m[1]));
-const docs = readdirSync(join(dirTest, '..')).filter(f => f.endsWith('.md'));
+const raizRepo = join(dirTest, '..');
+const docs = [...readdirSync(raizRepo).filter(f => f.endsWith('.md')).map(f => f),
+              ...readdirSync(join(raizRepo, 'docs')).filter(f => f.endsWith('.md')).map(f => 'docs/' + f)];
 const fantasmas = [];
 for (const d of docs)
   for (const m of leer(join(dirTest, '..', d), 'utf8').matchAll(/§(\d+)/g))
@@ -472,6 +474,19 @@ if (bundleSrc.includes(ABRE) && src.includes(ABRE)) {
 }
 ok(cmp === 'igual', 'el motor incrustado es exactamente el bundle del repositorio',
    cmp === 'igual' ? `${sinSangria(bundleSrc.slice(bundleSrc.indexOf(ABRE))).length} bytes` : cmp);
+
+/* §16 — Cada protocolo dice QUE FALLO evita.
+
+   PROTOCOLOS.md existe porque un procedimiento sin el fallo que lo produjo es
+   una opinion, y las opiniones se saltan cuando hay prisa. La cabecera del
+   documento lo promete; esto lo comprueba. Paso de verdad: el protocolo 11
+   documentaba tres fallos y ninguno estaba marcado, asi que la promesa no era
+   verificable. */
+const prot = leer(join(raizRepo, 'PROTOCOLOS.md'), 'utf8');
+const bloques = prot.split(/\n## /).slice(1).filter(b => /^\d+ ·/.test(b));
+const sinFallo = bloques.filter(b => !/Qué falló/.test(b)).map(b => b.split('\n')[0].slice(0, 40));
+ok(sinFallo.length === 0, `los ${bloques.length} protocolos dicen qué fallo evitan`,
+   sinFallo.length ? sinFallo.join(' · ') : 'todos con su fallo documentado');
 
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');

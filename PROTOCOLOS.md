@@ -27,6 +27,7 @@ cabeza de quien escribía — en el fichero únicamente estaban etiquetadas §12
 | 8 | Al clonar | humano |
 | 10 | Tocar el motor de cálculo | `motor-bundle` + `capa2` §15 |
 | 11 | Una aserción puede fallar por el motivo correcto | humano |
+| 12 | El porcentaje de riesgo se pasa como fracción | `invariantes` |
 | — | *Que esta tabla no mienta* | `capa2` §14 |
 
 ---
@@ -292,6 +293,44 @@ Los cuatro eslabones están vigilados, cada uno por su pieza:
 
 ---
 
+## 12 · El porcentaje de riesgo se pasa como FRACCIÓN
+
+`QE.dimensionar` acepta las dos formas y las distingue **por el valor**:
+
+```
+riesgoPct >= 1   se lee como PORCENTAJE   (1 -> 1%,  2 -> 2%,  50 -> 50%)
+riesgoPct <  1   se lee como FRACCIÓN     (0.01 -> 1%,  0.005 -> 0.5%)
+```
+
+Está probado a propósito (`riesgoPct: 0.01` → 12 contratos), así que **la
+convención del motor no se toca**. Lo que se hace es no depender de ella: quien
+llame desde la interfaz pasa `pc / 100`, una fracción, que el motor lee igual en
+todo el rango.
+
+> **Qué falló:** el campo se llama «Riesgo por operación (%)» y su `step` es
+> `0.1`, así que invita a escribir 0.5 queriendo medio por ciento. El motor leía
+> 50%. Medido por la app, cuenta de 25 000 con stop de 10 puntos MNQ:
+>
+> | escrito | contratos antes | contratos ahora |
+> |---|---|---|
+> | 0.25 | 625 | 3 |
+> | 0.5 | 1250 | 6 |
+> | 1 | 12 | 12 |
+> | 2 | 25 | 25 |
+> | 50 | 625 | 625 |
+>
+> Un **100× en el tamaño de posición**, en el número más peligroso del sistema.
+> No era silencioso —el motor avisaba «Arriesgar 50% por operación es
+> agresivo»— pero el aviso decía 50% para quien había escrito 0.5, y nada lo
+> bloqueaba. Arreglado en el sitio de llamada, no en el motor: para 1 y 2 el
+> resultado no cambia, y de paso un riesgo menor al 1% pasa a ser expresable.
+
+`test/invariantes.mjs` fija la doble lectura para que deje de sorprender:
+comprueba que `0.5` y `50` significan lo mismo. Si alguien cambia la convención,
+rompe una prueba en vez de un tamaño de posición.
+
+---
+
 ## 11 · Una aserción tiene que poder fallar por el motivo correcto
 
 Pasar y **demostrar lo que se busca** no son lo mismo. Tres formas de pasar por el
@@ -313,6 +352,11 @@ motivo equivocado, las tres encontradas aquí:
    pasaba con `NaN`. *Arreglo:* el valor exacto, `bal1 === bal0 - 40`, que es el
    que la propia confirmación de la app anuncia.
 
+> **Qué falló:** los tres casos de arriba, los tres encontrados en este
+> repositorio y los tres medidos con un sabotaje antes de arreglarlos. El peor
+> fue `sync.mjs`: la prueba de persistencia pasaba con la app devolviendo
+> `null` en cada campo.
+
 Para los caminos del dinero —balance, dimensionado, P&L, drawdown, Monte Carlo,
 IRR, borrado y deshacer, persistencia, reglas prop— la pregunta no es «¿pasa?»
 sino **«¿podría pasar si la app estuviera rota?»**. Si la respuesta es sí, la
@@ -328,7 +372,9 @@ Tres niveles, y cada uno responde algo que los otros no:
 
 ---
 
-## 9 · Lo que ningún protocolo cubre
+## · Lo que ningún protocolo cubre
+
+*No es un protocolo: es la lista de lo que queda fuera del alcance de todos.*
 
 Honestidad sobre los límites:
 
