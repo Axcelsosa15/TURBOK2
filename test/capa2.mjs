@@ -331,6 +331,36 @@ ok(/offsetParent !== null/.test(cuerpoDe('selFilas')),
 ok(/localStorage\.setItem\(PAPELERA/.test(codigo) && /localStorage\.getItem\(PAPELERA\)/.test(codigo),
    'la papelera se guarda en disco: deshacer sobrevive a recargar');
 
+/* §12 — Las capacidades del artefacto.
+
+   El mismo index.html corre en dos sitios: dentro del artefacto, donde
+   window.claude existe y concede db/assets/downloads, y servido como archivo
+   suelto, donde no existe nada de eso. Dos reglas lo sostienen, y ninguna era
+   comprobable hasta ahora porque el repositorio no registraba qué se declara al
+   publicar: durante semanas la única copia de ese dato estuvo en la llamada de
+   publicación, que no está en ningún archivo. */
+const manif = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'ARTEFACTO.md'), 'utf8');
+const usadas = [...new Set([...codigo.matchAll(/window\.claude\.use\("([a-z]+)"\)/g)].map(m => m[1]))].sort();
+ok(usadas.length > 0, 'el código llama a alguna capacidad', usadas.join(', '));
+for (const cap of usadas)
+  ok(new RegExp('`' + cap + '`').test(manif), `«${cap}» está documentada en ARTEFACTO.md`,
+     new RegExp('`' + cap + '`').test(manif) ? '' : 'se llama pero no se declara ni se explica en ninguna parte');
+
+/* permissions es built-in: declararla es un error que el contrato rechaza. Si
+   alguien la mete en la lista de declaradas, esto se pone rojo. */
+const declaradas = (manif.match(/^```\n([a-z, ]+)\n```$/m) || [, ''])[1].split(',').map(x => x.trim()).filter(Boolean);
+ok(declaradas.length === 3, 'ARTEFACTO.md declara tres capacidades', declaradas.join(', ') || 'no encontré el bloque');
+ok(!declaradas.includes('permissions'), 'permissions NO figura entre las declaradas',
+   declaradas.includes('permissions') ? 'es built-in; declararla la rechaza el contrato' : 'built-in, se llama sin declarar');
+
+/* Cada llamada tiene que caer a null. Sin esto la página servida como archivo
+   suelto revienta en el primer await en vez de degradarse. */
+for (const cap of usadas) {
+  const re = new RegExp('window\\.claude && window\\.claude\\.use \\? await window\\.claude\\.use\\("' + cap + '"\\) : null');
+  ok(re.test(codigo), `«${cap}» cae a null si no hay cápsula`,
+     re.test(codigo) ? '' : 'sin la guarda, el archivo suelto revienta en el primer await');
+}
+
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
 process.exit(fallos.length ? 1 : 0);

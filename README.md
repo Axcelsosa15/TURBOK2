@@ -1,5 +1,9 @@
 # TURBOK2 · Cabina
 
+> El archivo que se publica como artefacto, qué capacidades declara y cómo
+> republicarlo están en [ARTEFACTO.md](ARTEFACTO.md). El almacén de imágenes
+> del artefacto **no** está en este repositorio, y ahí se explica por qué.
+
 Cockpit de sesión para intradía en futuros, con journal de inversiones, playbook
 por instrumento y calculadoras de riesgo e interés compuesto.
 
