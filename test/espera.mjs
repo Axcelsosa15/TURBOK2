@@ -19,6 +19,15 @@
 /* Resuelve en cuanto el DOM lleva `calma` ms sin mutar. El tope duro existe
    para que un render que no llegue nunca falle como test lento y no como test
    colgado. */
+import { readFileSync } from 'node:fs';
+
+/* La semilla compartida. Se resuelve contra la ubicacion de ESTE archivo, no
+   contra process.cwd() ni contra /tmp: tres pruebas la leian de
+   /tmp/semilla.json, un archivo que existia en el contenedor donde se
+   escribieron y que ningun test crea. Pasaban aqui y morian en CI con ENOENT.
+   Es el mismo fallo que los imports por ruta absoluta, con otra cara. */
+export const SEMILLA = readFileSync(new URL('./semilla.json', import.meta.url), 'utf8');
+
 export const quieto = (pg, calma = 30, tope = 1500) => pg.evaluate(([c, t]) => new Promise(res => {
   let timer = setTimeout(fin, c);
   const ob = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(fin, c); });

@@ -238,7 +238,7 @@ console.log('\n═══ 9 · ningún test mide una copia congelada ═══');
    se arregla. */
 import { readdirSync, readFileSync as leer } from 'node:fs';
 const dirTest = join(dirname(fileURLToPath(import.meta.url)));
-const tests = readdirSync(dirTest).filter(f => f.endsWith('.mjs') && f !== 'sync-index.mjs' && f !== 'build-preview.mjs');
+const tests = readdirSync(dirTest).filter(f => f.endsWith('.mjs'));
 const conRutaFija = [];
 for (const f of tests) {
   const t = leer(join(dirTest, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -360,6 +360,25 @@ for (const cap of usadas) {
   ok(re.test(codigo), `«${cap}» cae a null si no hay cápsula`,
      re.test(codigo) ? '' : 'sin la guarda, el archivo suelto revienta en el primer await');
 }
+
+
+/* §13 — Ninguna prueba puede apuntar a una raiz del sistema de archivos.
+
+   Tres pruebas leian /tmp/semilla.json, un archivo que existia en el contenedor
+   donde se escribieron y que ningun test crea: pasaban ahi y morian en CI con
+   ENOENT. Ya habia pasado con los imports /opt/node22/... La regla de arriba
+   vigilaba `file:///` y los imports, no una lectura cualquiera, asi que no lo
+   vio -- y encima excluia sync-index.mjs, que era el fichero con una ruta de
+   contenedor clavada. Esta mira las raices reales. Lo relativo no la toca:
+   process.cwd() + '/preview.html' y new URL('./x', import.meta.url) pasan. */
+const sucias = [];
+for (const f of tests) {
+  const t = leer(join(dirTest, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  for (const m of t.matchAll(/['"](\/(?:tmp|home|opt|usr|var|Users|root|etc)\/[^'"]*)/g))
+    sucias.push(`${f} → ${m[1].slice(0, 44)}`);
+}
+ok(sucias.length === 0, `ninguna de las ${tests.length} pruebas apunta a una raiz del sistema`,
+   sucias.length ? sucias.slice(0, 4).join(' · ') : 'todo relativo al repositorio');
 
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');

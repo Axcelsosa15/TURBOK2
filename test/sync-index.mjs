@@ -4,7 +4,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
-const fuente = process.env.CABINA || "/tmp/claude-0/-home-user-trading-journal2/98c7b14f-3728-5f9b-a633-ce8f09807ce4/scratchpad/cabina.html";
+/* La fuente se pasa: antes el valor por defecto era una ruta del contenedor
+   donde se escribio esto, asi que para cualquier otra persona fallaba con un
+   ENOENT que no explicaba nada. */
+const fuente = process.argv[2] || process.env.CABINA;
+if (!fuente) {
+  console.error("Falta la fuente. Uso: node test/sync-index.mjs <ruta/al/cabina.html>");
+  console.error("  (o CABINA=<ruta> node test/sync-index.mjs)");
+  process.exit(2);
+}
 const idx = readFileSync(join(raiz, "index.html"), "utf8");
 const cab = readFileSync(fuente, "utf8");
 const i = idx.indexOf("<style>", idx.indexOf("<style>") + 1);

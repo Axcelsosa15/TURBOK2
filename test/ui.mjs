@@ -1,8 +1,8 @@
 /* Lo que el rediseño promete, comprobado: divulgación progresiva, estados
    vacíos con salida, y foco de teclado visible. */
 import { chromium } from 'playwright';
-import { readFileSync } from 'node:fs';
-const F=new Date('2026-09-18T14:20:00Z').getTime(); const sem=readFileSync('/tmp/semilla.json','utf8');
+import { SEMILLA as sem } from './espera.mjs';
+const F=new Date('2026-09-18T14:20:00Z').getTime(); 
 const errs=[]; const b=await chromium.launch();
 const p=await (await b.newContext({viewport:{width:1600,height:1100},deviceScaleFactor:2})).newPage();
 p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
@@ -25,7 +25,7 @@ await p.evaluate(()=>FUT.createTrade({accountId:'lucidflex25',instrument:'MNQ',d
 await p.waitForTimeout(600);
 ok(!(await p.evaluate(()=>document.querySelector('.acct[data-id="lucidflex25"] .metric[data-metric="colchon"] .mdet').hidden)),
    'sigue abierta tras registrar una operación');
-await p.screenshot({path:'/tmp/tomas/detalle.png', clip:{x:0,y:120,width:1600,height:700}});
+await p.screenshot({path:new URL('./tomas/', import.meta.url).pathname+'detalle.png', clip:{x:0,y:120,width:1600,height:700}});
 
 console.log('\n═══ ESTADOS VACÍOS ═══');
 const v = await p.evaluate(()=>{const e=document.querySelector('.acct[data-id="alpha50"] .acc-recent .vacio'); return e?e.innerText.replace(/\s+/g,' '):'(no)';});

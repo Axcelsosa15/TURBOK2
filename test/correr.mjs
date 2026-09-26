@@ -36,9 +36,25 @@ const t0 = Date.now();
 for (const f of archivos) {
   const r = await corre(f);
   const fallos = (r.out.match(/fallos: (\d+)/) || [])[1];
-  const marca = r.code === 0 ? '✅' : '❌';
-  console.log(`  ${marca} ${f.replace('.mjs', '').padEnd(14)} ${String(r.ms).padStart(6)} ms${fallos ? `  ${fallos} fallos` : ''}`);
-  if (r.code !== 0) { malos.push(f); console.log(r.out.split('\n').slice(-14).map(l => '       ' + l).join('\n')); }
+  /* Un test es rojo si se rompe O si dice que algo falló. Lo segundo no se
+     miraba, y de 44 archivos sólo 8 reportaban sus fallos por el código de
+     salida: los demás imprimían ❌ y salían 0, así que la suite los daba en
+     verde. Se comprobó con cmd.mjs, que falló una aserción y salió ✅.
+     Mirarlo aquí lo arregla para los 44 y para los que vengan, sin depender de
+     que cada archivo se acuerde de contar. Los 30 que sólo miden no imprimen
+     ❌, así que no les afecta. */
+  const cruces = (r.out.match(/❌/g) || []).length;
+  const rojo = r.code !== 0 || cruces > 0;
+  const nota = cruces ? `  ${cruces} ✗` : fallos ? `  ${fallos} fallos` : '';
+  console.log(`  ${rojo ? '❌' : '✅'} ${f.replace('.mjs', '').padEnd(14)} ${String(r.ms).padStart(6)} ms${nota}`);
+  if (rojo) {
+    malos.push(f);
+    /* Las líneas que fallaron primero: son lo que se quiere leer. Si no hay
+       ninguna, el proceso murió y entonces sí vale la cola. */
+    const rojas = r.out.split('\n').filter(l => l.includes('❌'));
+    const cuerpo = rojas.length ? rojas : r.out.split('\n').slice(-14);
+    console.log(cuerpo.map(l => '       ' + l).join('\n'));
+  }
 }
 console.log(`\n${archivos.length - malos.length}/${archivos.length} en verde · ${Math.round((Date.now() - t0) / 1000)} s`);
 if (malos.length) { console.log('rojos: ' + malos.join(' ')); process.exit(1); }

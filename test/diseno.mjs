@@ -1,9 +1,9 @@
 /* Segunda pasada: medir lo que el ojo no puede contar. Espaciado fuera de
    escala, alturas de línea sueltas, tamaños de tipo sin token, contraste. */
 import { chromium } from 'playwright';
-import { readFileSync } from 'node:fs';
+import { SEMILLA as sem } from './espera.mjs';
 const F=new Date('2026-09-18T14:20:00Z').getTime();
-const sem=readFileSync('/tmp/semilla.json','utf8');
+
 const b=await chromium.launch();
 const p=await (await b.newContext({viewport:{width:1600,height:1200}})).newPage();
 await p.addInitScript(`{const F=${F};const R=Date;class D extends R{constructor(...a){if(!a.length)super(F);else super(...a);}static now(){return F;}}window.Date=D;}`);

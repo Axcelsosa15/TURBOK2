@@ -1,9 +1,9 @@
 /* Paleta de comandos y atajos. La prueba que importa es la última: escribir
    una «n» en una nota NO puede abrir el editor de operaciones. */
 import { chromium } from 'playwright';
-import { readFileSync } from 'node:fs';
+import { SEMILLA as sem } from './espera.mjs';
 const F=new Date('2026-09-18T14:20:00Z').getTime();
-const sem=readFileSync('/tmp/semilla.json','utf8');
+
 const errs=[]; const b=await chromium.launch();
 const p=await (await b.newContext({viewport:{width:1500,height:1000},deviceScaleFactor:2})).newPage();
 p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
@@ -14,7 +14,7 @@ const ok=(c,t,d)=>console.log(`  ${c?'✅':'❌'} ${t}${d!=null?'   '+d:''}`);
 
 await p.keyboard.press('Control+k'); await p.waitForTimeout(350);
 ok(await p.isVisible('#cmdOv .cmd'), 'Ctrl+K abre la paleta');
-await p.screenshot({path:'/tmp/tomas/paleta.png'});
+await p.screenshot({path:new URL('./tomas/', import.meta.url).pathname+'paleta.png'});
 ok((await p.evaluate(()=>document.querySelectorAll('.cmd-it').length))>10, 'lista acciones y cuentas', await p.evaluate(()=>document.querySelectorAll('.cmd-it').length)+' entradas');
 await p.keyboard.type('analisis'); await p.waitForTimeout(250);
 ok((await p.evaluate(()=>document.querySelector('.cmd-it .ct')?.textContent))?.includes('análisis'), 'busca sin tildes', await p.evaluate(()=>document.querySelector('.cmd-it .ct')?.textContent));

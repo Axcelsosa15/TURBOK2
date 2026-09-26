@@ -9,3 +9,4 @@ test/prev_antes.html
 
 # Playwright se instala con `npm install`; aquí sólo hay un enlace al del contenedor.
 node_modules/
+test/tomas/
