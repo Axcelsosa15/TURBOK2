@@ -15,26 +15,48 @@ const aqui = dirname(fileURLToPath(import.meta.url));
 const NO_SON_TESTS = new Set(['build-preview.mjs', 'sync-index.mjs', 'espera.mjs', 'correr.mjs']);
 const SIN_BASELINE = new Set(['perf.mjs']);
 
+/* Las pruebas del motor viven fuera de test/, y por eso no se ejecutaban NUNCA:
+   este runner escaneaba solo este directorio. Eran 421 aserciones sobre la
+   matematica del dinero -- dimensionado en la rejilla de ticks, IRR, drawdown,
+   Monte Carlo de supervivencia -- presentes en el repositorio y sin correr, asi
+   que «45/45 en verde» no las incluia. El mismo fallo que el preview.html
+   rancio, un nivel mas abajo y sobre los numeros.
+
+   Estas dos si reportan sus fallos por el codigo de salida, al contrario que la
+   mayoria de test/. */
+const MOTOR = [
+  ['motor-quant', join(aqui, '..', 'engine', 'quant', 'quant.test.js')],
+  ['motor-math', join(aqui, '..', 'engine', 'MathEngine.test.js')],
+  /* No es una prueba de comportamiento: comprueba que el bundle committeado es
+     el que producen los modulos. Sin esto, el primer eslabon de la cadena queda
+     sin vigilar. El segundo (bundle -> inline en index.html) lo vigila capa2. */
+  ['motor-bundle', join(aqui, '..', 'engine', 'quant', 'bundle.mjs'), ['--check']],
+];
+
 const solo = process.argv.slice(2);
-let archivos = readdirSync(aqui).filter(f => f.endsWith('.mjs') && !NO_SON_TESTS.has(f) && !SIN_BASELINE.has(f)).sort();
-if (solo.length) archivos = archivos.filter(f => solo.some(s => f.startsWith(s)));
+let archivos = readdirSync(aqui)
+  .filter(f => f.endsWith('.mjs') && !NO_SON_TESTS.has(f) && !SIN_BASELINE.has(f))
+  .map(f => [f.replace(/\.mjs$/, ''), join(aqui, f)])
+  .concat(MOTOR)
+  .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+if (solo.length) archivos = archivos.filter(([et]) => solo.some(s => et.startsWith(s)));
 
 const TOPE_MS = 300000;
-const corre = f => new Promise(res => {
+const corre = ([etiqueta, ruta, args = []]) => new Promise(res => {
   const t0 = Date.now();
-  const p = spawn(process.execPath, [join(aqui, f)], { cwd: aqui, stdio: ['ignore', 'pipe', 'pipe'] });
+  const p = spawn(process.execPath, [ruta, ...args], { cwd: aqui, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   p.stdout.on('data', d => { out += d; });
   p.stderr.on('data', d => { out += d; });
   const reloj = setTimeout(() => { p.kill('SIGKILL'); }, TOPE_MS);
-  p.on('close', code => { clearTimeout(reloj); res({ f, code, ms: Date.now() - t0, out }); });
+  p.on('close', code => { clearTimeout(reloj); res({ f: etiqueta, code, ms: Date.now() - t0, out }); });
 });
 
 console.log(`Cabina · ${archivos.length} archivos de prueba\n`);
 const malos = [];
 const t0 = Date.now();
-for (const f of archivos) {
-  const r = await corre(f);
+for (const entrada of archivos) {
+  const r = await corre(entrada);
   const fallos = (r.out.match(/fallos: (\d+)/) || [])[1];
   /* Un test es rojo si se rompe O si dice que algo falló. Lo segundo no se
      miraba, y de 44 archivos sólo 8 reportaban sus fallos por el código de
@@ -46,9 +68,9 @@ for (const f of archivos) {
   const cruces = (r.out.match(/❌/g) || []).length;
   const rojo = r.code !== 0 || cruces > 0;
   const nota = cruces ? `  ${cruces} ✗` : fallos ? `  ${fallos} fallos` : '';
-  console.log(`  ${rojo ? '❌' : '✅'} ${f.replace('.mjs', '').padEnd(14)} ${String(r.ms).padStart(6)} ms${nota}`);
+  console.log(`  ${rojo ? '❌' : '✅'} ${r.f.padEnd(14)} ${String(r.ms).padStart(6)} ms${nota}`);
   if (rojo) {
-    malos.push(f);
+    malos.push(r.f);
     /* Las líneas que fallaron primero: son lo que se quiere leer. Si no hay
        ninguna, el proceso murió y entonces sí vale la cola. */
     const rojas = r.out.split('\n').filter(l => l.includes('❌'));

@@ -1,4 +1,7 @@
-const E = require("./MathEngine.js");
+/* ESM, no CommonJS: el package.json del repo declara "type": "module", asi que
+   un require() aqui ni siquiera compila. Estuvo roto desde que se añadio ese
+   package.json, y nadie lo noto porque nada ejecutaba este archivo. */
+import * as E from "./MathEngine.js";
 let ok = 0, fail = 0;
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function t(nombre, real, esperado) {

@@ -58,5 +58,25 @@ return { ${PUBLICOS.join(", ")} };
 })();
 `;
 
-writeFileSync(join(dir, "..", "QuantEngine.bundle.js"), salida);
+const destino = join(dir, "..", "QuantEngine.bundle.js");
+
+/* `--check` no escribe: compara. Existe porque la cadena modulos -> bundle ->
+   inline en index.html era MANUAL y nadie la comprobaba. Un cambio en un modulo
+   que nadie empaquetara dejaba a la app corriendo una matematica distinta de la
+   que las 329 pruebas verifican, en silencio y sobre el dinero: dimensionado en
+   la rejilla de ticks, IRR, drawdown. Con esto, la suite lo caza. */
+if (process.argv.includes("--check")) {
+  let actual = null;
+  try { actual = readFileSync(destino, "utf8"); } catch (e) { actual = null; }
+  if (actual === salida) {
+    console.log(`bundle al dia con los ${ORDEN.length} modulos (${salida.length} bytes)`);
+    process.exit(0);
+  }
+  console.log("FALLO: engine/QuantEngine.bundle.js no coincide con los modulos de engine/quant/.");
+  console.log("       Ejecuta `npm run bundle` y vuelve a incrustarlo en index.html.");
+  console.log(`       committeado: ${actual === null ? "(no existe)" : actual.length + " bytes"} · generado: ${salida.length} bytes`);
+  process.exit(1);
+}
+
+writeFileSync(destino, salida);
 console.log(`bundle escrito: ${salida.length} bytes, ${salida.split("\n").length} lineas`);

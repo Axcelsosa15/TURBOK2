@@ -5,6 +5,7 @@
   "description": "Cabina · cockpit de sesión para futuros e inversiones. Una sola página, sin build.",
   "type": "module",
   "scripts": {
+    "bundle": "node engine/quant/bundle.mjs",
     "preview": "node test/build-preview.mjs",
     "test": "node test/correr.mjs",
     "serve": "python3 -m http.server 8000"
@@ -12,5 +13,7 @@
   "devDependencies": {
     "playwright": "1.56.1"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

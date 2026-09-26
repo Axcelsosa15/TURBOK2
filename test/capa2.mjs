@@ -38,7 +38,9 @@ for (const f of ['tradeCalc', 'acctAgg', 'acctAggCrudo', 'consistency', 'futStat
 }
 
 console.log('\n═══ 2 · nadie se salta la memoria ═══');
-/* Los *Crudo son el cálculo caro. Sólo su envoltorio memorizado debe llamarlos:
+/* §1 — Los envoltorios memorizados.
+
+   Los *Crudo son el cálculo caro. Sólo su envoltorio memorizado debe llamarlos:
    una llamada directa recalcula la curva entera de una cuenta sin necesidad. */
 for (const crudo of ['acctAggCrudo', 'futStatsCrudo']) {
   const n = llamadas(crudo);
@@ -55,7 +57,9 @@ const faltan = FUNCIONES.filter(f => !new RegExp('^    ' + f + '\\(', 'm').test(
 ok(faltan.length === 0, `las ${FUNCIONES.length} funciones de FUT`, faltan.length ? 'faltan: ' + faltan.join(', ') : '');
 
 console.log('\n═══ 4 · ningún número con DOS implementaciones ═══');
-/* La pregunta no es «¿existe este nombre?» sino «¿hace este nombre la cuenta por
+/* §2 — Un nombre por cada cuenta.
+
+   La pregunta no es «¿existe este nombre?» sino «¿hace este nombre la cuenta por
    su cuenta?». MULT existe y está bien: es una vista de sólo lectura derivada de
    QE.CONTRACTS. riskThreshold existe y está bien: delega en QE.sueloPara. Lo que
    no puede volver es que CALCULEN. */
@@ -69,7 +73,9 @@ for (const [nombre, re, debe] of DELEGAN) {
   const cuerpo = nombre === 'MULT' ? (codigo.match(/const\s+MULT\s*=.*/) || [''])[0] : cuerpoDe(nombre);
   ok(cuerpo !== '' && re.test(cuerpo), `${nombre} sigue delegando`, cuerpo === '' ? 'no existe' : re.test(cuerpo) ? '' : 'ya no ' + debe);
 }
-/* El suelo de la cuenta y el P&L de una operación son los dos números que más
+/* §3 — El suelo de la cuenta y el P&L.
+
+   El suelo de la cuenta y el P&L de una operación son los dos números que más
    veces se han duplicado aquí. Que nadie los escriba a mano otra vez. */
 const AMANO = [
   ['P&L a mano con multiplicador', /\(\s*(?:exit|salida)\s*-\s*(?:entry|entrada)\s*\)\s*\*/],
@@ -89,7 +95,9 @@ for (const [nombre, re] of AMANO) {
 }
 
 console.log('\n═══ 5 · las memorias llevan en la clave todo lo que leen ═══');
-/* Una clave incompleta es un número rancio con fecha de caducidad desconocida.
+/* §4 — La clave de cache completa.
+
+   Una clave incompleta es un número rancio con fecha de caducidad desconocida.
    Se comprueba que cada memoria mencione la revisión de la colección. */
 for (const [nombre, re] of [
   ['tradesOf', /_tradesMemo[\s\S]{0,400}?c\.rev/],
@@ -97,7 +105,9 @@ for (const [nombre, re] of [
   ['acctAgg', /function acctAgg\([\s\S]{0,500}?coll\("trades"\)\.rev/],
   ['futFiltered', /function futFiltered\([\s\S]{0,500}?coll\("trades"\)\.rev/],
 ]) ok(re.test(src), `la memoria de ${nombre} depende de coll("trades").rev`);
-/* La huella de la cuenta debe incluir TODO campo que acctAggCrudo lee de ella. */
+/* §5 — La huella de la cuenta.
+
+   La huella de la cuenta debe incluir TODO campo que acctAggCrudo lee de ella. */
 const cuerpo = cuerpoDe('acctAggCrudo').replace(/curva\./g, 'CURVA.');
 const leidos = [...new Set([...cuerpo.matchAll(/\ba\.([a-zA-Z]+)/g)].map(m => m[1]))].filter(x => x !== 'id');
 const huella = (codigo.match(/JSON\.stringify\(\[a\.[^\]]*\]\)/) || [''])[0];
@@ -106,7 +116,9 @@ ok(fuera.length === 0, 'la huella cubre todo lo que acctAgg lee de la cuenta',
    fuera.length ? 'fuera de la huella: ' + fuera.join(', ') : leidos.join(', '));
 
 console.log('\n═══ 6 · inversiones: un rendimiento, una fuente ═══');
-/* Esta sección existe porque el guardián no la tenía y el defecto salió en una
+/* §6 — Inversiones: un solo rendimiento.
+
+   Esta sección existe porque el guardián no la tenía y el defecto salió en una
    captura de pantalla, dos veces. La misma SCHD aparecía al 6,0% en la tabla y
    al 2,0% en el gráfico de al lado; la tarjeta «Realizado» enseñaba $400 donde
    había $508.57; y la tarjeta del IRR ponía un retorno simple junto a una
@@ -144,7 +156,9 @@ const sinInv = INVF.filter(f => !new RegExp('^    ' + f + '\\(|^    ' + f + ':',
 ok(sinInv.length === 0, `las ${INVF.length} funciones de INV`, sinInv.length ? 'faltan: ' + sinInv.join(', ') : '');
 
 console.log('\n═══ 7 · tesis: se escribe el precio, se deriva el resto ═══');
-/* La plantilla original pide a mano capital, riesgo $, tamaño, R:R y la R del
+/* §7 — Tesis: la aritmetica por activo.
+
+   La plantilla original pide a mano capital, riesgo $, tamaño, R:R y la R del
    cierre. Cabina calcula las cinco, y un campo para escribirlas volvería a
    crear dos fuentes para una cifra. Esto vigila que no vuelvan. */
 ok(defs('tesisCalc') === 1, 'tesisCalc'.padEnd(22), defs('tesisCalc') === 1 ? '' : defs('tesisCalc') + ' definiciones');
@@ -204,7 +218,9 @@ ok(!/Math\.(floor|round|ceil)/.test(puente),
    /Math\./.test(puente) ? 'volvió a redondear por su cuenta' : '');
 
 console.log('\n═══ 8 · ningún var(--x) que no exista ═══');
-/* Un token de color mal escrito NO falla: `background: var(--warning-soft)` con
+/* §8 — Todo token de color existe.
+
+   Un token de color mal escrito NO falla: `background: var(--warning-soft)` con
    ese token sin definir se queda transparente y la regla no pinta nada. Escribí
    --positive-soft, --negative-soft y --warning-soft cuando los tokens se llaman
    --good-soft, --bad-soft y --warn-soft. Seis usos, tres reglas invisibles, y
@@ -225,7 +241,9 @@ ok(huerfanos.length === 0, `los ${usados.length} tokens usados existen`,
    huerfanos.length ? 'sin definir: ' + huerfanos.join(', ') : '');
 
 console.log('\n═══ 9 · ningún test mide una copia congelada ═══');
-/* Siete tests apuntaban a una ruta ABSOLUTA de un scratchpad en vez de al
+/* §9 — Las pruebas no llevan rutas fijas.
+
+   Siete tests apuntaban a una ruta ABSOLUTA de un scratchpad en vez de al
    preview que se reconstruye. El archivo existía, así que pasaban en verde —
    sobre una copia de la app de hacía seis días: 141 KB menos, sin posPerf, sin
    INV, sin TES, sin QE.dimensionar, sin el arreglo del IRR. Cuatro veces
@@ -271,7 +289,9 @@ ok(ausentes.length === 0, 'preview.html está reconstruido desde el index.html a
    ausentes.length ? 'falta en el preview: ' + ausentes.join(', ') + ' — corre build-preview.mjs' : '');
 
 console.log('\n═══ 10 · nadie recarga antes de que el disco tenga el dato ═══');
-/* `persistDay()` escribe el día con `debounce("day", fn, 400)`. Un test que
+/* §10 — Nada de recargar sin esperar el guardado.
+
+   `persistDay()` escribe el día con `debounce("day", fn, 400)`. Un test que
    cambia el día y recarga 400 ms después pierde lo guardado SIN un solo error:
    sale «sin filas» y localStorage devuelve null. Me pasó convirtiendo
    sesiones.mjs y no lo vi venir, porque busqué diferidos como `setTimeout(…,N)`
@@ -296,7 +316,9 @@ ok(flojos.length === 0, 'ninguna recarga ni lectura de disco con <600 ms detrás
    flojos.length ? flojos.slice(0, 4).join(' · ') + ' — usa enDisco()' : `hay dos debounces: el día 400 ms, los ajustes 500 ms`);
 
 console.log('\n═══ 11 · el borrado en masa pasa por una sola puerta ═══');
-/* Borrar una cuenta tenía TRES implementaciones: la fachada FUT.deleteAccount,
+/* §11 — Nadie saca una cuenta fuera de la fachada.
+
+   Borrar una cuenta tenía TRES implementaciones: la fachada FUT.deleteAccount,
    el menú de la tarjeta y el editor. Las dos últimas hacían su propio
    `arr.splice` sin limpiar el filtro, y por la del menú `meta.acct` se quedaba
    en disco apuntando a la cuenta muerta. En la operación más destructiva de la
@@ -394,6 +416,62 @@ for (const f of tests) {
 }
 ok(sucias.length === 0, `ninguna de las ${tests.length} pruebas apunta a una raiz del sistema`,
    sucias.length ? sucias.slice(0, 4).join(' · ') : 'todo relativo al repositorio');
+
+/* §14 — Ningun documento puede citar un guardian que no existe.
+
+   PROTOCOLOS.md dice quien vigila cada protocolo, y esa columna es lo mas
+   importante del documento: separa lo comprobado de lo que depende de que
+   alguien se acuerde. Si cita «capa2 §9» y aqui no hay §9, la columna miente y
+   el lector confia en una red que no esta puesta.
+
+   Paso de verdad: §9, §10 y §11 se citaron en mensajes de commit y en
+   PROTOCOLOS.md durante toda una sesion, con una numeracion que existia solo en
+   la cabeza de quien escribia. En el fichero solo estaban etiquetadas §12 y §13.
+   Nadie podia seguir la referencia. */
+/* Solo las ETIQUETAS, no las menciones de paso. La primera version contaba
+   cualquier §N del fichero, y §13 aparece dos veces: como etiqueta y dentro de
+   la prosa de este mismo comentario. Con eso, borrar una etiqueta no ponia la
+   regla roja -- la mencion la sostenia. El sabotaje lo enseño. */
+const ETIQUETA = /^\/\* §(\d+) — /gm;
+const secciones = new Set([...leer(join(dirTest, 'capa2.mjs'), 'utf8').matchAll(ETIQUETA)].map(m => m[1]));
+const docs = readdirSync(join(dirTest, '..')).filter(f => f.endsWith('.md'));
+const fantasmas = [];
+for (const d of docs)
+  for (const m of leer(join(dirTest, '..', d), 'utf8').matchAll(/§(\d+)/g))
+    if (!secciones.has(m[1])) fantasmas.push(`${d} cita §${m[1]}`);
+ok(fantasmas.length === 0, `los ${docs.length} documentos citan solo secciones que existen`,
+   fantasmas.length ? [...new Set(fantasmas)].join(' · ') : `§1–§${Math.max(...[...secciones].map(Number))} etiquetadas`);
+
+/* §15 — Lo que corre en la app es el bundle del motor, sin una coma de mas.
+
+   La cadena es engine/quant/*.js -> engine/QuantEngine.bundle.js -> incrustado
+   en index.html, y era MANUAL de principio a fin: ningun script la construia
+   (`bundle.mjs` existia pero no estaba en package.json) y nada la comprobaba.
+   Estaba intacta por disciplina, no por comprobacion, y lo que se arriesgaba es
+   lo peor posible: que la app corriera una matematica del dinero distinta de la
+   que verifican las 329 pruebas del motor. Dimensionado en la rejilla de ticks,
+   IRR, drawdown, Monte Carlo.
+
+   Esto vigila el segundo eslabon. El primero (modulos -> bundle) lo vigila
+   `node engine/quant/bundle.mjs --check`, que la suite ejecuta como
+   «motor-bundle».
+
+   Se compara quitando la sangria de cada linea: al incrustarlo en el HTML va
+   indentado, y eso es lo UNICO que puede cambiar. */
+const ABRE = 'const QE = (function () {';
+const bundleSrc = leer(join(dirTest, '..', 'engine', 'QuantEngine.bundle.js'), 'utf8');
+const sinSangria = t => t.replace(/\r/g, '').split('\n').map(l => l.trim()).join('\n').trim();
+let cmp = 'no encontre el bloque';
+if (bundleSrc.includes(ABRE) && src.includes(ABRE)) {
+  const b = bundleSrc.slice(bundleSrc.indexOf(ABRE));
+  const i0 = src.indexOf(ABRE);
+  const iRet = src.indexOf('return { QE_VERSION,', i0);
+  const iFin = iRet < 0 ? -1 : src.indexOf('})();', iRet);
+  const a = iFin < 0 ? '' : src.slice(i0, iFin + 5);
+  cmp = sinSangria(a) === sinSangria(b) ? 'igual' : `difieren (${sinSangria(a).length} vs ${sinSangria(b).length} bytes)`;
+}
+ok(cmp === 'igual', 'el motor incrustado es exactamente el bundle del repositorio',
+   cmp === 'igual' ? `${sinSangria(bundleSrc.slice(bundleSrc.indexOf(ABRE))).length} bytes` : cmp);
 
 console.log('\n──────────────────────────────────────────');
 console.log('  fallos:', fallos.length, fallos.length ? '→ ' + fallos.join(' · ') : '');
