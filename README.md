@@ -32,7 +32,7 @@ engine/quant/*.js          los 11 módulos FUENTE del motor
 engine/QuantEngine.bundle.js   generado por `npm run bundle`
 engine/MathEngine.js       motor v1, REFERENCIA histórica — la app no lo usa
 
-test/                      50 archivos · 45 pruebas + 5 herramientas
+test/                      53 archivos · 48 pruebas + 5 herramientas
   └─ correr.mjs            el runner: un proceso por archivo, veredicto por salida
 ```
 
@@ -62,7 +62,7 @@ También se abre como archivo suelto (`file://`), con las limitaciones de abajo.
 
 ```sh
 npm run preview         # regenera test/preview.html desde index.html — NO es opcional
-npm test                # las 50 suites
+npm test                # las 51 suites
 npm test motor          # sólo el motor
 npm test humo           # sólo el smoke test de producción
 ```
@@ -117,14 +117,21 @@ resuelve.
   puede hacer.
 - **`file://` tira el almacén al recargar**, de forma intermitente. Por eso el
   smoke test usa HTTP y dos pruebas abren una pestaña nueva en vez de recargar.
-- **32 de las 45 pruebas de `test/` no afirman nada**: miden y registran. Su
-  único modo de fallo es romperse. Las que afirman están contadas abajo.
+- **36 de las 48 pruebas de `test/` no afirman nada**: miden y registran. Su
+  único modo de fallo es romperse. Las 12 que afirman están contadas abajo, y el
+  número lo imprime `npm test`, no un `grep` sobre el código — ver protocolo 14.
 - **El motor tiene 55 funciones que la app no usa**, incluido el módulo de
   *compliance*: están probadas pero no conectadas a producción.
 - **`pagina.yml` lleva un `continue-on-error`** en `configure-pages`. Si fallara
   por un motivo distinto a «Pages sin activar», el despliegue se salta y el run
   queda verde.
 - **`test/perf.mjs` no corre**: necesita un baseline que no está en el repositorio.
+- **La prueba de la capa `db` fija el contrato, no la plataforma.** Si claude.ai
+  cambiara ese contrato, `capsula.mjs` seguiría verde y el artefacto estaría roto.
+  Eso sólo lo detecta abrir el artefacto.
+- **Si el `db` del artefacto falla al escribir, el dato se queda en memoria.** La
+  app avisa con el código real del error, pero no cae a `localStorage`, así que al
+  recargar se pierde. Afirmado tal cual es en `capsula.mjs`.
 
 ---
 
@@ -132,9 +139,10 @@ resuelve.
 
 | | |
 |---|---|
-| Suites que se ejecutan | **50** (45 de `test/` + humo + invariantes + 3 del motor) |
+| Suites que se ejecutan | **51** (48 de `test/` + 3 del motor) |
 | Aserciones del motor | **421** (`quant` 329 · `math` 92) |
-| Aserciones de navegador y guardianes | **376** en 13 archivos |
+| Aserciones de navegador y guardianes | **441** en 12 archivos — las cuenta la propia suite |
+| Cobertura de la capa `db` del artefacto | **28** aserciones contra un doble fiel del contrato |
 | Smoke test de producción | 23 comprobaciones sobre HTTP |
 | CI | ejecuta el mismo `npm test`, verificado en el log |
 | Secretos técnicos en el repositorio | ninguno |

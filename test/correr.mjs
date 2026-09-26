@@ -55,6 +55,7 @@ const corre = ([etiqueta, ruta, args = []]) => new Promise(res => {
 console.log(`Cabina · ${archivos.length} archivos de prueba\n`);
 const malos = [];
 const t0 = Date.now();
+let totalAfirm = 0, conAfirm = 0;
 for (const entrada of archivos) {
   const r = await corre(entrada);
   const fallos = (r.out.match(/fallos: (\d+)/) || [])[1];
@@ -67,8 +68,21 @@ for (const entrada of archivos) {
      ❌, así que no les afecta. */
   const cruces = (r.out.match(/❌/g) || []).length;
   const rojo = r.code !== 0 || cruces > 0;
+  /* CUANTAS ASERCIONES CORRIERON DE VERDAD, contando la SALIDA y no el fuente.
+     Contarlas con una regex sobre el codigo NO funciona: se cuelan las que
+     aparecen dentro de un comentario. Paso aqui — capsula.mjs daba 29 por grep y
+     28 al ejecutarse, y la de mas estaba en una linea de su encabezado que
+     menciona `paso(...)` como prosa. Ese mismo error ya se habia cometido en la
+     §14 de capa2, que contaba «§13» escrito en un parrafo como si fuera una
+     etiqueta. Leer la salida es la unica medicion que un comentario no puede
+     falsear, y asi el numero que va al README lo produce la suite, no yo.
+     Los archivos que solo miden no imprimen lineas con esta forma: salen en 0,
+     que es exactamente lo que son. */
+  const afirm = (r.out.match(/^ {2}(?:[✅❌]|PASS|FAIL) /gm) || []).length;
   const nota = cruces ? `  ${cruces} ✗` : fallos ? `  ${fallos} fallos` : '';
-  console.log(`  ${rojo ? '❌' : '✅'} ${r.f.padEnd(14)} ${String(r.ms).padStart(6)} ms${nota}`);
+  totalAfirm += afirm;
+  if (afirm) conAfirm++;
+  console.log(`  ${rojo ? '❌' : '✅'} ${r.f.padEnd(14)} ${String(r.ms).padStart(6)} ms${(afirm ? '  ' + String(afirm).padStart(3) + ' af.' : '        ')}${nota}`);
   if (rojo) {
     malos.push(r.f);
     /* Las líneas que fallaron primero: son lo que se quiere leer. Si no hay
@@ -79,4 +93,5 @@ for (const entrada of archivos) {
   }
 }
 console.log(`\n${archivos.length - malos.length}/${archivos.length} en verde · ${Math.round((Date.now() - t0) / 1000)} s`);
+console.log(`${totalAfirm} aserciones ejecutadas en ${conAfirm} archivos · el resto solo mide`);
 if (malos.length) { console.log('rojos: ' + malos.join(' ')); process.exit(1); }

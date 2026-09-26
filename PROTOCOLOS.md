@@ -28,6 +28,8 @@ cabeza de quien escribía — en el fichero únicamente estaban etiquetadas §12
 | 10 | Tocar el motor de cálculo | `motor-bundle` + `capa2` §15 |
 | 11 | Una aserción puede fallar por el motivo correcto | humano |
 | 12 | El porcentaje de riesgo se pasa como fracción | `invariantes` |
+| 13 | Probar una plataforma que no está en el repositorio | `capsula` + humano |
+| 14 | No contar aserciones leyendo el código | `correr.mjs` |
 | — | *Que esta tabla no mienta* | `capa2` §14 |
 
 ---
@@ -372,6 +374,95 @@ Tres niveles, y cada uno responde algo que los otros no:
 
 ---
 
+## 13 · Probar una plataforma que no está en el repositorio
+
+La app tiene **dos** ramas de persistencia y son un `if/else`, no una mezcla:
+
+```
+if (state.db)                    → el artefacto: window.claude.use("db")
+else if (state.store === "local") → Pages y file://: localStorage
+```
+
+Las pruebas de navegador corren sin `window.claude`, así que **todas medían la
+segunda rama**. La primera —la que el usuario usa de verdad— se prueba con un
+**doble fiel** instalado con `addInitScript` antes del script de la app
+(`test/capsula.mjs`).
+
+Fiel quiere decir que el doble **no simplifica el contrato**:
+
+| lo que la app llama | lo que el doble implementa |
+|---|---|
+| `doc(p).set / get / delete` | y devuelve promesas, que la app espera con `await` |
+| `doc(p).onSnapshot(cb)` | dispara al suscribirse, y devuelve la función de baja |
+| `collection(n).limit(1000).onSnapshot` | con `{ docs: [{ data() }] }` |
+| `collection("days").orderBy("date","desc").limit(15)` | la cadena entera |
+| `collection(n).doc(id).set / delete` | y hace **eco** al suscriptor, como un Firestore |
+
+Reglas al escribir una prueba de esta rama:
+
+1. **Registrar las llamadas, no mirar la pantalla.** Se afirma sobre la ruta y el
+   contenido del documento que salió (`settings/main`, `days/<hoy>`,
+   `col:tesis/<id>`), porque una pantalla correcta con el disco vacío es
+   exactamente el fallo que se busca.
+2. **Comprobar que la otra rama no se toca.** Con `db` conectado, `localStorage`
+   tiene que quedarse sin una sola clave `cabina-mnq`. Es lo único que prueba que
+   el `if/else` es un `if/else`.
+3. **Romper el doble a propósito.** Con todo `set()` rechazando, la app debe
+   avisar **con el código del error**, no con un genérico ni con «guardado».
+4. **Probar el snapshot entrante**, que es la mitad que nadie prueba: un
+   documento más nuevo reemplaza el día, uno más viejo no, y **con el foco
+   dentro de un campo no se sobreescribe lo que se está escribiendo**.
+
+> **Qué falló:** durante toda esta auditoría la suite dio **50/50 en verde**
+> mientras el entorno **principal** tenía **cero** aserciones. El artefacto es
+> donde el usuario trabaja; Pages es la copia de respaldo. Un fallo en la rama
+> `db` habría sido invisible para 50 suites y visible para el usuario en el primer
+> uso. No lo tapó nadie: simplemente nunca se preguntó *qué* rama medían las
+> pruebas, que es el protocolo 2 aplicado a la arquitectura y no a un número.
+>
+> Y la primera versión de `capsula.mjs` falló acusando a la app de borrar el
+> campo del diario al llegar un snapshot. La app tenía razón: `index.html:3689`
+> guarda el campo enfocado a propósito. El fallo era de la prueba, que empujaba
+> el snapshot con el foco dentro. Ahora se prueban **los dos lados de esa
+> guarda**, que es una aserción más de las que había antes de equivocarme.
+
+---
+
+## 14 · No contar aserciones leyendo el código
+
+El número de aserciones de la suite **lo imprime la suite**, al final de
+`npm test`:
+
+```
+51/51 en verde · NNN s
+NNN aserciones ejecutadas en NN archivos · el resto solo mide
+```
+
+`correr.mjs` lo cuenta sobre la **salida** de cada proceso hijo
+(`/^ {2}(?:[✅❌]|PASS|FAIL) /`), no sobre el fuente. Un archivo que solo mide
+sale en 0, que es lo que es.
+
+Contarlas con `grep` sobre los `.mjs` **no vale**, y no por pereza: no hay regex
+razonable que distinga una llamada de una mención en prosa.
+
+> **Qué falló:** `grep` dijo que `capsula.mjs` tenía **29** aserciones; al
+> ejecutarlo imprimió **28**. La de más estaba dentro de su propio encabezado, en
+> la línea que explica cómo falla el archivo y que por tanto escribe `paso(...)`
+> como prosa. Se intentó arreglar excluyendo las líneas que empiezan por `//`,
+> `*` o `/*`: siguió dando 29, porque las líneas interiores de un comentario de
+> bloque no empiezan por ninguno de los tres.
+>
+> Es el **mismo error** que la §14 de `capa2` ya cometió, contando un «§13»
+> escrito en un párrafo como si fuera una etiqueta. Dos veces el mismo error
+> justifica un protocolo, no otra regex.
+>
+> Consecuencia: el «**376 aserciones en 13 archivos**» que decía el README **no
+> se reproduce** con ningún método, ni el de antes ni el de ahora. Está
+> reemplazado por el número que imprime la suite, y queda anotado aquí que el
+> anterior era una cuenta que no se podía repetir.
+
+---
+
 ## · Lo que ningún protocolo cubre
 
 *No es un protocolo: es la lista de lo que queda fuera del alcance de todos.*
@@ -387,3 +478,14 @@ Honestidad sobre los límites:
 - **La compartición del artefacto sólo la cambia su dueño**, desde el menú Share.
 - **No hay LICENSE**, así que el repositorio es «todos los derechos reservados»:
   público para leer, sin permiso para usar.
+- **El doble de `db` fija el CONTRATO, no la plataforma.** `capsula.mjs` prueba
+  que la app usa correctamente el `db` que *espera*. Si claude.ai cambiara ese
+  contrato, la prueba seguiría **verde** y el artefacto estaría **roto**. Eso sólo
+  lo detecta abrir el artefacto. Por eso el contrato está escrito en el
+  encabezado del fichero y en el protocolo 13, no sólo codificado.
+- **Si el `db` falla al escribir, el dato se queda en memoria.** Medido: la app
+  avisa «no se pudo guardar (*código*)» — con el código real, no un genérico — pero
+  **no** cae a `localStorage`, así que al recargar se pierde. No se ha cambiado:
+  añadir ese respaldo altera el comportamiento de la app y eso está fuera del
+  alcance de esta auditoría. Queda afirmado tal cual es en `capsula.mjs`, así que
+  si alguien lo cambia, la prueba lo dirá.
