@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 /* Apuntaba a una ruta ABSOLUTA del scratchpad. Ese archivo existía, así que
    el test pasaba en verde — midiendo una copia congelada de la app. Cuando se
    descubrió llevaba seis días sin regenerarse: 141 KB menos, sin posPerf, sin

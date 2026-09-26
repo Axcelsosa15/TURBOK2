@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const errs=[]; const b=await chromium.launch();
 const p=await b.newPage({viewport:{width:1400,height:1100}});
 p.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));

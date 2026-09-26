@@ -1,6 +1,6 @@
 /* Segunda pasada: medir lo que el ojo no puede contar. Espaciado fuera de
    escala, alturas de línea sueltas, tamaños de tipo sin token, contraste. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 const F=new Date('2026-09-18T14:20:00Z').getTime();
 const sem=readFileSync('/tmp/semilla.json','utf8');

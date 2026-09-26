@@ -1,6 +1,6 @@
 /* Lo que el rediseño promete, comprobado: divulgación progresiva, estados
    vacíos con salida, y foco de teclado visible. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 const F=new Date('2026-09-18T14:20:00Z').getTime(); const sem=readFileSync('/tmp/semilla.json','utf8');
 const errs=[]; const b=await chromium.launch();

@@ -1,6 +1,6 @@
 /* Paleta de comandos y atajos. La prueba que importa es la última: escribir
    una «n» en una nota NO puede abrir el editor de operaciones. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 const F=new Date('2026-09-18T14:20:00Z').getTime();
 const sem=readFileSync('/tmp/semilla.json','utf8');

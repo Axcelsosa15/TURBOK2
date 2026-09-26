@@ -7,7 +7,7 @@
    nunca se actualiza.
 
    Aquí se comprueba que se ESCRIBA el precio y se DERIVE el resto. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { siembra } from './espera.mjs';
 const errs = [], fallos = [];
 const F = new Date('2026-09-18T14:00:00Z').getTime();

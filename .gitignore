@@ -6,3 +6,6 @@ test/preview_cnt.html
 test/preview_prof.html
 test/preview_who.html
 test/prev_antes.html
+
+# Playwright se instala con `npm install`; aquí sólo hay un enlace al del contenedor.
+node_modules/

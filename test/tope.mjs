@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const errs=[]; const b=await chromium.launch(); const F=new Date('2026-09-17T14:00:00Z').getTime();
 function semilla(n){ const trades={}; let r=99; const rnd=()=>(r=(r*1103515245+12345)&0x7fffffff)/0x7fffffff;
   for(let i=0;i<n;i++){ const d=new Date(Date.UTC(2025,0,1+Math.floor(i/3))); const id='t'+i; const g=rnd()<0.45;

@@ -7,7 +7,7 @@
      · la confirmación dice QUÉ cambia, no cuántas filas;
      · lo borrado vuelve entero, incluso después de recargar;
      · en masa sólo se borra lo que está EN PANTALLA. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { quieto, arrancada, trasGuardar } from './espera.mjs';
 const errs = [], fallos = [];
 const F = new Date('2026-09-17T14:00:00Z').getTime();

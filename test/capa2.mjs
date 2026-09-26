@@ -249,6 +249,18 @@ for (const f of tests) {
 ok(conRutaFija.length === 0, `los ${tests.length} tests derivan su ruta de process.cwd()`,
    conRutaFija.length ? conRutaFija.slice(0, 5).join(' · ') : '');
 
+/* Lo mismo con las dependencias. 44 archivos importaban Playwright por la ruta
+   absoluta de un contenedor concreto: el repositorio es público y nadie que lo
+   clonara podía correr un solo test. Un import desnudo lo resuelve npm, aquí y
+   en CI. */
+const porRutaAbsoluta = [];
+for (const f of tests) {
+  const t = leer(join(dirTest, f), 'utf8');
+  for (const m of t.matchAll(/from\s+['"](\/[^'"]+)['"]/g)) porRutaAbsoluta.push(`${f}: ${m[1].slice(0, 46)}`);
+}
+ok(porRutaAbsoluta.length === 0, 'ninguna dependencia se importa por ruta absoluta',
+   porRutaAbsoluta.length ? porRutaAbsoluta.slice(0, 3).join(' · ') + ' — usa el nombre del paquete' : 'se resuelven por node_modules');
+
 /* Y que el preview contra el que corren sea el de AHORA, no uno de ayer. */
 const prev = join(dirTest, 'preview.html');
 const idx = leer(join(dirTest, '..', 'index.html'), 'utf8');

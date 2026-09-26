@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { quieto, arrancada, trasGuardar, enDisco } from './espera.mjs';
 const URL = 'file://' + process.cwd() + '/preview.html';
 const errs = []; const b = await chromium.launch();

@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const errs = []; const b = await chromium.launch();
 const F = new Date('2026-09-17T14:00:00Z').getTime();
 const SEM = { settings: { accounts: [{ id:'a1', firm:'Lucid', name:'LucidFlex 25K', kind:'Evaluación',

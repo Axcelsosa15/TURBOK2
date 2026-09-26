@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const b = await chromium.launch();
 const CASES = [
   ['pre-mercado 7:30', '2026-09-15T11:30:00Z'],

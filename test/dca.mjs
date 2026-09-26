@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const errs=[]; const b=await chromium.launch(); const F=new Date('2026-01-01T14:00:00Z').getTime();
 function semilla(conPos){ const trades={}; let u=0, coste=0;
   for(let m=0;m<12;m++){ const precio=100*Math.pow(1.10,m/12); const q=200/precio; u+=q; coste+=200;

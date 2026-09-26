@@ -1,0 +1,39 @@
+# La suite corre sola en cada push. Sin esto, 44 archivos de prueba sólo se
+# ejecutan cuando alguien se acuerda — y un test que nadie corre no es un test,
+# es un archivo.
+name: pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm install
+
+      # Sólo Chromium: la suite no prueba otros navegadores, y bajar los tres
+      # cuesta varios minutos por corrida sin comprobar nada más.
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      # preview.html se genera desde index.html. Si se olvidara, los tests
+      # medirían una copia vieja — que es exactamente lo que pasó una vez y por
+      # lo que capa2.mjs tiene una comprobación para ello.
+      - name: Construir el preview
+        run: npm run preview
+
+      - name: Correr la suite
+        run: npm test

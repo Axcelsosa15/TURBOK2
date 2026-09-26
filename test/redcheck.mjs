@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1100 } });
 await p.addInitScript(()=>{window.claude={use:async n=>n==='permissions'?{state:async()=>'granted',request:async ns=>Object.fromEntries((ns||[]).map(x=>[x,'granted']))}:null};});

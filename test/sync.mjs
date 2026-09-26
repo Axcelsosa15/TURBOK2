@@ -4,7 +4,7 @@
    aparece en CABINA y en FUTUROS después de cada escritura, sin recargar. Todo
    se escribe por las puertas que usa una persona (el editor de operaciones, los
    botones de la tarjeta, los selectores) y se lee del DOM de las dos pestañas. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 
 const errs = [], fallos = [];
 const F = new Date('2026-09-18T14:00:00Z').getTime();

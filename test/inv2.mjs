@@ -3,7 +3,7 @@
    La pregunta que existe para responder: ¿de DÓNDE vino el dinero? Un solo
    número («+20.9%») no lo dice, y de dónde vino es lo que decide si repetir la
    operación. Las cinco piezas tienen que sumar exactamente. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const errs = [], fallos = [];
 const F = new Date('2026-09-18T14:00:00Z').getTime();
 const b = await chromium.launch();

@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const b = await chromium.launch();
 // 9:00 AM ET (kill zone), 12:00 PM ET (lunch), 20:00 ET (Asia) y sábado (cerrado)
 const CASES = [['killzone','2026-09-15T13:00:00Z'],['lunch','2026-09-15T16:00:00Z'],['asia','2026-09-16T01:00:00Z'],['cerrado','2026-09-19T15:00:00Z']];

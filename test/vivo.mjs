@@ -2,7 +2,7 @@
    Verdad de referencia = lo que muestra la app tras RECARGAR.
    Cualquier valor que difiera entre "actualizado en vivo" y "tras recargar"
    está rancio: la app te está enseñando un número viejo. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { quieto, arrancada, trasGuardar } from './espera.mjs';
 const errs = []; const b = await chromium.launch();
 const F = new Date('2026-09-17T14:00:00Z').getTime();

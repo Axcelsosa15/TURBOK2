@@ -4,7 +4,7 @@
    tope de $200 y una Apex con tope de $1.100, ¿la cabina le dice a cada una su
    número, o le enseña a las dos el mismo? Hasta hoy, el mismo — y el que se
    equivoca en la dirección peligrosa te quema la cuenta. */
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 const errs = [], fallos = [];
 const F = new Date('2026-09-18T14:00:00Z').getTime();
 const b = await chromium.launch();

@@ -1612,6 +1612,32 @@ Depende de dónde se abra la página:
 Dicho claro: este repositorio guarda **el sistema, no los datos**. Clonarlo no
 trae tu journal.
 
+## Correr las pruebas
+
+```sh
+npm install                 # Playwright
+npx playwright install chromium
+npm run preview             # genera test/preview.html desde index.html
+npm test                    # los 44 archivos de test/
+npm test vivo capa          # o sólo algunos, por prefijo
+```
+
+`npm test` corre cada archivo en su propio proceso —comparten `preview.html`
+pero no estado de navegador, y uno que se cuelgue no se lleva a los demás— y
+devuelve un código de salida útil para CI. Un test colgado se mata al tope y se
+reporta como colgado, no como una tubería que se agota sin decir cuál fue.
+
+`.github/workflows/pruebas.yml` hace lo mismo en cada push y cada pull request.
+Sin eso, 44 archivos de prueba sólo se ejecutan cuando alguien se acuerda — y un
+test que nadie corre no es un test, es un archivo.
+
+> Durante buena parte de su vida esta suite **no se podía correr fuera del
+> contenedor donde se escribió**: 44 de 48 archivos importaban Playwright por
+> una ruta absoluta (`/opt/node22/lib/node_modules/playwright/index.mjs`). El
+> repositorio es público y nadie que lo clonara podía ejecutar una sola prueba.
+> Ahora el import es el nombre del paquete, lo resuelve npm, y `capa2.mjs` falla
+> si alguien vuelve a escribir una ruta absoluta.
+
 ## Abrirla en local
 
 ```sh
