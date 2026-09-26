@@ -7891,17 +7891,18 @@
       if (!raiz) { multDesconocido = true; }
       else if (valido && cap != null && pc != null) {
         /* pc viene del campo «Riesgo por operación (%)», cuyo step es 0.1: es un
-             PORCENTAJE. El motor, en cambio, acepta las dos formas y las distingue
-             por el valor —`>= 1` lo lee como porcentaje, `< 1` como fracción— así que
-             un 0.5 escrito queriendo medio por ciento se leía como 50%: 1250
-             contratos en vez de 12, el mismo número que escribir 50. Medido por la
-             app: 0.25 -> 625, 0.5 -> 1250, 1 -> 25, 2 -> 50.
+           PORCENTAJE. El motor acepta las dos formas y las distingue por el valor
+           —`>= 1` lo lee como porcentaje, `< 1` como fracción— así que un 0.5
+           escrito queriendo medio por ciento se leía como 50%: 1250 contratos en
+           vez de 12, el mismo número que escribir 50. Medido por la app, cuenta de
+           25.000 con stop de 10 puntos MNQ: 0.25 -> 625, 0.5 -> 1250, 1 -> 12,
+           2 -> 25.
 
-             Se pasa como FRACCIÓN, que el motor lee tal cual en todo el rango. Para
-             1 y 2 el resultado no cambia; para lo de debajo de 1 deja de estar mal, y
-             de paso un riesgo menor al 1% pasa a ser expresable. La convención del
-             motor no se toca: está probada (`riesgoPct: 0.01` -> 12 contratos). */
-          const r = QE.dimensionar({ simbolo: raiz, balance: cap, entrada: e, stop: st, riesgoPct: pc / 100 });
+           Se pasa como FRACCIÓN, que el motor lee igual en todo el rango. Para 1 y
+           2 el resultado no cambia; por debajo de 1 deja de estar mal, y de paso un
+           riesgo menor al 1% pasa a ser expresable. La convención del motor no se
+           toca: está probada (`riesgoPct: 0.01` -> 12 contratos). */
+        const r = QE.dimensionar({ simbolo: raiz, balance: cap, entrada: e, stop: st, riesgoPct: pc / 100 });
         if (r && r.ok) {
           dim = r.value; mult = dim.contrato.multiplier;
           porUnidadUsd = dim.riesgoPorContrato;

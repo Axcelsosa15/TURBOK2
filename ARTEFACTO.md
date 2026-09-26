@@ -11,7 +11,8 @@ ni por qué el mismo archivo se comporta distinto según dónde se abra.
 | | |
 |---|---|
 | Enlace | https://claude.ai/artifact/2Nkv7mgKa7xtxZY9yvxeAb |
-| Contrato en ejecución | `0.2.46` |
+| Versión viva | **61** · `1790422823-8b79` · 2026-09-26 |
+| Contrato en ejecución | `0.2.46` (el más nuevo disponible es `0.2.60`; no se mueve sin motivo) |
 | Compartición | enlace público — *ver la advertencia al final* |
 
 ## Capacidades declaradas
@@ -78,47 +79,78 @@ afectadas. Restaurado y md5 comprobado.
 
 ## Publicar un cambio
 
-El contenido del artefacto es `index.html` **desde `<style>` en adelante**. La
-diferencia con el archivo del repositorio es sólo el envoltorio de página
-estática que añade `test/sync-index.mjs`:
+El contenido del artefacto es `index.html` **desde su SEGUNDO `<style>`**. Decir
+«desde `<style>`» a secas no vale y costó una comparación falsa de 113 bloques: el
+PRIMER `<style>` de `index.html` (línea 13) es el reset mínimo del envoltorio de
+página estática, y el cuerpo del artefacto empieza en el SEGUNDO (línea 22), que
+es el sistema de diseño.
 
-- delante: `<!DOCTYPE html>`, `<head>` con las fuentes y los metas, un reset
+La diferencia con el archivo del repositorio es sólo ese envoltorio, que añade
+`test/sync-index.mjs`:
+
+- delante: `<!DOCTYPE html>`, `<head>` con las fuentes y los metas, el reset
   mínimo, `</head><body>`
 - detrás: `</body></html>`
 
-### ⚠ Ahora mismo NO coinciden, y esta vez SÍ importa
+### Coinciden — republicado el 2026-09-26
 
-`index.html` va **por delante** del artefacto publicado (versión
-`1790329585-a362`). Hasta ahora la diferencia eran sólo comentarios y una función
-muerta, y quedó escrito aquí que **en cuanto tocara una línea que se ejecuta
-dejaba de ser aceptable**. Ya la toca:
+`index.html` y el artefacto publicado vuelven a decir lo mismo. La versión viva
+es la **61** (`1790422823-8b79`); la anterior era `1790329585-a362`.
+
+Lo que fue en esa republicación, medido diferenciando el fichero publicado contra
+el candidato **antes** de enviarlo — 72 líneas fuera, 37 dentro, y ni una más:
 
 | Cambio | ¿Se ejecuta? |
 |---|---|
 | el bloque «MathEngine — ÚNICA FUENTE DE CÁLCULO» dice ahora la verdad | no, comentario |
 | «190 pruebas» → «329 pruebas» | no, comentario |
-| 9 copias duplicadas del encabezado del bundle, fuera | no, comentarios |
+| 10 copias duplicadas del encabezado del bundle, fuera | no, comentarios |
 | `pbar()` retirada | no, nadie la llamaba |
 | **`riesgoPct: pc` → `riesgoPct: pc / 100`** | **SÍ** |
 
-Ese último arregla un **100× en el tamaño de posición**: el campo «Riesgo por
+Ese último arreglaba un **100× en el tamaño de posición**: el campo «Riesgo por
 operación (%)» tiene `step: 0.1`, y quien escribía `0.5` queriendo medio por
-ciento obtenía 50%. Medido por la app, cuenta de 25 000 con stop de 10 puntos
-MNQ: `0.5` daba **1250 contratos** donde ahora da **6**.
+ciento obtenía 50%. Medido por la app, cuenta de 25.000 con stop de 10 puntos
+MNQ: `0.5` daba **1250 contratos** donde ahora da **6**. Estuvo vivo en el
+artefacto — el entorno principal — hasta esa versión; se confirmó leyendo la
+línea 7922 del fichero publicado, no dedujo.
 
-El artefacto es el entorno principal, así que dejarlo con ese fallo mientras el
-repositorio está arreglado sería el peor de los resultados posibles. **Hay que
-republicar.**
+**Cómo se verificó antes de publicar**, porque un artefacto no tiene suite:
 
-### Cuando sí coinciden
+    «MathEngine — ÚNICA FUENTE» fuera        0 apariciones
+    «190 pruebas» fuera                       0
+    «329 pruebas» dentro                      1
+    pbar() fuera                              0
+    encabezado del bundle                     1 (eran 11)
+    riesgoPct: pc / 100                       1
+    riesgoPct: pc })                          0
+    <title>Cabina</title>                     1 (es el nombre del artefacto)
+    </body>                                   0 (lo pone el publicador)
+    window.QuantEngine / window.FUT           1 cada uno
+    el motor incrustado == el bundle          capa2 §15 en verde
 
-Verificado con el arreglo anterior: quitando ese envoltorio, el cuerpo coincide
-byte a byte con lo publicado (sha256 `2c50f0a516caff45`).
+El contador de esas comprobaciones salió **roto la primera vez** — `grep -c`
+termina con código 1 cuando cuenta cero, así que el `|| echo 0` escribía un
+segundo cero y todo lo que debía valer 0 se marcaba FALLO. Anotado porque es
+exactamente el error del protocolo 14 otra vez: el instrumento mentía, no el
+archivo.
+
+### Cómo se republica
+
+El contenido del artefacto es `index.html` **desde su SEGUNDO `<style>`**, con el
+`<title>` y los dos `<link>` de fuentes tomados del fichero publicado — no del
+repositorio, cuyo título es otro y renombraría el artefacto. El `</body></html>`
+no va: lo pone el publicador.
+
+La herramienta **no acepta una comparación por hash**: exige haber leído las
+10.818 líneas de lo publicado, y hace bien — es lo que permitió diferenciar y
+saber que no entraba nada más. Son ~15 lecturas.
 
 Al republicar **se omite `capabilities`**, que arrastra la declaración guardada
-intacta y mantiene fijado el contrato. Pasarlo de nuevo es una declaración
-completa: lo que no se repita se revoca. Mover el contrato (`contract:
-'latest'`) es un gesto deliberado, nunca un efecto colateral de editar.
+intacta (`assets, db, downloads`) y mantiene fijado el contrato en `0.2.46` —
+confirmado en la respuesta del publicador. Pasarlo de nuevo es una declaración
+completa: lo que no se repita se revoca. Mover el contrato (`contract: 'latest'`)
+es un gesto deliberado, nunca un efecto colateral de editar.
 
 ## El almacén de assets NO está aquí
 
