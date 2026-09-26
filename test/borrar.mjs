@@ -61,7 +61,12 @@ console.log('\n═══ el clic selecciona; borrar dice qué cambia ═══')
   await p.click('[data-sel="si"]'); await trasGuardar(p);
   ok(await vivos(p, 'jrTable') === 4, 'borra las 2 marcadas y deja las otras 4');
   const bal1 = await p.evaluate(() => FUT.calculateAccountStats('a1').total);
-  ok(bal1 !== bal0, 'y el balance de la cuenta se mueve de verdad', `${bal0} → ${bal1}`);
+  /* `!==` era demasiado flojo: pasaba con cualquier cambio, NaN incluido. Las dos
+     operaciones que se borran valen +$40 juntas -- lo dice la propia confirmación
+     que se comprueba tres líneas arriba -- asi que el balance tiene que bajar
+     exactamente eso. Una asercion que solo dice «cambio» no demuestra que el
+     borrado reste lo que resta. */
+  ok(bal1 === bal0 - 40, 'y el balance baja exactamente los $40 de las dos borradas', `${bal0} → ${bal1}`);
 
   console.log('\n═══ lo borrado vuelve, incluso tras recargar ═══');
   ok(await p.evaluate(() => !!document.getElementById('papelera')), 'queda una barra con «Deshacer»');

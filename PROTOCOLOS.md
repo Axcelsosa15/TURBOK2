@@ -26,6 +26,7 @@ cabeza de quien escribía — en el fichero únicamente estaban etiquetadas §12
 | 7 | Republicar el artefacto | `capa2` §12 (parcial) |
 | 8 | Al clonar | humano |
 | 10 | Tocar el motor de cálculo | `motor-bundle` + `capa2` §15 |
+| 11 | Una aserción puede fallar por el motivo correcto | humano |
 | — | *Que esta tabla no mienta* | `capa2` §14 |
 
 ---
@@ -57,6 +58,19 @@ así que caza un preview rancio. No caza que te olvides del paso 5.
 ---
 
 ## 2 · Antes de decir «verde»
+
+> **La regla, en una línea:** no aceptar «verde», «sincronizado», «publicado» ni
+> un número de tests como evidencia **hasta comprobar exactamente qué se
+> ejecutó**.
+
+Esta sesión la violó cuatro veces, y cada una parecía un hecho:
+
+| Se dijo | Qué era en realidad |
+|---|---|
+| «42/42 en verde» | siete pruebas medían un `preview.html` de seis días antes |
+| «44/44 en verde» | 37 procesos no se rompieron; las aserciones no se miraban |
+| «45/45 en verde» | no incluía las 421 aserciones del motor: nada las ejecutaba |
+| «todo el código está subido» | cierto, y contestaba a la pregunta equivocada |
 
 No se reporta un número sin haber mirado la salida.
 
@@ -198,6 +212,11 @@ minutos sí corrió la suite y está diciendo algo del código.
 - `permissions` **no se declara**: es built-in y declararla la rechaza el
   contrato.
 
+**Hoy `index.html` va por delante de lo publicado**, en comentarios y en una
+función muerta — cero cambio de comportamiento. El alcance exacto y cómo cerrar
+la divergencia están en [ARTEFACTO.md](ARTEFACTO.md), y ahí queda escrito que en
+cuanto toque una línea que se EJECUTA deja de ser aceptable.
+
 Detalle completo en [ARTEFACTO.md](ARTEFACTO.md). `capa2` §12 vigila que toda
 capacidad que el código llame esté documentada, que `permissions` no figure entre
 las declaradas y que cada llamada degrade a `null`.
@@ -270,6 +289,42 @@ Los cuatro eslabones están vigilados, cada uno por su pieza:
 > el `"type": "module"` que se añadió al crear `package.json` lo dejó sin
 > compilar. Dos commits en ese estado sin que nada lo dijera, porque nada lo
 > ejecutaba.
+
+---
+
+## 11 · Una aserción tiene que poder fallar por el motivo correcto
+
+Pasar y **demostrar lo que se busca** no son lo mismo. Tres formas de pasar por el
+motivo equivocado, las tres encontradas aquí:
+
+1. **La semilla hace el trabajo.** `borrar.mjs` afirmaba «vuelven las 6
+   operaciones» tras recargar. La semilla se re-sembraba en cada navegación, así
+   que volvían **antes** de pulsar «Deshacer». Medido: 6 en disco antes del clic.
+   *Arreglo:* sembrar lo GUARDADO y comprobar además que **el borrado sigue
+   hecho** (4) al reabrir — la mitad que faltaba.
+
+2. **La app se compara contra sí misma.** `sync.mjs` afirmaba «todo sobrevive»
+   con `pre === post`, dos fotos de la app. Con `foto()` devolviendo `null` en
+   cada campo, **pasaba igual**: no distinguía «todo sobrevive» de «todo está
+   vacío en los dos lados». *Arreglo:* anclar primero — números finitos, `n > 0`,
+   cuentas > 0 — y después comparar.
+
+3. **La aserción es demasiado laxa.** `bal1 !== bal0` («el balance se mueve»)
+   pasaba con `NaN`. *Arreglo:* el valor exacto, `bal1 === bal0 - 40`, que es el
+   que la propia confirmación de la app anuncia.
+
+Para los caminos del dinero —balance, dimensionado, P&L, drawdown, Monte Carlo,
+IRR, borrado y deshacer, persistencia, reglas prop— la pregunta no es «¿pasa?»
+sino **«¿podría pasar si la app estuviera rota?»**. Si la respuesta es sí, la
+aserción no vale todavía.
+
+Tres niveles, y cada uno responde algo que los otros no:
+
+| Nivel | Qué prueba | Dónde |
+|---|---|---|
+| unidad | las funciones calculan bien | `motor-quant` 329, `motor-math` 92 |
+| integración | la app consume **ese** motor | `motor-bundle`, `capa2` §15 |
+| navegador | acción → DOM → cálculo → disco → reabrir → mismo número | `sync`, `borrar`, `servida` |
 
 ---
 

@@ -262,6 +262,18 @@ await p2.addInitScript(`{const F=${F};const R=Date;class D extends R{constructor
 await p2.addInitScript(`try{localStorage.setItem('cabina-mnq:v1', ${JSON.stringify(guardado)});}catch(e){}`);
 await p2.goto('file://' + process.cwd() + '/preview.html'); await p2.waitForTimeout(1400);
 const post = await foto(p2);
+/* ANCLAJE. Comparar una foto de la app contra otra foto de la app no distingue
+   «todo sobrevive» de «todo está vacío en los dos lados»: si foto() devolviera
+   null en cada campo, `pre === post` pasaría igual y esta prueba diría que la
+   persistencia funciona. Es la diferencia entre PASAR y demostrar lo que se
+   busca, y el mismo agujero que tenía borrar.mjs: una aserción cierta por un
+   motivo equivocado. Así que primero se exige que la foto de antes tenga
+   números de verdad; después la comparación significa algo. */
+const solida = o => Number.isFinite(o.a1) && Number.isFinite(o.a2)
+  && Number.isFinite(o.balance1) && Number.isFinite(o.balance2)
+  && o.n > 0 && o.cuentas > 0 && !!o.reglas && !!o.sel && !!o.estado;
+ok(solida(pre), 'la foto de ANTES tiene números de verdad, no nulls', JSON.stringify(pre));
+
 ok(JSON.stringify(pre) === JSON.stringify(post), 'todo sobrevive (operaciones, cuentas, reglas y selección)',
    `\n     antes: ${JSON.stringify(pre)}\n     luego: ${JSON.stringify(post)}`);
 ok(post.sel === 'a1', 'la cuenta seleccionada también se guarda', post.sel);

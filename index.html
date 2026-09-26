@@ -3008,11 +3008,6 @@
       ${g.payouts || g.fees ? kpi("Retirado y costo", money(g.payouts) + " / " + money(g.fees), g.payouts ? "good" : "", "movimientos") : ""}
     </div>`;
   }
-  /* ---------- barra de progreso reutilizable ---------- */
-  function pbar(p, cls, markAt) {
-    const w = Math.max(0, Math.min(100, (Number(p) || 0) * 100));
-    return `<div class="pbar ${cls || ""}"><i style="width:${w.toFixed(1)}%"></i>${markAt != null ? `<b style="left:${Math.max(0, Math.min(100, markAt * 100)).toFixed(1)}%"></b>` : ""}</div>`;
-  }
   /* Curva de la cuenta: línea del balance con la línea del tamaño inicial de fondo.
      Sin ejes ni texto dentro del SVG, así que estirarlo no encoge ninguna letra. */
   function equityMini(g) {
@@ -3867,17 +3862,28 @@
   function renderAll() { renderSettings(); renderJournalDay(); renderSessionStrip(); renderHistory(); renderLevels(); if (typeof renderBackup === "function") { try { renderBackup(); } catch (e) { } } }
 
   /* ==================================================================
-     MOTOR MATEMÁTICO (MathEngine) — ÚNICA FUENTE DE CÁLCULO
-     Copia literal de engine/MathEngine.js sin los `export`, porque la app es un
-     solo archivo y no hay imports. Si cambias algo aquí, cámbialo allí: el
-     archivo suelto es el que lleva las pruebas.
+     DÓNDE SE CALCULA: QuantEngine, justo debajo.
 
-     Va dentro de su propio ámbito a propósito. Sus ayudantes (num, redondear,
-     esNumero, acotar, raiz) comparten nombre con funciones de la app y NO hacen
-     lo mismo: `num` del motor devuelve null para "" y la de la app devuelve 0.
-     Sueltas en el mismo ámbito, la del motor ganaría por hoisting sobre TODA la
-     app y cambiaría en silencio cómo se lee cada campo vacío de cada formulario.
-     Encerradas aquí, no se tocan.
+     Aquí vivía MathEngine (v1) incrustado, y este comentario decía ser «la
+     única fuente de cálculo». Dejó de ser verdad cuando QuantEngine lo
+     reemplazó por completo y el código de MathEngine salió de este archivo: de
+     sus 14 exports, 12 no están en ninguna parte de la app. El comentario se
+     quedó atrás proclamándose único, que es peor que no estar — dentro de seis
+     meses alguien se fía de él.
+
+     Lo cierto, hoy:
+
+       · TODO cálculo de producción sale de QuantEngine (`QE.*`, 29 usos).
+       · MathEngine v1 sigue en `engine/MathEngine.js` COMO REFERENCIA, no como
+         código de la app. Tiene sus propias 92 pruebas y desde ahora corren en
+         la suite («motor-math»). Un export de MathEngine que la app no importa
+         NO es un camino de cálculo de producción.
+       · Si alguna vez vuelve a incrustarse algo aquí, cuidado con los nombres:
+         sus ayudantes (`num`, `redondear`, `esNumero`, `acotar`) coinciden con
+         funciones de la app y NO hacen lo mismo — el `num` del motor devuelve
+         null para "" y el de la app devuelve 0. Suelto en el mismo ámbito,
+         ganaría por hoisting y cambiaría en silencio cómo se lee cada campo
+         vacío de cada formulario. Por eso iba encerrado en su propio ámbito.
      ================================================================== */
   /* ═══════════════════════ MOTOR CUANTITATIVO · QuantEngine v2 ═══════════════════════
      Reemplaza por completo al motor anterior. Diseño por capas, de abajo a arriba:
@@ -3897,63 +3903,11 @@
        2. Lo que no se puede calcular devuelve null y dice por qué. Cero invenciones.
        3. Puro y determinista: sin DOM, sin reloj, sin azar sin semilla.
 
-     Fuente modular y 190 pruebas: repo TURBOK2, engine/quant/.
+     Fuente modular y 329 pruebas: repo TURBOK2, engine/quant/. Corren en la suite
+     como «motor-quant»; «motor-bundle» comprueba que este bloque es exactamente
+     el que producen esos módulos, y capa2 §15 que no se haya editado a mano.
      Este bloque está GENERADO por engine/quant/bundle.mjs — no editarlo a mano. */
 
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
-  /* =========================================================================
-     QuantEngine 2.0.0 — bundle de un solo ambito
-     GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos
-     en engine/quant/ y volver a ejecutar el empaquetador.
-     Fuente modular y pruebas: engine/quant/*.js  ·  node engine/quant/quant.test.js
-     ========================================================================= */
   /* =========================================================================
      QuantEngine 2.0.0 — bundle de un solo ambito
      GENERADO por engine/quant/bundle.mjs. No editar a mano: editar los modulos

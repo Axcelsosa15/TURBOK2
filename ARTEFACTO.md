@@ -50,8 +50,42 @@ estática que añade `test/sync-index.mjs`:
   mínimo, `</head><body>`
 - detrás: `</body></html>`
 
-Verificado: quitando ese envoltorio, el cuerpo coincide byte a byte con lo
-publicado.
+### ⚠ Ahora mismo NO coinciden
+
+`index.html` va **por delante** del artefacto publicado (versión
+`1790329585-a362`). La diferencia es exactamente esto, y sólo esto:
+
+| Cambio | Efecto en la app |
+|---|---|
+| el bloque «MathEngine — ÚNICA FUENTE DE CÁLCULO» dice ahora la verdad | ninguno: es un comentario |
+| «190 pruebas» → «329 pruebas» | ninguno: es un comentario |
+| 9 copias duplicadas del encabezado del bundle, fuera | ninguno: son comentarios |
+| `pbar()` retirada | ninguno: estaba definida y **nunca se llamaba**, y su marcado no tenía una sola regla CSS |
+
+**Cero cambio de comportamiento.** Por eso la divergencia se deja registrada en
+vez de gastar el presupuesto de una sesión en cerrarla: republicar obliga a leer
+las 10 818 líneas de lo publicado —la herramienta no acepta una comparación por
+hash, y hace bien: es la regla de no publicar lo que no has visto— y eso son unos
+430 000 tokens para un cambio que ningún usuario ve.
+
+Lo que **no** se hace es dejarlo en silencio. Para cerrarla:
+
+```sh
+# 1. reconstruir el cuerpo: la cabecera (<title> + las dos fuentes) se toma de
+#    lo publicado, y el contenido desde el SEGUNDO <style> de index.html
+# 2. leer lo publicado entero (lo exige la herramienta)
+# 3. publicar omitiendo `capabilities`, para arrastrar la declaración guardada
+```
+
+El cuerpo listo para publicar ya está generado en el scratchpad de la sesión que
+lo preparó. Si esta divergencia crece más allá de comentarios, **deja de ser
+aceptable**: en cuanto toque una línea que se ejecuta, hay que republicar antes
+de seguir.
+
+### Cuando sí coinciden
+
+Verificado con el arreglo anterior: quitando ese envoltorio, el cuerpo coincide
+byte a byte con lo publicado (sha256 `2c50f0a516caff45`).
 
 Al republicar **se omite `capabilities`**, que arrastra la declaración guardada
 intacta y mantiene fijado el contrato. Pasarlo de nuevo es una declaración

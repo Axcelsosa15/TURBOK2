@@ -1706,3 +1706,17 @@ quieres que la indexen los buscadores, quita esa línea del `<head>`.
 > El repositorio es público: cualquiera puede leer el código y los valores por
 > defecto de las reglas y las cuentas de ejemplo. Tus operaciones no están aquí
 > — viven en tu navegador.
+
+## Licencia: ninguna, a propósito
+
+Este repositorio **no lleva licencia**, y es una decisión, no un olvido.
+
+Sin licencia rige el derecho de autor por defecto: el código es público para
+leerlo y **nadie tiene permiso para usarlo, copiarlo ni derivarlo**. Eso es
+exactamente lo que se quiere hoy — Cabina es el cockpit de una persona, no una
+herramienta que se ofrezca a terceros, y conceder derechos «porque un proyecto
+público debería tener licencia» sería regalar algo sin necesitarlo.
+
+Si algún día se abre a otros, se elige la licencia **entonces**, con la decisión
+delante. Añadirla ahora no adelanta nada y no se puede deshacer con limpieza:
+quien haya usado el código bajo esa licencia conserva el permiso.
