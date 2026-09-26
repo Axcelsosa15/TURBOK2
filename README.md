@@ -117,9 +117,10 @@ resuelve.
   puede hacer.
 - **`file://` tira el almacén al recargar**, de forma intermitente. Por eso el
   smoke test usa HTTP y dos pruebas abren una pestaña nueva en vez de recargar.
-- **36 de las 48 pruebas de `test/` no afirman nada**: miden y registran. Su
-  único modo de fallo es romperse. Las 12 que afirman están contadas abajo, y el
-  número lo imprime `npm test`, no un `grep` sobre el código — ver protocolo 14.
+- **33 de las 48 pruebas de `test/` no afirman nada**: miden y registran. Su
+  único modo de fallo es romperse. Las 15 que afirman están contadas abajo, y
+  tanto el número como la lista los imprime `npm test`, no un `grep` sobre el
+  código — ver protocolo 14.
 - **El motor tiene 55 funciones que la app no usa**, incluido el módulo de
   *compliance*: están probadas pero no conectadas a producción.
 - **`pagina.yml` lleva un `continue-on-error`** en `configure-pages`. Si fallara
@@ -141,7 +142,7 @@ resuelve.
 |---|---|
 | Suites que se ejecutan | **51** (48 de `test/` + 3 del motor) |
 | Aserciones del motor | **421** (`quant` 329 · `math` 92) |
-| Aserciones de navegador y guardianes | **441** en 12 archivos — las cuenta la propia suite |
+| Aserciones de navegador y guardianes | **455** en 15 archivos — las cuenta la propia suite |
 | Cobertura de la capa `db` del artefacto | **28** aserciones contra un doble fiel del contrato |
 | Smoke test de producción | 23 comprobaciones sobre HTTP |
 | CI | ejecuta el mismo `npm test`, verificado en el log |

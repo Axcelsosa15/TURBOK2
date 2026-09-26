@@ -456,10 +456,32 @@ razonable que distinga una llamada de una mención en prosa.
 > escrito en un párrafo como si fuera una etiqueta. Dos veces el mismo error
 > justifica un protocolo, no otra regex.
 >
+> **Y una tercera vez, media hora después.** Con el contador ya escrito, lo corrí
+> sólo sobre los 12 archivos que el `grep` decía que afirmaban — o sea que usé la
+> lista mala para decidir QUÉ medir, y el contador nunca vio los otros tres. Dio
+> 441 en 12 y lo escribí en el README. La suite completa dice **455 en 15**, y lo
+> dijo primero CI. La regla no es sólo «no cuentes con grep»: es **no elijas con
+> grep lo que vas a contar**. Se corre la suite entera.
+>
+> Los tres que faltaban imprimen `✅`/`❌` dentro de una plantilla, sin definir
+> ningún ayudante — y aun así ponen la suite roja, porque `correr.mjs` mira la
+> cruz en la salida:
+>
+> | fichero | grep | ejecutado |
+> |---|---|---|
+> | `capa2` | 51 | **102** (sus reglas iteran) |
+> | `tesis` | 68 | 71 |
+> | `borrar` | 25 | 34 |
+> | `capa` | **0** | **7** |
+> | `vivo3` | **0** | **5** |
+> | `vivo4` | **0** | **2** |
+> | `capsula` | 29 | 28 (prosa contada como llamada) |
+>
 > Consecuencia: el «**376 aserciones en 13 archivos**» que decía el README **no
 > se reproduce** con ningún método, ni el de antes ni el de ahora. Está
-> reemplazado por el número que imprime la suite, y queda anotado aquí que el
-> anterior era una cuenta que no se podía repetir.
+> reemplazado por el número que imprime la suite — 455 en 15, idéntico en local
+> (485 s) y en CI (450 s), así que no depende del entorno — y queda anotado aquí
+> que el anterior era una cuenta que no se podía repetir.
 
 ---
 
