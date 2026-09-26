@@ -33,6 +33,14 @@ desaparece y el respaldo usa la descarga del navegador. Que eso funcione en vez
 de reventar en el primer `await` es lo que vigila `capa2.mjs` §12; ver
 [ARTEFACTO.md](ARTEFACTO.md).
 
+**Hace falta activarlo una vez a mano**: Settings → Pages → Build and deployment
+→ Source: **GitHub Actions**. Un workflow no puede hacerlo por su cuenta — el
+`GITHUB_TOKEN` de Actions no tiene permiso para *crear* el sitio de Pages, eso es
+administración del repositorio, y `configure-pages` con `enablement: true` falla
+con «Resource not accessible by integration». Una vez activado, ese paso
+encuentra el sitio y no intenta crear nada, así que a partir de ahí es
+automático.
+
 La publica `.github/workflows/pagina.yml`, y sólo **después de que la suite pase
 en verde**: un push rojo no llega a la página, y lo que haya publicado sigue
 siendo la última versión que pasó. Se sirven únicamente `index.html` y

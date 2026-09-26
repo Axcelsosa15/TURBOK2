@@ -34,11 +34,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # `enablement: true` activa Pages si aún no lo está, para no tener que
-      # entrar en Settings a mano.
-      - uses: actions/configure-pages@v5
+      # `enablement: true` sólo sirve SI Pages ya está activado: el GITHUB_TOKEN
+      # de Actions no tiene permiso para crear el sitio (eso es administración
+      # del repositorio), así que la primera vez falla con «Resource not
+      # accessible by integration». Se deja puesto porque en cuanto Pages esté
+      # activado este paso lo encuentra y no intenta crear nada.
+      - id: cfg
+        uses: actions/configure-pages@v5
+        continue-on-error: true
         with:
           enablement: true
+
+      # Sin esto el fallo dice «Resource not accessible by integration», que no
+      # le dice a nadie qué hacer.
+      - name: Pages no está activado
+        if: steps.cfg.outcome == 'failure'
+        run: |
+          echo "::error title=Pages no está activado::Un workflow no puede activarlo: hace falta un clic del dueño del repositorio."
+          echo ""
+          echo "  Settings → Pages → Build and deployment → Source: GitHub Actions"
+          echo "  https://github.com/${{ github.repository }}/settings/pages"
+          echo ""
+          echo "Hecho eso, este workflow publica solo en cada push que pase la suite."
+          exit 1
 
       # Sólo lo que la página necesita. index.html es autosuficiente: no
       # referencia ningún archivo del repositorio, así que test/ y engine/ no
