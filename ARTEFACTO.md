@@ -50,37 +50,29 @@ estática que añade `test/sync-index.mjs`:
   mínimo, `</head><body>`
 - detrás: `</body></html>`
 
-### ⚠ Ahora mismo NO coinciden
+### ⚠ Ahora mismo NO coinciden, y esta vez SÍ importa
 
 `index.html` va **por delante** del artefacto publicado (versión
-`1790329585-a362`). La diferencia es exactamente esto, y sólo esto:
+`1790329585-a362`). Hasta ahora la diferencia eran sólo comentarios y una función
+muerta, y quedó escrito aquí que **en cuanto tocara una línea que se ejecuta
+dejaba de ser aceptable**. Ya la toca:
 
-| Cambio | Efecto en la app |
+| Cambio | ¿Se ejecuta? |
 |---|---|
-| el bloque «MathEngine — ÚNICA FUENTE DE CÁLCULO» dice ahora la verdad | ninguno: es un comentario |
-| «190 pruebas» → «329 pruebas» | ninguno: es un comentario |
-| 9 copias duplicadas del encabezado del bundle, fuera | ninguno: son comentarios |
-| `pbar()` retirada | ninguno: estaba definida y **nunca se llamaba**, y su marcado no tenía una sola regla CSS |
+| el bloque «MathEngine — ÚNICA FUENTE DE CÁLCULO» dice ahora la verdad | no, comentario |
+| «190 pruebas» → «329 pruebas» | no, comentario |
+| 9 copias duplicadas del encabezado del bundle, fuera | no, comentarios |
+| `pbar()` retirada | no, nadie la llamaba |
+| **`riesgoPct: pc` → `riesgoPct: pc / 100`** | **SÍ** |
 
-**Cero cambio de comportamiento.** Por eso la divergencia se deja registrada en
-vez de gastar el presupuesto de una sesión en cerrarla: republicar obliga a leer
-las 10 818 líneas de lo publicado —la herramienta no acepta una comparación por
-hash, y hace bien: es la regla de no publicar lo que no has visto— y eso son unos
-430 000 tokens para un cambio que ningún usuario ve.
+Ese último arregla un **100× en el tamaño de posición**: el campo «Riesgo por
+operación (%)» tiene `step: 0.1`, y quien escribía `0.5` queriendo medio por
+ciento obtenía 50%. Medido por la app, cuenta de 25 000 con stop de 10 puntos
+MNQ: `0.5` daba **1250 contratos** donde ahora da **6**.
 
-Lo que **no** se hace es dejarlo en silencio. Para cerrarla:
-
-```sh
-# 1. reconstruir el cuerpo: la cabecera (<title> + las dos fuentes) se toma de
-#    lo publicado, y el contenido desde el SEGUNDO <style> de index.html
-# 2. leer lo publicado entero (lo exige la herramienta)
-# 3. publicar omitiendo `capabilities`, para arrastrar la declaración guardada
-```
-
-El cuerpo listo para publicar ya está generado en el scratchpad de la sesión que
-lo preparó. Si esta divergencia crece más allá de comentarios, **deja de ser
-aceptable**: en cuanto toque una línea que se ejecuta, hay que republicar antes
-de seguir.
+El artefacto es el entorno principal, así que dejarlo con ese fallo mientras el
+repositorio está arreglado sería el peor de los resultados posibles. **Hay que
+republicar.**
 
 ### Cuando sí coinciden
 
