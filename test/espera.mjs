@@ -98,9 +98,26 @@ export const trasAccion = (pg) => quieto(pg, 150, 3000);
    La solución no es adivinar mejor: es sembrar en un documento YA cargado, donde
    localStorage responde de verdad, y recargar una vez para que la app lo lea. */
 export const siembra = async (pg, url, datos) => {
+  const txt = JSON.stringify(datos);
   await pg.goto(url);
-  await pg.evaluate(t => localStorage.setItem('cabina-mnq:v1', t), JSON.stringify(datos));
+  await pg.evaluate(t => localStorage.setItem('cabina-mnq:v1', t), txt);
   await pg.reload();
+  /* Sobre file:// Chromium tira el area de almacenamiento al recargar de forma
+     INTERMITENTE. Esta documentado en sync.mjs, que por eso abre una pestaña
+     nueva en vez de recargar, y es lo que hizo fallar borrar.mjs en CI y no aqui:
+     la recarga se llevo la papelera, la barra de «Deshacer» no se pinto, y el
+     test acuso a la app de un defecto del navegador. 33 s en el runner contra
+     18 s en local; el mismo codigo, otra suerte.
+
+     Este ayudante recarga por dentro, asi que el peligro estaba dentro de lo que
+     el protocolo recomienda usar. Si el almacen desaparecio, se vuelve a escribir
+     y se recarga otra vez: cuando funciona no cambia nada, y cuando no, deja de
+     ser suerte. */
+  const vivo = async () => pg.evaluate(() => { try { return !!localStorage.getItem('cabina-mnq:v1'); } catch (e) { return false; } });
+  if (!(await vivo())) {
+    await pg.evaluate(t => localStorage.setItem('cabina-mnq:v1', t), txt);
+    await pg.reload();
+  }
 };
 
 /* ── esperar al DATO, no al pintado ────────────────────────────────────────

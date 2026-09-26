@@ -37,7 +37,8 @@ de reventar en el primer `await` es lo que vigila `capa2.mjs` §12; ver
 → Source: **GitHub Actions**. Un workflow no puede hacerlo por su cuenta — el
 `GITHUB_TOKEN` de Actions no tiene permiso para *crear* el sitio de Pages, eso es
 administración del repositorio, y `configure-pages` con `enablement: true` falla
-con «Resource not accessible by integration». Una vez activado, ese paso
+con «Resource not accessible by integration». Mientras no esté activado el
+workflow **avisa y no despliega**, sin ponerse rojo. Una vez activado, ese paso
 encuentra el sitio y no intenta crear nada, así que a partir de ahí es
 automático.
 

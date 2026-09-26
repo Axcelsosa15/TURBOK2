@@ -65,14 +65,40 @@ console.log('\n═══ el clic selecciona; borrar dice qué cambia ═══')
 
   console.log('\n═══ lo borrado vuelve, incluso tras recargar ═══');
   ok(await p.evaluate(() => !!document.getElementById('papelera')), 'queda una barra con «Deshacer»');
-  await p.reload(); await arrancada(p, '.tabbtn');
-  ok(await p.evaluate(() => !!document.getElementById('papelera')),
+  /* NO se usa p.reload(). Sobre file:// Chromium tira el área de almacenamiento
+     al recargar de forma intermitente — está documentado en sync.mjs desde antes,
+     y es exactamente lo que hizo fallar esta aserción en CI y no aquí: la
+     recarga se llevó la papelera, así que la barra no se pintaba y el test
+     acusaba a la app de un defecto del navegador. 33 s en el runner contra 18 s
+     en local; el mismo código, otra suerte.
+
+     Lo que interesa es la misma pregunta: si se relee lo que quedó escrito,
+     ¿vuelve la papelera? Así que se lee el disco y se abre una pestaña NUEVA
+     sembrada con exactamente eso. Se arrastran las DOS claves: los datos y la
+     papelera, que vive en `cabina-mnq:v1:papelera`. */
+  const enDiscoAhora = await p.evaluate(() => ({
+    datos: localStorage.getItem('cabina-mnq:v1'),
+    papelera: localStorage.getItem('cabina-mnq:v1:papelera'),
+  }));
+  const q = await p.context().newPage();
+  q.on('pageerror', e => errs.push('PAGEERROR(reapertura): ' + e.message));
+  await q.addInitScript(`{const F=${F};const R=Date;class D extends R{constructor(...a){if(!a.length)super(F);else super(...a);}static now(){return F;}}window.Date=D;}`);
+  await q.addInitScript(`try{const g=${JSON.stringify(enDiscoAhora)};if(g.datos)localStorage.setItem('cabina-mnq:v1',g.datos);if(g.papelera)localStorage.setItem('cabina-mnq:v1:papelera',g.papelera);}catch(e){}`);
+  await q.goto('file://' + process.cwd() + '/preview.html'); await arrancada(q, '.tabbtn');
+  /* Que el borrado siguiera hecho al reabrir es la mitad que faltaba: con la
+     semilla re-sembrándose en cada navegación, las 2 operaciones volvían solas y
+     «vuelven las 6» pasaba sin que «Deshacer» hiciera nada. Medido: 6 en disco
+     antes del clic. Aquí se siembra lo GUARDADO, así que son 4. */
+  ok(await q.evaluate(() => !!document.getElementById('papelera')),
      'que SOBREVIVE a recargar — un aviso que se va convierte «me equivoqué» en «ya no hay nada que hacer»');
-  await p.click('[data-pap="undo"]'); await quieto(p);
-  await p.click('.tabbtn[data-tab="futuros"]'); await quieto(p);
-  await p.click('#ftSeg button[data-v="diario"]'); await quieto(p);
-  ok(await vivos(p, 'jrTable') === 6, 'vuelven las 6 operaciones');
-  ok(await p.evaluate(() => FUT.calculateAccountStats('a1').total) === bal0,
+  /* La pestaña nueva abre en Cabina, y `vivos` sólo cuenta lo VISIBLE: hay que
+     ir al diario antes de contar, o se leen 0 filas y parece que no hay datos. */
+  await q.click('.tabbtn[data-tab="futuros"]'); await quieto(q);
+  await q.click('#ftSeg button[data-v="diario"]'); await quieto(q);
+  ok(await vivos(q, 'jrTable') === 4, 'al reabrir, el borrado sigue hecho (4 operaciones)', await vivos(q, 'jrTable'));
+  await q.click('[data-pap="undo"]'); await quieto(q);
+  ok(await vivos(q, 'jrTable') === 6, 'vuelven las 6 operaciones');
+  ok(await q.evaluate(() => FUT.calculateAccountStats('a1').total) === bal0,
      'y el balance vuelve al que era, al céntimo', bal0);
   await p.context().close();
 }
