@@ -1,0 +1,58 @@
+# Publica index.html como página viva en GitHub Pages.
+#
+# Se dispara DESPUÉS de que `pruebas` termine en verde, no en cada push. Un push
+# rojo no debe llegar a la página: si la suite falla, aquí no se despliega nada y
+# lo que haya publicado sigue siendo la última versión que pasó.
+name: pagina
+
+on:
+  workflow_run:
+    workflows: [pruebas]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un despliegue a la vez. `cancel-in-progress: false` porque cortar un despliegue
+# a medias puede dejar la página en un estado intermedio.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    # En workflow_dispatch no hay conclusión que mirar; en workflow_run sí.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # `enablement: true` activa Pages si aún no lo está, para no tener que
+      # entrar en Settings a mano.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # Sólo lo que la página necesita. index.html es autosuficiente: no
+      # referencia ningún archivo del repositorio, así que test/ y engine/ no
+      # tienen por qué acabar servidos.
+      - name: Armar lo que se publica
+        run: |
+          mkdir -p sitio
+          cp index.html sitio/index.html
+          cp .nojekyll sitio/.nojekyll
+          ls -la sitio
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: sitio
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

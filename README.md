@@ -11,6 +11,39 @@ Es **una sola página**: `index.html` lleva dentro el HTML, el CSS y el JS. Sin
 build, sin bundler, sin dependencias. Lo único que carga de fuera son las
 tipografías de Google Fonts.
 
+
+## Tres formas de entrar
+
+El mismo `index.html` se abre de tres maneras, y **no se comporta igual en las
+tres**. La diferencia no es cosmética: es qué capacidades le concede el entorno.
+
+| Entrada | Dónde guarda | Imágenes | Respaldo |
+|---|---|---|---|
+| El artefacto en claude.ai | almacén `db`, sincronizado entre dispositivos | sí (`assets`) | por la cápsula, con permiso |
+| GitHub Pages | `localStorage` del navegador | no | descarga normal |
+| Archivo local (`file://`) | `localStorage` del navegador | no | descarga normal |
+
+**GitHub Pages**: https://axcelsosa15.github.io/TURBOK2/
+
+Servida así no existe `window.claude`, así que las cuatro llamadas a
+capacidades caen a `null` y la app degrada: los datos viven en el
+`localStorage` de ese navegador — **por dispositivo, sin sincronizar y sin
+sobrevivir a un borrado de datos del sitio** —, el botón de subir imagen
+desaparece y el respaldo usa la descarga del navegador. Que eso funcione en vez
+de reventar en el primer `await` es lo que vigila `capa2.mjs` §12; ver
+[ARTEFACTO.md](ARTEFACTO.md).
+
+La publica `.github/workflows/pagina.yml`, y sólo **después de que la suite pase
+en verde**: un push rojo no llega a la página, y lo que haya publicado sigue
+siendo la última versión que pasó. Se sirven únicamente `index.html` y
+`.nojekyll`, porque la página no referencia ningún otro archivo del
+repositorio. Lleva `<meta name="robots" content="noindex, nofollow">`, así que
+no entra en buscadores — lo cual no la hace privada: **cualquiera con el enlace
+la abre**.
+
+Para servirla en local sin Pages: `npm run serve` y abrir
+`http://localhost:8000/`.
+
 ## Qué hay dentro
 
 | Pestaña | Para qué |

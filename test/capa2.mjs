@@ -353,12 +353,27 @@ ok(declaradas.length === 3, 'ARTEFACTO.md declara tres capacidades', declaradas.
 ok(!declaradas.includes('permissions'), 'permissions NO figura entre las declaradas',
    declaradas.includes('permissions') ? 'es built-in; declararla la rechaza el contrato' : 'built-in, se llama sin declarar');
 
-/* Cada llamada tiene que caer a null. Sin esto la página servida como archivo
-   suelto revienta en el primer await en vez de degradarse. */
+/* Cada llamada necesita AL MENOS UNA de las dos defensas.
+
+   Servida sin capsula, `window.claude` no existe. Hay dos cosas que lo
+   absorben, y cada una basta por si sola:
+     - el ternario `window.claude && window.claude.use ? await ... : null`,
+       que no llega a llamar nada;
+     - el `catch { x = null; }`, que recoge el TypeError si se llama.
+   Son redundantes a proposito. Dos versiones anteriores de esta regla vigilaban
+   una sola y afirmaban que sin ella la pagina reventaba: las dos eran falsas, y
+   el sabotaje lo demostro las dos veces -- quitar una deja que la otra cubra.
+   Lo que de verdad hay que impedir es que se vayan LAS DOS, que es lo unico que
+   rompe la pagina. */
 for (const cap of usadas) {
-  const re = new RegExp('window\\.claude && window\\.claude\\.use \\? await window\\.claude\\.use\\("' + cap + '"\\) : null');
-  ok(re.test(codigo), `«${cap}» cae a null si no hay cápsula`,
-     re.test(codigo) ? '' : 'sin la guarda, el archivo suelto revienta en el primer await');
+  const k = codigo.indexOf(`use("${cap}")`);
+  const trozo = k < 0 ? '' : codigo.slice(Math.max(0, k - 220), k + 220);
+  const ternario = new RegExp('window\\.claude && window\\.claude\\.use \\? await window\\.claude\\.use\\("' + cap + '"\\) : null').test(trozo);
+  const atrapa = /catch\s*(?:\([^)]*\))?\s*\{\s*[\w.$]+\s*=\s*null\s*;?\s*\}/.test(trozo);
+  ok(ternario || atrapa, `«${cap}» degrada a null sin capsula`,
+     ternario && atrapa ? 'ternario y catch (redundante a proposito)'
+     : ternario ? 'solo el ternario' : atrapa ? 'solo el catch'
+     : 'NINGUNA de las dos: servida sin capsula revienta en el primer await');
 }
 
 
