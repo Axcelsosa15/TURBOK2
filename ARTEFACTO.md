@@ -40,6 +40,42 @@ misma página funciona servida como archivo suelto, donde `window.claude` no
 existe: `db` cae a `localStorage`, `assets` esconde el botón, `downloads` usa
 `URL.createObjectURL`.
 
+## Lo que está probado de esta capa — y lo que no
+
+Hasta ahora **nada** lo estaba. Las 50 suites corrían sin `window.claude`, o sea
+que medían la rama de `localStorage`: la del respaldo, no la del entorno
+principal. `test/capsula.mjs` cubre la rama `db` con **28 aserciones** contra un
+doble fiel del contrato (detalle y reglas en el protocolo 13).
+
+Lo que queda demostrado:
+
+| | |
+|---|---|
+| pide los permisos | una sola vez, y exactamente `["db","assets"]` |
+| se conecta | el rótulo pasa a «sincronizado» |
+| se suscribe | `settings/main`, `days/<hoy>`, el histórico `orderBy(date,desc).limit(15)` y las **9** colecciones con `limit(1000)` |
+| escribe donde debe | crear cuenta → `settings/main`; escribir en el diario → `days/<hoy>`; crear una tesis → `collection("tesis").doc(id)`, con el contenido real dentro |
+| **no** escribe donde no debe | con `db` conectado, `localStorage` se queda sin una sola clave `cabina-mnq` |
+| recibe cambios de fuera | un `settings/main` entrante añade la cuenta; un `days/<hoy>` más nuevo reemplaza el día, uno más viejo no |
+| no te borra lo que escribes | con el foco dentro del campo, un snapshot entrante **no** lo sobreescribe |
+| avisa cuando falla | con el código real del error, no un genérico, y sin reventar la página |
+
+Probado en los dos sentidos: con tres sabotajes en `index.html` — esconder el
+error de escritura, quitar la guarda del foco e invertir la precedencia de
+`updatedAt` — la prueba se pone roja y nombra exactamente las aserciones
+afectadas. Restaurado y md5 comprobado.
+
+**Dos límites, dichos aquí porque importan:**
+
+1. Esto fija el **contrato**, no la plataforma. Si claude.ai cambiara el `db`, la
+   prueba seguiría verde y el artefacto estaría roto. Eso sólo lo detecta abrirlo.
+2. Cuando el `db` falla al escribir, el dato **se queda en memoria**: la app
+   avisa, pero no cae a `localStorage`, así que al recargar se pierde. No se ha
+   cambiado — sería alterar el comportamiento de la app, fuera del alcance — pero
+   está afirmado tal cual es, así que si alguien lo cambia la prueba lo dirá.
+
+---
+
 ## Publicar un cambio
 
 El contenido del artefacto es `index.html` **desde `<style>` en adelante**. La
