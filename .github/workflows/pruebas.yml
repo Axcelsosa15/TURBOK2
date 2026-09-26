@@ -22,7 +22,7 @@ jobs:
           cache: npm
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
 
       # Sólo Chromium: la suite no prueba otros navegadores, y bajar los tres
       # cuesta varios minutos por corrida sin comprobar nada más.
