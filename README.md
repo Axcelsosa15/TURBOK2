@@ -77,9 +77,10 @@ queda es configuración en GitHub y en Supabase, y sólo el dueño puede hacerla
   toda escritura va condicionada, así que el que llega tarde ve un conflicto en vez de
   destruir el cambio del otro ([docs/MULTIUSUARIO.md](docs/MULTIUSUARIO.md))
 - capturas sin cuenta
-- importación desde bróker o CSV: no hay esquema canónico de operación importada, ni
-  mapeos por bróker, ni el camino SUBIR → DETECTAR → MAPEAR → PREVISUALIZAR →
-  VALIDAR → IMPORTAR, ni huella de deduplicación. Nada de eso está a medias: no está
+- importación desde bróker o CSV: no está hecho, pero ya está
+  **especificado** en [`docs/IMPORTAR.md`](docs/IMPORTAR.md) — esquema, camino,
+  emparejado de ejecuciones, huella de deduplicación y cinco fases con su punto
+  de control. Nada implementado todavía
 - interfaz para crear y anclar versiones del contrato de una firma: la arquitectura
   y la fachada están ([docs/DATA_MODEL.md](docs/DATA_MODEL.md)), el formulario no
 - medición de rendimiento con cifras (hoy sólo hay el tope de 1005 operaciones que
