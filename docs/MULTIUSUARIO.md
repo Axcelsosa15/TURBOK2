@@ -260,7 +260,7 @@ Para abrir las cuentas, en este orden:
 1. **GitHub Pages activado** (Settings → Pages → Source: GitHub Actions). Sin eso no
    hay página pública donde entrar.
 2. **Supabase → Authentication → URL Configuration**: *Site URL* =
-   `https://axcelsosa15.github.io/TURBOK2/`, y la misma URL en *Redirect URLs*. Sin
+   `https://axcelsosa15.github.io/Cabina/`, y la misma URL en *Redirect URLs*. Sin
    esto, los enlaces de confirmar y de recuperar vuelven a `localhost`.
 3. **Activar la protección de contraseñas filtradas** y poner el **mínimo en 8**
    (Authentication → contraseñas). Con login por contraseña no es opcional. El

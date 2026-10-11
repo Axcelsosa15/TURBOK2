@@ -254,7 +254,7 @@ fila('pages', 'El CDN de GitHub sirve el payload verificado', 'UNKNOWN',
 /* ── LA TABLA ── */
 const C = { PASS: '✅', FAIL: '❌', UNKNOWN: '—' };
 const anchoQ = Math.max(...filas.map(f => f.que.length));
-console.log('\n═══ COMPUERTA DE RELEASE · TURBOK2 ═══\n');
+console.log('\n═══ COMPUERTA DE RELEASE · CABINA ═══\n');
 let capaAnt = null;
 for (const f of filas) {
   if (f.capa !== capaAnt) { console.log(`  ${f.capa.toUpperCase()}`); capaAnt = f.capa; }

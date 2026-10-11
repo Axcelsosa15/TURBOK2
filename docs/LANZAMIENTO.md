@@ -65,8 +65,9 @@ explicara. Al no estar, deja de exigirlo.
    intención por escrito y cubrir con claridad a quien reparta una copia modificada.
 2. **Idioma.** Sólo español. Es un mercado, y es una decisión.
 
-Decididas: el **nombre** es Cabina (el repositorio sigue llamándose TURBOK2, y eso no
-se ve desde la app); las **cuentas del autor** se quitaron del código (arriba).
+Decididas: el **nombre** es Cabina — y desde el 11/10/2026 el repositorio también
+(se renombró TURBOK2 → Cabina; GitHub redirige el nombre viejo, pero **Pages no**: la
+URL pasó a `https://axcelsosa15.github.io/Cabina/` y la vieja da 404); las **cuentas del autor** se quitaron del código (arriba).
 
 **Lo que quitarlas del código no quita:** la historia de git. Los commits anteriores
 siguen conteniendo los nombres y el repositorio es público. Borrarlos de ahí exige
