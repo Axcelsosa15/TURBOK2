@@ -98,5 +98,9 @@ rama y la PR abierta. Es posible, pero es una decisión tuya y no se hace sin pe
   del navegador borra todo. La copia existe —«Ver el texto», importar—, pero nada te
   recuerda hacerla. Es el hueco más importante que queda para un usuario que no es el
   autor.
-- **Imagen para compartir** (`og:image`). El nombre ya está; falta la imagen, y tiene
-  que ir dentro del repositorio, no en un servidor ajeno.
+- ~~**Imagen para compartir** (`og:image`).~~ **Hecha**: `og.png` (1200×630) vive en el
+  repositorio y la sirve Pages, sin servidor ajeno. `index.html` la declara con URL
+  absoluta porque Twitter y LinkedIn no resuelven una relativa — esas dos líneas
+  (`og:url`, `og:image`) son el único sitio del código donde la URL de Pages está
+  escrita a mano. **Falta comprobarlo**: abrir la URL de Pages y pasarla por el
+  validador de enlaces de la red donde vayas a compartirla.
