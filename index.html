@@ -1535,6 +1535,62 @@
      Encontrado mirando la captura, no leyendo el CSS. */
   .qk .btn:disabled, .qk .btn.primary:disabled {
     background: var(--surface-2); color: var(--dim); border-color: var(--line); opacity: 1; }
+
+  /* ═══════════════ NAVEGACIÓN LATERAL · sólo cuando hay sitio ═══════════════
+     A partir de 1100 px las siete secciones dejan de ser una tira horizontal y
+     pasan a un raíl fijo a la izquierda: se leen todas de una vez, sin arrastrar
+     y sin tener que recordar cuál venía después. La tira obligaba a desplazar
+     para llegar a «Calculadora» en cuanto la ventana bajaba de ~1200 px.
+
+     POR DEBAJO DE 1100 px EL RAÍL NO APARECE, Y ES LA DECISIÓN IMPORTANTE. Una
+     columna fija de 240 px sobre una pantalla de 430 px se come más de la mitad
+     del ancho y deja la aplicación recortada: es exactamente el fallo que se ve
+     en cualquier diario de trading de escritorio abierto en un teléfono. En
+     móvil la tira horizontal que ya existía sigue siendo la respuesta correcta,
+     y test/vista.mjs la comprueba a 430 px.
+
+     Se usa #tabnav y no .tabnav: `.tabnav.sub` es la sub-navegación del Playbook
+     y vive DENTRO de una pestaña. Con el selector de clase, esa sub-navegación
+     también se habría convertido en un raíl fijo encima de la página. */
+  @media (min-width: 1100px) {
+    :root { --rail: 240px; }
+    body { padding-left: calc(var(--rail) + var(--gut)); }
+
+    #tabnav {
+      position: fixed; inset: 0 auto 0 0; width: var(--rail); z-index: 20;
+      flex-direction: column; align-items: stretch; gap: 2px;
+      margin: 0; padding: 20px 12px calc(20px + env(safe-area-inset-bottom));
+      background: var(--surface);
+      /* El borde es el último recurso, pero aquí separa dos superficies del
+         mismo tono: es el caso que el sistema de diseño sí permite. */
+      border-bottom: 0; border-right: 1px solid var(--line);
+      overflow-y: auto; overflow-x: hidden;
+    }
+    #tabnav::before {
+      content: "Secciones"; display: block;
+      padding: 4px 12px 16px;
+      font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+    }
+    #tabnav .tabbtn {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      text-align: left; text-transform: none; letter-spacing: 0;
+      font-family: var(--font-ui); font-size: 14px;
+      padding: 10px 12px; margin-bottom: 0;
+      border-bottom: 0; border-left: 2px solid transparent;
+      border-radius: var(--r-sm);
+    }
+    #tabnav .tabbtn:hover { background: var(--surface-2); color: var(--text); }
+    #tabnav .tabbtn.active {
+      background: var(--surface-3); color: var(--text);
+      border-bottom-color: transparent; border-left-color: var(--accent);
+    }
+    /* El contador se va al final de la fila, no pegado al texto: en vertical
+       todos quedan alineados y la columna se lee como una tabla. */
+    #tabnav .tabbtn .n { margin-left: auto; }
+
+    .topbar { padding-top: 20px; }
+  }
 </style>
 
 <div class="topbar">
