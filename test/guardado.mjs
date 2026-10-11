@@ -247,13 +247,23 @@ for (const [w, h, nombre] of [[1440, 900, 'escritorio'], [430, 900, 'telefono']]
     const de = document.documentElement, cs = getComputedStyle(el);
     return { txt: el.textContent.trim(), alto: Math.round(r.height), ancho: Math.round(r.width),
       sale: Math.round(r.right - de.clientWidth), color: cs.color,
+      /* EL ROJO SE LEE DEL TOKEN, NO SE ESCRIBE A MANO. Estaba clavado como
+         `rgb(224, 96, 79)` y se puso rojo —la prueba, no el aviso— en cuanto
+         --negative subió para cumplir el contraste mínimo. Lo que esta línea
+         tiene que comprobar es que el aviso usa EL ROJO DE ERROR, no que el rojo
+         de error valga un número concreto; eso último es una decisión de diseño
+         y cambiarla no debería romper nada. */
+      esperado: getComputedStyle(de).getPropertyValue('--negative').trim(),
       scrollX: de.scrollWidth - de.clientWidth };
   });
   ok(/SIN GUARDAR/.test(av.txt) && av.alto > 0 && av.ancho > 0,
      `el aviso SE VE en ${nombre} ${w}px`, `«${av.txt}» · ${av.ancho}×${av.alto}px`);
   ok(av.sale <= 0 && av.scrollX <= 2, `y no desborda la pantalla en ${nombre}`,
      `borde derecho a ${av.sale}px del limite · scrollX ${av.scrollX}`);
-  ok(/rgb\(224, 96, 79\)/.test(av.color), `con el rojo de error en ${nombre}`, av.color);
+  const aRgb = h => { const n = parseInt(h.slice(1), 16);
+    return `rgb(${n >> 16 & 255}, ${n >> 8 & 255}, ${n & 255})`; };
+  ok(av.color === aRgb(av.esperado), `con el rojo de error (--negative) en ${nombre}`,
+     `${av.color} · token ${av.esperado}`);
   if (nombre === 'telefono') {
     ok(ambiental.alto === 0, 'y lo AMBIENTAL sigue escondido en el telefono: solo se ensena lo que importa',
        `«${ambiental.txt}» medido a ${ambiental.alto}px de alto`);

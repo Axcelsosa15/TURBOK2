@@ -66,17 +66,34 @@
     --line-strong: #2C3442;
 
     /* ── TEXTO · tres niveles para toda la app ─────────────────────────
-       primario = el dato · secundario = la etiqueta · terciario = el matiz */
+       primario = el dato · secundario = la etiqueta · terciario = el matiz
+
+       LOS TRES NIVELES SE MIDEN CONTRA --surface-3, NO CONTRA --bg. Es la
+       superficie más clara de las cuatro (fila activa, hover, panel dentro de
+       panel), así que es donde cualquier texto contrasta PEOR. Medir contra el
+       fondo de la aplicación da un número bonito que no se cumple en la mitad
+       de la pantalla.
+
+       --dim estaba en #5B6577: 2.59:1 sobre surface-3, por debajo de cualquier
+       mínimo — y --dim es justo el que lleva las líneas pequeñas que explican
+       un campo. --muted estaba en 4.97, que pasa por los pelos y falla en un
+       teléfono con el brillo bajo. Subidos al mínimo AA con un escalón claro
+       entre niveles, conservando el tono:
+
+           text  12.82:1   el dato
+           muted  6.50:1   la etiqueta
+           dim    4.61:1   el matiz — el suelo AA, no menos
+
     --text:  #E8ECF2;
-    --muted: #8A94A6;
-    --dim:   #5B6577;
+    --muted: #A2AAB9;
+    --dim:   #848EA1;
 
     /* ── SEMÁNTICOS · para NÚMEROS y ESTADOS, nunca como fondo grande ──
        Un panel entero en verde o en rojo deja de significar nada a los diez
        minutos. El color se gana marcando una cifra, no pintando una caja. */
     --accent:      #4FB3A0;  --accent-ink: #0B0E13;
     --positive:    #5BC489;
-    --negative:    #E0604F;
+    --negative:    #E26959;
     --warning:     #E0A458;
     --info:        #6E9BD8;
     --accent-soft: rgba(79,179,160,.13);

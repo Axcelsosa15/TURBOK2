@@ -181,6 +181,18 @@ de posición. Las ejecuciones huérfanas se muestran, no se tiran.
 Una firma de cabecera por plataforma, añadida **sólo** cuando haya un CSV real
 de ella. Nada de mapeos escritos de memoria.
 
+Las dos que importan, en este orden, porque son las que usa el autor:
+
+| Plataforma | De dónde sale el CSV | Qué trae |
+|---|---|---|
+| **Tradovate** | Account → la cuenta → ajustes → pestaña **Orders** → rango → descargar | Órdenes, no idas y vueltas → necesita la fase 2 |
+| **NinjaTrader** | Control Center → **Trade Performance** → pestaña Trades → exportar | Ya empareja idas y vueltas él solo → puede saltarse la fase 2 |
+
+Esa diferencia es la razón de empezar por NinjaTrader aunque Tradovate sea el
+que más se usa en las prop: con un export de Trades de NinjaTrader la fase 1
+sola ya produce operaciones correctas, sin emparejado. Sirve de banco de pruebas
+del resto del camino mientras la fase 2 no existe.
+
 > **Control:** el fixture se detecta solo y el mapeo propuesto es el correcto sin
 > tocarlo.
 
