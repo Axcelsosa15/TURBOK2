@@ -210,8 +210,16 @@
   .toolbar .sp { flex: 1; }
   /* un nombre de setup largo no debe estirar la barra ni romper el ancho de la página */
   .toolbar select, .toolbar input[type="text"] { max-width: min(100%, 260px); }
-  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-sm); overflow: hidden; }
-  .seg button { background: transparent; border: 0; padding:8px 16px; font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; color: var(--muted); letter-spacing: .03em; }
+  /* `overflow: hidden` a secas RECORTABA la última opción sin dejar llegar a
+     ella: en Futuros, a 430 px, «Pre-sesión» se salía 32 px y no había forma de
+     pulsarla — ni arrastrando. El recorte seguía siendo necesario para que los
+     botones no se salgan del radio, así que se recorta sólo en vertical y el eje
+     horizontal pasa a desplazarse. max-width:100% porque un inline-flex crece
+     con su contenido y era el padre quien lo cortaba. */
+  .seg { display: inline-flex; max-width: 100%; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+         overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg button { flex: none; white-space: nowrap; background: transparent; border: 0; padding:8px 16px; font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; color: var(--muted); letter-spacing: .03em; }
   .seg button.active { background: var(--accent); color: var(--accent-ink); }
   .seg button.active.inv { background: var(--blue); }
   .lab { display: block; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom:4px; }
@@ -326,6 +334,13 @@
   table.t { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
   table.t th { text-align: left; font-weight: 500; color: var(--muted); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; padding:4px 8px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   table.t td { padding:8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  /* En un teléfono la tabla del año a año se salía 18 px y la última columna
+     quedaba cortada a media cifra. 8→5 px por lado en cinco columnas devuelven
+     30 px: entra entera sin tocar el tamaño de letra. */
+  @media (max-width: 480px) {
+    table.t th { padding: 4px 5px 8px; }
+    table.t td { padding: 8px 5px; }
+  }
   table.t tr:last-child td { border-bottom: 0; }
   table.t tbody tr:hover td { background: var(--surface-2); }
   table.t .r { text-align: right; }
@@ -3673,6 +3688,23 @@
   });
 
   /* =============================== TABS =============================== */
+  /* UNA PESTAÑA ACTIVA FUERA DE LA TIRA NO EXISTE. En un teléfono la tira mide
+     430 px y las siete secciones ocupan 970: al restaurar la pestaña guardada
+     (o al llegar con #calc en la URL) la activa quedaba a 814 px a la derecha,
+     o sea invisible, y la tira aparecía en «Cabina» como si no hubiera pasado
+     nada. Medido a 430 px. `block:"nearest"` es lo que impide que la página
+     entera salte en vertical al hacerlo. */
+  function aLaVista(el) {
+    if (!el) return;
+    try { el.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); } catch { }
+  }
+  /* En captura: el botón pulsado es el que va a quedar activo, así que se trae
+     sin esperar a que lo marque quien lleve esa navegación. Cubre la tira
+     principal, la sub-navegación del Playbook y los segmentados. */
+  document.addEventListener("click", e => {
+    const b = e.target.closest && e.target.closest(".seg button, .tabnav .tabbtn");
+    if (b) aLaVista(b);
+  }, true);
   function showTab(name) {
     if (name === "journal") name = "futuros";
     if (!document.querySelector(`.tab[data-tab="${name}"]`)) name = "cabina";
@@ -3683,6 +3715,7 @@
       b.classList.toggle("active", active);
       if (active) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
+    aLaVista(document.querySelector("#tabnav .tabbtn.active"));
     $("editToggle").hidden = name !== "cabina";
     if (name !== "cabina" && state.editing) setEditing(false);
     try { if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name); } catch {}
@@ -11533,7 +11566,20 @@
     const l1 = pts.map((p, k) => (k ? "L" : "M") + xs(p.year).toFixed(1) + " " + ys(p.bal).toFixed(1)).join(" ");
     const l2 = pts.map((p, k) => (k ? "L" : "M") + xs(p.year).toFixed(1) + " " + ys(p.contributed).toFixed(1)).join(" ");
     const area = l1 + ` L${xs(x.y).toFixed(1)} ${ys(0).toFixed(1)} L${xs(0).toFixed(1)} ${ys(0).toFixed(1)} Z`;
-    const xt = []; const step = x.y <= 10 ? 1 : x.y <= 20 ? 2 : x.y <= 40 ? 5 : 10; for (let v = 0; v <= x.y; v += step) xt.push(v);
+    /* EL PASO SE DECIDE POR EL ANCHO QUE HAY, NO POR LOS AÑOS QUE SON. Con paso
+       fijo de 1 año hasta 10, en un teléfono entraban once etiquetas («hoy»,
+       «año 1»…«año 10») en 358 px útiles: ~45 px cada una, 495 px en total. Se
+       pisaban unas a otras y el eje se leía «hoyaño 1año 2año 3». Ahora se
+       cuenta cuántas caben y el paso sube al siguiente valor redondo. */
+    const anchoEje = W - pl - pr;
+    const caben = Math.max(2, Math.floor(anchoEje / 56));
+    const minimo = Math.ceil(x.y / caben);
+    const step = [1, 2, 5, 10, 20, 25, 50].find(v => v >= minimo) || 100;
+    const xt = []; for (let v = 0; v <= x.y; v += step) xt.push(v);
+    /* El último año es el que importa: si el paso no llega justo, se añade —
+       pero sólo si queda sitio, para no reintroducir el solape por la puerta de
+       atrás. Va anclado a la derecha (text-anchor "end"), así que no se sale. */
+    if (xt[xt.length - 1] !== x.y && x.y - xt[xt.length - 1] >= step / 2) xt.push(x.y);
     const fmtK = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? "$" + Math.round(v / 1e3) + "k" : "$" + v;
     $("ccChartWrap").innerHTML = `<svg class="chart" id="ccChart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Crecimiento del balance frente a lo aportado">
       <g class="grid">${ticks.map(v => `<line x1="${pl}" x2="${W - pr}" y1="${ys(v).toFixed(1)}" y2="${ys(v).toFixed(1)}"></line><text x="${pl - 6}" y="${(ys(v) + 4).toFixed(1)}" text-anchor="end">${fmtK(v)}</text>`).join("")}</g>
