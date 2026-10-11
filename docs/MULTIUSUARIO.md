@@ -184,10 +184,34 @@ dispositivos, porque sin la columna no la hay. Al aplicar la migración vuelve s
 | `test/conflicto.mjs` | la app real contra el doble: A gana, B ve conflicto, la base conserva lo de A. Contra el upsert anterior se pone roja | **PASS** |
 | el proyecto Supabase real | que el proyecto **tenga** la migración aplicada, que el `auth.uid()` de GoTrue se comporte como el sustituto, que PostgREST devuelva `[]` con 0 filas, y que el Storage aplique las políticas igual | **UNKNOWN** |
 
-El UNKNOWN no es un hueco por rellenar: desde este entorno la política de red deniega
+El UNKNOWN no es un hueco por rellenar: desde CI la política de red deniega
 `supabase.co` (403 al CONNECT, medido con `curl`). Lo corre el dueño:
 `supabase/pruebas/concurrencia.sql` en el editor SQL del proyecto, con el sabotaje que
 el propio fichero describe.
+
+#### Medido contra el proyecto real · 11/10/2026
+
+Una parte del UNKNOWN sí se pudo cerrar desde fuera, con la clave publicable que va en
+`index.html` — la que tiene cualquier visitante. Contra `cabina_docs`, **sin sesión**:
+
+| Como `anon` | Respuesta |
+|---|---|
+| `GET` (leer) | **401** · `42501 permission denied for table cabina_docs` |
+| `POST` (insertar) | **401** · `42501` |
+| `PATCH` (modificar) | **401** · `42501` |
+| `GET /rest/v1/` (el esquema) | **401** · ni los nombres de tabla salen |
+
+Es más fuerte que la RLS: al rol `anon` no se le ha concedido **ningún** privilegio
+sobre la tabla, así que no se llega a evaluar ninguna política. Un desconocido con el
+enlace no saca nada, y eso importa desde que la página es indexable.
+
+`DELETE` **no se probó a propósito**: comprobarlo significa ejecutar un borrado real
+contra la tabla de producción. Por el mismo GRANT debería estar igual de denegado.
+
+**Lo que esto NO demuestra, y sigue en UNKNOWN:** que un usuario CON sesión no pueda
+leer las filas de otro. Eso es justo lo que gobiernan las políticas RLS y hacen falta
+dos cuentas para verlo. Es la comprobación que hay que hacer **antes** de darle el
+enlace a nadie, no después.
 
 ### Lo que sigue sin resolverse
 

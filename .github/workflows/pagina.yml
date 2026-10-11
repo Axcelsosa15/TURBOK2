@@ -43,15 +43,41 @@ jobs:
       # no un aviso.
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
 
-      # Sólo lo que la página necesita. index.html es autosuficiente: no
-      # referencia ningún archivo del repositorio, así que test/ y engine/ no
-      # tienen por qué acabar servidos.
+      # Sólo lo que la página necesita, así que test/ y engine/ no acaban
+      # servidos. index.html FUE autosuficiente hasta que se añadió la imagen
+      # para compartir: og.png vive en el repositorio a propósito —para no
+      # depender de un servidor ajeno— y por tanto hay que publicarla.
       - name: Armar lo que se publica
         run: |
           mkdir -p sitio
           cp index.html sitio/index.html
           cp .nojekyll sitio/.nojekyll
+          cp og.png sitio/og.png
           ls -la sitio
+
+      # EL FALLO QUE ESTE PASO EXISTE PARA IMPEDIR, Y QUE YA OCURRIÓ UNA VEZ:
+      # se añadió `og:image` apuntando a og.png, la imagen se commiteó, la suite
+      # pasó en verde y Pages sirvió un 404 durante horas. Nadie se enteró porque
+      # la comprobación de abajo sólo mira index.html, y el enlace compartido no
+      # se rompe de forma visible: sale sin imagen y ya está.
+      #
+      # Se recorre index.html buscando URL absolutas al propio sitio y se exige
+      # que cada fichero esté dentro de `sitio/`. Copiar un fichero nuevo al
+      # repositorio y olvidarse de copiarlo aquí vuelve a ser imposible.
+      - name: Todo lo que index.html pide del propio sitio está publicado
+        run: |
+          faltan=0
+          for ruta in $(grep -oE 'https://axcelsosa15\.github\.io/Cabina/[A-Za-z0-9_./-]+' index.html \
+                        | sed 's|https://axcelsosa15.github.io/Cabina/||' | sort -u); do
+            [ -z "$ruta" ] && continue
+            if [ -f "sitio/$ruta" ]; then
+              echo "✅ $ruta publicado"
+            else
+              echo "::error::index.html pide $ruta y no está en sitio/"
+              faltan=1
+            fi
+          done
+          exit $faltan
 
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
@@ -72,6 +98,13 @@ jobs:
             if curl -fsSL "$url" -o publicado.html && cmp -s publicado.html index.html; then
               echo "✅ $url sirve exactamente el index.html probado ($(wc -c < index.html) bytes)"
               echo "✅ $url sirve exactamente el index.html probado" >> "$GITHUB_STEP_SUMMARY"
+              # Y la imagen para compartir responde de verdad, no sólo existe en
+              # el repositorio. Es lo que faltaba la vez que dio 404.
+              if ! curl -fsS -o /dev/null "${url%/}/og.png"; then
+                echo "::error::${url%/}/og.png no responde: el enlace compartido saldrá sin imagen"
+                exit 1
+              fi
+              echo "✅ ${url%/}/og.png responde"
               exit 0
             fi
             sleep 5
