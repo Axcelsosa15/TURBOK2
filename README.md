@@ -87,4 +87,9 @@ queda es configuración en GitHub y en Supabase, y sólo el dueño puede hacerla
 
 ## Licencia
 
-Sin licencia seleccionada todavía: rige el derecho de autor por defecto.
+[AGPL-3.0-only](LICENSE). Puedes usar Cabina, leer el código, modificarlo y
+redistribuirlo. La condición es recíproca: si publicas una versión modificada —
+también si la ofreces a otros como servicio — tienes que publicar su código bajo la
+misma licencia.
+
+Usarla para tu propio trading, o modificarla y no distribuirla, no te obliga a nada.

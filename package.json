@@ -2,6 +2,7 @@
   "name": "cabina",
   "version": "1.0.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "description": "Cabina · cockpit de sesión para futuros e inversiones. Una sola página, sin build.",
   "type": "module",
   "scripts": {

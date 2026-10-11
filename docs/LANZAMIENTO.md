@@ -23,21 +23,15 @@ prueba de que un usuario no ve la data de otro) está hecha y verificada.
 
 ---
 
-## El interruptor
+## El interruptor — quitado
 
-La cabecera de `index.html` dice:
+La cabecera de `index.html` llevó `<meta name="robots" content="noindex, nofollow">`
+hasta que se decidió la licencia. **Ya no está: la página es indexable.** Publicar
+indexable un producto sin licencia es publicarlo con todos los derechos reservados; con
+la AGPL-3.0 puesta, eso dejó de ser cierto.
 
-```html
-<meta name="robots" content="noindex, nofollow">
-```
-
-Mientras esté, los buscadores no indexan la página: sólo la encuentra quien tenga el
-enlace. **Quitar esa línea es el lanzamiento.** Se deja puesta a propósito hasta que
-esté decidida la licencia — publicar indexable un producto sin licencia es publicarlo
-con todos los derechos reservados.
-
-`test/lanzamiento.mjs` exige que, mientras la línea exista, este documento la explique.
-Cuando se quite, deja de exigirlo.
+`test/lanzamiento.mjs` exigía que, mientras la línea existiera, este documento la
+explicara. Al no estar, deja de exigirlo.
 
 ---
 
@@ -60,10 +54,15 @@ Cuando se quite, deja de exigirlo.
 
 ## Decisiones tuyas — bloquean el interruptor
 
-1. **Licencia — pendiente.** Hoy no hay: el repositorio es «todos los derechos
-   reservados», público para leer y sin permiso para usar. Si quieres que otros lo
-   usen y lo mejoren, una licencia abierta (MIT es la más simple). Si quieres venderlo
-   algún día, puede convenir mantenerlo cerrado. No es una decisión técnica.
+1. ~~**Licencia — pendiente.**~~ **Decidida: AGPL-3.0-only** ([`LICENSE`](../LICENSE)).
+   Cualquiera puede usar Cabina y mejorarla; quien publique una versión modificada —
+   también ofreciéndola como servicio — tiene que publicar su código igual. El autor
+   sigue siendo dueño del copyright, así que puede licenciarla aparte a quien quiera
+   otras condiciones. **Aviso honesto:** en una aplicación que corre entera en el
+   navegador, el artículo 13 de la AGPL — el que cubre el uso en red — tiene un
+   alcance discutido, porque el programa se ejecuta en la máquina del visitante y no
+   en el servidor. Protege menos de lo que su fama sugiere; lo que sí hace es dejar la
+   intención por escrito y cubrir con claridad a quien reparta una copia modificada.
 2. **Idioma.** Sólo español. Es un mercado, y es una decisión.
 
 Decididas: el **nombre** es Cabina (el repositorio sigue llamándose TURBOK2, y eso no
